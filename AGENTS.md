@@ -28,6 +28,7 @@ Before making changes:
 2. Inspect `package.json`, the existing `src/` tree, configuration, and relevant code.
 3. Check the installed Next.js/React versions; use documentation and conventions appropriate to those versions, including any Next.js-generated agent rules already in this file.
 4. Distinguish **confirmed business requirements** from **proposals/open decisions** in `PROJECT.md`.
+5. Check the latest relevant entries in `docs/DEVLOG.md` before continuing development, and append a concise, verified entry after each completed development step. `PROJECT.md` remains the business source of truth; never record secrets in the devlog.
 
 **Priority:** Explicit user instructions for the current task take precedence over prior implementation plans. If a requested change would alter a confirmed business rule, identify the conflict and propose a corresponding update to `PROJECT.md` rather than silently changing behavior.
 

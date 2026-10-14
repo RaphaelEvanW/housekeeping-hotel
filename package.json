@@ -12,6 +12,9 @@
     "db:stop": "docker compose stop",
     "db:generate": "prisma generate",
     "db:validate": "prisma validate",
+    "db:migrate": "prisma migrate deploy",
+    "db:migrate:test": "node --import tsx scripts/migrate-test.ts",
+    "db:seed": "prisma db seed",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:integration": "vitest run tests/integration"
@@ -20,6 +23,7 @@
     "@next/env": "16.4.0",
     "@prisma/adapter-pg": "7.10.0",
     "@prisma/client": "7.10.0",
+    "better-auth": "1.7.7",
     "next": "16.4.0",
     "pg": "8.23.1",
     "react": "19.3.0",
@@ -37,6 +41,7 @@
     "eslint-config-next": "16.4.0",
     "prisma": "7.10.0",
     "tailwindcss": "^4",
+    "tsx": "4.23.15",
     "typescript": "^5",
     "vitest": "4.1.11"
   }
