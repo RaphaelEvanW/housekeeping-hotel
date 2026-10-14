@@ -72,12 +72,12 @@ These constraints come from `PROJECT.md` and outrank UI convenience:
 - `Items` represents **item types**; `ItemUnits` represents **individual physical units**. Do not merge them into a single stock counter.
 - Inventory totals are **derived from physical unit records** and their statuses.
 - `Add New Item Type` and `Add Stock to Existing Item` are distinct operations. Prevent duplicate item types caused by capitalization or whitespace variations, subject to the agreed uniqueness scope.
-- Only an `AVAILABLE` unit can be newly borrowed. A unit cannot belong to two active, unreturned borrowing lines.
+- Borrowability is derived from lifecycle, custody, readiness/holds, lost/missing state, and unresolved borrowing obligations as defined in `PROJECT.md`. A unit cannot belong to two unresolved active borrowing lines.
 - Recheck availability **on the server**; UI filtering is insufficient.
 - Borrowing, returning, and status transitions must be **atomic** and safe against concurrent requests. Use database transactions and suitable constraints/locking for the chosen persistence layer.
 - Support **partial returns**. Returning one unit must not mark the entire borrowing complete while other units remain outstanding.
 - Reject duplicate returns. Map return condition to unit status as specified in `PROJECT.md`.
-- Keep **physical condition**, **physical unit availability**, and **borrowing status** conceptually separate.
+- Keep **lifecycle**, **custody/location**, **physical condition**, **readiness/holds**, and **borrowing obligation** separate. `LOST`/`MISSING` are operational states/events, not physical conditions; settlement/recovery must not fabricate a physical return.
 - Avoid the AppSheet reference bug where a borrowing displays `Returned` but the stored operational state still says `Borrowed`. Define one consistent canonical/effective state model.
 - Keep historical transactions accessible even when guests check out or item types become inactive.
 

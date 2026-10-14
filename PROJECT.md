@@ -1,258 +1,258 @@
 # Hotel Housekeeping — Web Application Project Specification
 
-> Status: Initial specification (v0.1)  
-> Purpose: Source of truth for product scope and business rules during Next.js development with OpenCode.  
-> Reference: Existing AppSheet housekeeping workflow, **not** its infrastructure.
+> Status: Consolidated business specification (v0.2, 14 October 2026)
+> Purpose: Product scope and agreed business rules for development with OpenCode.
+> Related agent instructions: [`AGENTS.md`](./AGENTS.md).
+> Source of truth: Explicit project-owner decisions; the old AppSheet app is a workflow reference, **not** a technical dependency.
 
-## 1. Project overview
+## 1. Product and working principles
 
-Build an independent, full-stack web application for a hotel's Housekeeping team to manage loanable items, physical inventory units, guest borrowing, and returns. The project recreates the **business workflows** of the existing AppSheet application in a custom web experience, with room to improve usability and maintainability.
+Build a **standalone Next.js full-stack web app** for hotel Housekeeping inventory, guest borrowing, return, inspection, maintenance, lost-asset handling, and operational history.
 
-**Critical boundary:** The web application and AppSheet application must operate **in parallel as separate systems**. They must not share databases, synchronize records, call each other's APIs, or rely on each other for core functions. Both may be demonstrated side by side; matching workflows do not mean their data must match.
+- The Next.js web app and AppSheet are **separate systems**. No shared database, synchronization, API integration, or dependence on AppSheet. Manual entry is the MVP; keep data-entry logic service-oriented so importing from a future source is possible, but **do not build an importer now**.
+- Optimize for real Housekeeping work: a few clear forms, conditional fields, batch actions where useful, and minimal approvals.
+- **Do not turn real-world hotel SOP into web workflows.** Cashier/payment operations, whether a replacement item is commercially acceptable, who physically carries it to a storage room, guest damage-liability disputes, and internal coordination outside the agreed app flows are out of scope.
+- **Do not keep reopening settled decisions** or ask a separate question for every optional field, location, status, or button. Infer sensible defaults from the established patterns. Ask only when an essential unresolved rule would block correct implementation, threaten data integrity, or meaningfully alter permissions/guest obligations.
+- Distinguish *business decisions* (confirmed below) from *technical proposals* (not all finalized). Avoid speculative approval chains, forms, departments, and subsystems.
 
-## 2. Goals and non-goals
+## 2. Primary domain concepts
 
-### Goals
-- Centralize housekeeping item types and track **individual physical units**.
-- Show accurate available, borrowed, maintenance, and lost inventory counts.
-- Record which guest borrows each physical unit and when.
-- Support multiple units in one borrowing transaction, including partial returns.
-- Record item condition and supporting photos at handover and return.
-- Offer straightforward workflows for **Add New Item Type** versus **Add Stock**.
-- Deliver a responsive, clear web UI suitable for hotel operations.
-- Establish a clean, documented, testable codebase that can be developed feature by feature.
-
-### Non-goals (initial scope)
-- Migrating or importing AppSheet data.
-- Integrating with or replacing the AppSheet application.
-- Real-time synchronization with AppSheet or Google Sheets.
-- Payment, billing, PMS integrations, or cross-property operations unless explicitly requested.
-- Complex forecasting, procurement, or accounting modules.
-
-## 3. Users and permissions
-
-Primary users are Housekeeping staff and supervisors. The exact roles and permission matrix are **not yet confirmed**. Until agreed, design access checks as a capability that can be added safely; do not invent production credentials or assume all users are administrators.
-
-Potential permissions to finalize: view stock, create borrowing, process returns, maintain master data, view audit history, and manage users.
-
-## 4. Core domain model
-
-**Distinction that must never be lost:**
-- `Items` = **item types** (for example, *Hair Dryer*).
-- `ItemUnits` = **individual physical assets** belonging to an item type (for example, `HD-001`, `HD-002`).
-
-A single item type can have many physical units. Stock is derived from units, **not** from manually editable counters or the number of item names.
-
-### 4.1 Confirmed AppSheet-reference entities
-
-| Entity | Purpose | Known fields / reference notes |
-|---|---|---|
-| `Items` | Master catalog of item types | `ItemID`, `ItemCode`, `ItemName`, `CategoryID`, `Description`, `IsActive`, `CreatedAt` |
-| `ItemUnits` | Physical units | `ItemUnitID`, `ItemID`, `UnitCode`, `SerialNumber`, `LocationID`, `ConditionID`, `Status`, `Notes`, `CreatedAt`, `UpdatedAt` |
-| `Borrowings` | Borrowing transaction header | `BorrowingID`, `BorrowingCode`, `GuestID`, `CreatedBy`, `BorrowedAt`, `ReturnedAt`, `Status`, `Notes`, `CreatedAt`, `UpdatedAt` |
-| `BorrowingItems` | Individual units in each borrowing | `BorrowingItemID`, `BorrowingID`, `ItemUnitID`, `InitialConditionID`, `ReturnConditionID`, `ReturnedAt`, `ReturnedBy`, `Notes`, `Status` |
-| `Guests` | Guest information for borrowing | `Status = STAYING` is used to select guests for **new** borrowings; other fields require confirmation |
-| `Returns` | Return transaction header | Exists in reference workflow; exact fields require confirmation |
-| `ReturnItems` | Items processed as part of a return | Exists in reference workflow; exact fields require confirmation |
-| `ItemCategories` | Categorization for item types | Exact fields require confirmation |
-| `ItemConditions` | Physical condition master | Known codes listed below; other fields require confirmation |
-| `Locations` | Storage / operational locations | Exact fields require confirmation |
-
-The table and column names above describe the reference business domain, **not a mandate** to duplicate AppSheet's physical schema verbatim. Propose a normalized relational model before implementation. Do not silently invent unspecified legacy fields.
-
-### 4.2 Known unit status and condition codes
-
-**Physical unit status:** `AVAILABLE`, `BORROWED`, `MAINTENANCE`, `LOST`.
-
-**Physical condition:** `GOOD`, `MINOR_DAMAGE`, `DAMAGED`, `MISSING_PART`, `LOST`.
-
-Status describes **availability / workflow**; condition describes **physical quality**. Keep them separate. A unit can be damaged while under maintenance; do not use the two fields interchangeably.
-
-### 4.3 Entity relationships (conceptual)
-
-```text
-ItemCategories 1 ── * Items 1 ── * ItemUnits
-                              │
-                       * BorrowingItems * ── 1 Borrowings * ── 1 Guests
-                              │
-                     ReturnItems / Returns (return history)
-
-ItemConditions 1 ── * ItemUnits
-Locations      1 ── * ItemUnits
-```
-
-Final return relationships and photo storage models must be established during database design, rather than guessed from this sketch.
-
-## 5. Inventory rules
-
-1. **Available stock** for item type X = count of its `ItemUnits` with `Status = AVAILABLE`.
-2. **Borrowed stock** = count with `Status = BORROWED`.
-3. **Maintenance stock** = count with `Status = MAINTENANCE`.
-4. **Lost stock** = count with `Status = LOST`.
-5. **Total registered units** = count of all units for the type (subject to a future decision on archived/deleted units).
-6. Only an `AVAILABLE` unit may be selected for a new borrowing.
-7. No physical unit may be part of two simultaneously active, unreturned borrowing lines.
-8. Inventory changes happen as a consequence of controlled unit operations, not free-form edits to a stock number.
-9. Changes that affect borrowing/return records and unit status must be **atomic** (database transaction) to prevent inconsistent stock.
-10. The system must revalidate unit availability on the server before saving, even if the UI already filters it.
-
-### 5.1 Master item naming and duplicate prevention
-
-Staff must not accidentally create separate master types due to capitalization or extra whitespace, e.g., `Hair Dryer`, `hair dryer`, and `Hair  Dryer`.
-
-- Use a searchable selection of existing item types for **Add Stock**.
-- Normalize names for duplicate checks (trim, collapse whitespace, compare case-insensitively).
-- Prevent or flag duplicate item types at the server/database level; offer selection of the existing master instead.
-- Preserve a properly formatted display name rather than overwriting it with a normalized key.
-- Define the exact uniqueness scope (name-only versus name + category) before locking the database constraint.
-
-## 6. Main functional modules
-
-### 6.1 Dashboard
-
-Show concise operational summaries such as available units, borrowed units, units under maintenance, lost units, and active borrowing transactions. Provide links to relevant filtered lists. Exact KPI layout is a UI decision, not a fixed AppSheet clone.
-
-### 6.2 Item types (master catalog)
-
-- List, search, filter, and view item types.
-- Create a new type with its code, name, category, description, and active flag as appropriate.
-- Show the calculated unit counts per type.
-- Provide a clear **Add Stock** action for an existing type.
-- Handle inactive types without accidentally deleting historical transactions.
-
-### 6.3 Physical units / add stock
-
-- Add one or more physical units under an existing `Item`.
-- Capture unit code, optional serial number, location, condition, and notes as applicable.
-- Ensure unit codes are unique under the agreed identifier policy.
-- Unit creation and current status must follow validated operational rules.
-- Keep **Create Item Type** and **Add Stock** as two distinct actions in the interface, even if reachable from the same inventory page.
-- Do not treat a stock addition as a new `Items` record when the item type already exists.
-
-### 6.4 Guest management
-
-- Maintain the minimum guest data required to identify borrowers.
-- New borrowings may select guests with `Status = STAYING`.
-- Existing borrowings and returns remain accessible even after a guest checks out; changing guest status must not hide outstanding returns.
-- Decide later whether guests are entered manually or sourced from another internal source; no integration is assumed.
-
-### 6.5 Borrowing transaction
-
-1. User creates a borrowing and selects the guest (and room where modeled).
-2. User adds one or more **specific, available** item units.
-3. User records the initial item condition and optional supporting handover photos.
-4. On save, create borrowing header and unit detail records.
-5. Atomically mark the selected physical units `BORROWED`.
-6. Show a readable borrowing code, borrower, timestamps, included units, and current state.
-
-Do not allow duplicate selection of the same unit in a single transaction. Never rely on a client-side stock check alone.
-
-### 6.6 Return transaction (including partial returns)
-
-1. Open an existing borrowing with outstanding unit lines.
-2. Select one or more outstanding borrowed units to return.
-3. Record return condition, timestamp, operator, and supporting photos where applicable.
-4. Create the return transaction/history and mark **only those** borrowing lines as returned.
-5. Map condition to unit availability according to the following reference rule:
-
-| Return condition | Resulting unit status |
+| Concept | Meaning |
 |---|---|
-| `GOOD` | `AVAILABLE` |
-| `MINOR_DAMAGE` | `MAINTENANCE` |
-| `DAMAGED` | `MAINTENANCE` |
-| `MISSING_PART` | `MAINTENANCE` |
-| `LOST` | `LOST` |
+| `Items` | Master **types** of loanable items, such as Hair Dryer, Iron, Baby Cot. |
+| `ItemUnits` | **Physical units** tracked independently, e.g. HD-001 and HD-002, each belonging to one `Item`. |
+| `GuestVisit` | A guest's **individual stay/visit** and its current room; not a persistent cross-stay guest identity. |
+| `Borrowings` | One transaction for **one occasion of issuing** item units to a guest visit. |
+| `BorrowingItems` | Original issued **physical units**, linked to a borrowing and responsible-guest/room snapshot. |
+| `Returns` / `ReturnLines` | Actual physical return events; one Combined Return can refer to units from **multiple Borrowings of the same GuestVisit**. |
+| `ItemPhotos` / evidence | Photos attached to the specific transaction/unit/event, with uploader/time and immutable history after finalization. |
+| `Locations` | Operational Housekeeping storage/custody locations; `HK Main Storage` is the default for newly registered units. |
+| `MaintenanceRecords` / `VerificationRecords` | Actual work performed and Supervisor inspection outcomes; preserve repeated rounds. |
+| `LostReports` / `Settlements` / `RecoveryEvents` | Lost/missing events, authorized resolution, and subsequent recoveries. |
+| `AuditEvents` | Who changed what, when, and (where relevant) old/new values and required reasons. |
 
-6. A partially returned borrowing remains outstanding for its remaining lines.
-7. When all lines are returned, the borrowing's **effective/display status** is `RETURNED` and its completion timestamp should be recorded.
-8. The same line must not be returned twice; server-side checks and transactions are mandatory.
+These are conceptual names; refine table normalization in a reviewed schema. Do **not** copy the AppSheet schema blindly.
 
-**Known reference issue to avoid:** In AppSheet, a returned borrowing could display `Returned` through `StatusTampilan` while the stored header `Status` remained `Borrowed`. For the web app, define one consistent canonical state model with computed effective status or synchronized persisted state. Never leave UI status and operational logic contradictory.
+Keep distinct dimensions rather than one overloaded status field:
 
-### 6.7 Search, history, and traceability
+1. **Lifecycle:** e.g. `ACTIVE` or `RETIRED` (historical units remain recorded).
+2. **Custody:** e.g. `HOUSEKEEPING`, `GUEST`, `ENGINEERING`, `EXTERNAL_VENDOR`.
+3. **Current location:** a real Housekeeping location or an appropriate logical location such as `WITH_GUEST`; for missing/lost stock retain last known location.
+4. **Condition:** `GOOD`, `MINOR_DAMAGE`, `DAMAGED`, `MISSING_PART` (and any explicitly modeled unassessable condition).
+5. **Operational readiness/hold:** derived availability, `ON_HOLD`, `PENDING_INSPECTION`, `PENDING_VERIFICATION`, etc.
+6. **Borrowing obligation:** open/returned/lost-pending/settled; separate from the physical item's repair status.
 
-Support finding transactions by borrowing code, guest, unit, and status. Keep historical borrowing and return events even when a master item becomes inactive. Capture relevant operators and timestamps; never rewrite past borrowing details simply because current item status changes.
+`LOST` and `MISSING` are **events/operational states**, not valid substitutes for a physical condition like `DAMAGED`.
 
-## 7. User experience principles
+## 3. Roles and authorization
 
-- Prioritize desktop usability **and** tablet/mobile responsiveness for hotel staff.
-- Use clear navigation: Dashboard, Inventory, Borrowings, Returns/History, and Masters/Settings as the permissions allow.
-- Make unit availability obvious before selection.
-- Use consistent status labels and avoid exposing internal IDs as primary display text.
-- Give useful validation messages and loading/empty/error states.
-- Require confirmation for destructive or irreversible operations.
-- Prefer task-oriented forms over large, confusing all-fields-at-once forms.
-- UI language is tentatively Indonesian; exact copy and branding are to be decided.
+Four business/access roles:
 
-## 8. Technical direction (proposed, not yet locked)
+- **Housekeeping Staff:** routine guest visit registration, room transfers, primary guest changes, borrowing/return processing, creating master items and stock, direct correction of clerical inventory errors, reporting damage/missing/lost, recording actually completed repairs, recording recoveries, proposing guest-LOST replacement or money compensation.
+- **HK Supervisor:** all relevant Housekeeping capabilities plus required operational verification/inspection and approval/rejection of LOST reports and replacement/compensation settlements, retiring/reactivating units. Can correct master data without an approval chain. **Only Supervisor proposes WRITE_OFF.**
+- **Management:** business approval for WRITE_OFF and approvals required to grant/revoke Management role.
+- **System Admin / IT:** technical account/access administration; **does not automatically have authority to approve business decisions** such as WRITE_OFF or Supervisor inspections.
 
-| Concern | Starting point | Decision status |
+Management role grants/revocations require in-app Management authorization and IT execution; exceptional emergency Management access is temporary and fully audited, with authorization by the Head/Manager IT (including self-authorization if appropriate). This exceptional-access procedure is **not a blocker for the operational MVP**: defer detailed recovery UX until account administration is being implemented.
+
+Enforce permissions **on the server**. Do not add approvals to routine staff data entry, corrections, Master Item creation, stock addition, location updates, or routine returns.
+
+## 4. Guest visits and registration
+
+- Only **registered hotel guests** borrow items. Employees/staff never borrow through guest borrowing.
+- Create a new `GuestVisit` **per stay**, without cross-stay guest-identity merging. Manual guest check-in/check-out for MVP; no PMS sync.
+- Minimum registration: **Primary Guest name, room number, check-in date, planned checkout date**, plus a generated immutable `GuestVisitID`. No reservation/folio reference required. Planned checkout date does not automatically checkout a guest.
+- A guest must be `STAYING` to receive **new** borrowing. Checkout is allowed with outstanding units after warning, and does **not** automatically classify remaining units as LOST; returns and settlement remain possible after checkout.
+- Where multiple guests share a room, one **Primary Guest** is responsible for borrowing under that stay. HK Staff may change the Primary Guest **with mandatory reason and audit**. Existing borrowings keep the **original responsible guest snapshot**, while subsequent borrowings use the new primary guest.
+- HK Staff may directly transfer the visit's room **with reason and audit**, even with outstanding borrowing. Update the current visit room; each prior borrowing's original room snapshot remains unchanged. A room transfer does not create a new borrowing or falsely relocate guest-held units to Housekeeping.
+- Warn about suspected duplicate active visits. Allow an override **with mandatory reason and audit**. For an exact duplicate (normalized primary name, same room, matching check-in and planned checkout dates, overlapping active stay), mark new visit `IsDuplicate`. A confirmed duplicate remains only **flagged**: no auto-merge, consolidation, liability transfer, new-borrowing restriction, or forced status change.
+
+## 5. Master items, units and add stock
+
+### 5.1 Item master
+
+- **All HK Staff may create Master Items**, immediately usable without Supervisor approval. Supervisor may later revise names/details directly.
+- `Add New Item Type` and `Add Stock` are **different operations**, even if reachable on the same Inventory screen.
+- On new type creation, check normalized names (case insensitive, trim/collapse whitespace) so `Hair Dryer`, `hair dryer`, and `Hair  Dryer` are not registered as distinct types. Prefer selecting the existing type; preserve readable display names.
+- Master Item creation/renaming **does not create stock or trigger physical inspection**.
+- Record `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt`; track old/new values for edits. No approval queue.
+
+### 5.2 Bulk Add Stock
+
+- HK Staff chooses **an existing master Item** and a `Quantity`. The app creates exactly that number of new **physical `ItemUnits`** in a **single atomic transaction**.
+- Each unit receives a **unique, immutable internal ID** and automatically generated, readable **UnitCode** (e.g. `HD-001`); code generation must be concurrency-safe and never reuse a previously assigned code for another physical unit.
+- Optional **per-unit SerialNumber and Notes**, editable in a simple batch form/expandable rows. Do not require staff to fill each row when all details are blank.
+- **Default initial location = HK Main Storage**, custody = `HOUSEKEEPING`. Do not reopen an extra location-choice debate/form for stock registration. After registration, internal Housekeeping moves use the existing simple audited location-update mechanism when necessary.
+- Use the existing condition/readiness rules for the physical units, with a practical default of `GOOD` and override only when needed. Non-GOOD units are not automatically borrowable.
+- **Stock is computed from registered physical units and their current state**, never from a writable total stock counter. A batch insert that fails partway must not create partial stock.
+- HK Staff **corrects input errors directly** by editing the affected unit(s), without Supervisor approval. Mistakes like serial-number typos or notes do not need inspection. Never silently rewrite finalized borrowing/return evidence or use a clerical edit to bypass an actual ON_HOLD/inspection. A mistaken unused phantom registration may be corrected/removed with an audit trail; historical operational records must not be destroyed.
+
+### 5.3 Derived stock and borrowing eligibility
+
+Track at least: total registered units, ready/borrowable, currently borrowed, on hold/pending inspection/maintenance, lost/missing, retired. **Do not equate total registered with ready stock.**
+
+A unit may be offered for new borrowing only when **all** are true:
+
+- It is an active physical unit not retired, lost, or missing.
+- It is fit for use and has **no active hold/inspection/maintenance blocker**.
+- `CurrentCustodian = HOUSEKEEPING` and it is not held by Engineering/vendor/guest.
+- It has **no unresolved active borrowing** for the same unit.
+
+All **Housekeeping-custody storage locations** may supply borrowable units; do not create a per-location borrowing whitelist. A location labeled “HK Maintenance Area” does not in itself mean the unit is blocked. Apply real readiness/workflow and custody states.
+
+## 6. Borrowing
+
+- Borrower selection is restricted to `STAYING` guest visits. One **handover/issue occasion = one new Borrowings header**, even if the same guest borrows again later that day. Each header may contain multiple physical units.
+- Every borrowing line must reference the **exact ItemUnit**, never just an Item type or quantity.
+- Record logged-in `IssuedBy`, server timestamp, `GuestVisitID`, Primary Guest responsible **at issue time**, and **original room snapshot**. Display the current guest room separately where useful.
+- **At least one photo of initial condition is mandatory for every ItemUnit on every issuance**. It is required anew for each issue, not reused from past borrowing. Link the evidence to that `BorrowingItemID` (not only the borrowing header). Multiple photos per unit may be supported.
+- The selected unit must be eligible at save time. Atomically create borrowing/header/lines, associate uploaded evidence, change custody to `GUEST`, and set logical location `WITH_GUEST`.
+- Reject double borrowing (including simultaneous requests), duplicate line selection, missing photos, and stale eligibility. Finalization is all-or-nothing. Use server-side validation, database constraints/locking, and safe retry behavior.
+- Show every individual borrowing occasion in history; the guest visit detail may aggregate all outstanding units across occasions.
+
+## 7. Combined and partial return
+
+- Return operation is **per GuestVisit**, allowing selection of any outstanding **BorrowingItems** across different Borrowings for that **same guest visit**. Allow partial returns of any subset of lines; keep each line linked to its original borrowing.
+- One combined return is **one atomic save**: if any selected line fails validation or upload, save **none** of them. Do not add complex partial-success/error-retry queues.
+- The default receiving **location** belongs to the return header and can be overridden per unit/return line. Save the **effective actual receiving location per line**. Never auto-return everything to its original borrowing location.
+- `ReturnedBy` / receiver comes from the authenticated staff session and return timestamp from server. Different staff can issue and receive.
+- **Return condition defaults to `GOOD` for each unit**, overridable to `MINOR_DAMAGE`, `DAMAGED`, or `MISSING_PART`.
+- **Return photo is optional for `GOOD`** and **mandatory (at least one per unit) for every non-GOOD return**. Validate server-side and preserve original borrowing photos.
+- On physical return, close only the selected borrowing lines as `RETURNED`, switch custody to `HOUSEKEEPING`, update actual effective location, and record condition/history.
+- `GOOD` may become ready immediately **if all other availability rules allow**. Any non-GOOD return becomes `PENDING_INSPECTION` and cannot be borrowed until cleared through the existing Supervisor workflow.
+- A physically returned damaged item is **no longer an outstanding borrowing**; damage/maintenance does not keep guest borrowing open. Guest payment/damage liability disputes are handled **offline**, not inside this app.
+- Partial borrowing remains outstanding only for the unreturned lines. When no lines remain outstanding, the borrowing's canonical/effective completion state is RETURNED. **Never repeat the AppSheet bug** where display says RETURNED while operational status remains BORROWED.
+- Prevent duplicate returns and race conditions; preserve original issue snapshots and immutable final return history.
+
+## 8. Inspection, holds, maintenance and custody
+
+### 8.1 Reporting and holds
+
+- When Staff discovers damage **after a previously finalized GOOD return**, they may report it immediately; place the unit **ON_HOLD** at once without waiting for Supervisor approval. The original GOOD return remains historical truth; create a separate damage report with notes, reporter/time and relevant evidence.
+- When Staff discovers a **missing unit that was not on guest borrowing**, they report `MISSING`; the unit immediately becomes **ON_HOLD / not borrowable** without approval. Preserve last known location. Supervisor may later confirm `LOST` or restore appropriately if found. Do not fabricate a guest obligation.
+- An active guest borrowing must not be turned into a fake Housekeeping receipt to report a problem.
+
+### 8.2 Actual maintenance work, not a ticket-routing app
+
+- **No repair assignment, work-order dispatch, approval-to-repair, or routing workflow.** When actual repair happens, Staff simply records who fixed it (person and HK/Engineering/vendor team), work performed, results, actual work/completion time, `RecordedBy`, timestamp, and optional photos/documents.
+- Engineering/vendors do **not** need app login. Physical handovers to/from Engineering or vendors capture sender/recipient/time and location/custody; ordinary internal Housekeeping moves are a simple audited update.
+- After staff records completed repair, the unit becomes `PENDING_VERIFICATION`. It is **not** automatically READY.
+- Supervisor can also directly inspect/release an `ON_HOLD` unit **without fabricating a repair record** when no repair was needed.
+
+### 8.3 Supervisor verification
+
+- For **every Supervisor Verification**, require per-unit **Result, Notes, and Photo Evidence**. Identify verifier from the authenticated session, record time, and keep each verification round.
+- Passing `FIT_FOR_USE` clears the relevant hold when all actual requirements are satisfied. Failing `UNFIT_FOR_USE` keeps/returns the unit to ON_HOLD, without auto-creating a maintenance job.
+- For multiple units inspected together, provide a batch UI with individual results/notes/photos, and a **single all-or-nothing atomic Save**. No partial success workflow.
+- A FIT_FOR_USE decision does **not** imply borrowable if the unit is still physically in Engineering/vendor custody or otherwise has a blocker; receiving it back in Housekeeping custody remains a separate recorded event.
+
+## 9. Lifecycle: retirement and reactivation
+
+- HK Supervisor may mark a physical unit `RETIRED` with reason and supporting evidence, **without an extra approval**. Retired units remain in history and are excluded from operational/ready stock; do not delete their records.
+- HK Supervisor may **reactivate the same physical RETIRED unit** with the normal verification requirements: Result, Notes, Photo. A pass reactivates it subject to other custody/readiness rules; a fail leaves it retired.
+- **No DISPOSED status or disposal-tracking subsystem**. The last recorded location of a retired unit is not necessarily proof of its current physical whereabouts.
+
+## 10. LOST, MISSING, settlement, and recovery
+
+### 10.1 Guest-borrowed LOST
+
+- Staff can report an outstanding borrowed unit as LOST; **Supervisor approval confirms LOST**. The specific guest borrowing obligation stays unresolved until actual return, approved replacement, approved money compensation, approved WRITE_OFF, or physical recovery as defined below.
+- Do not automatically classify outstanding units as LOST at guest checkout.
+
+### 10.2 Simple settlement form
+
+Present one straightforward **LOST Settlement form** that shows fields conditionally based on a method selector:
+
+| Method | Basic fields / approval | Outcome |
 |---|---|---|
-| Web framework | Next.js, App Router | Chosen |
-| Language | TypeScript | Chosen during project setup |
-| Styling | Tailwind CSS | Chosen during project setup |
-| Backend | Next.js server-side code / Route Handlers / Server Actions as appropriate | Proposed architecture |
-| Database | PostgreSQL (independent from AppSheet data) | **Needs confirmation** |
-| ORM | Prisma or Drizzle | **Needs confirmation** |
-| Authentication / roles | To be designed | **Needs confirmation** |
-| Photo storage | Private object/file storage with controlled access | **Needs confirmation** |
-| Hosting | To be decided | **Needs confirmation** |
+| `REPLACEMENT` | Staff records what replacement item was received, **initial condition default GOOD (staff may override)**, notes and **required photo**, physical receipt confirmation; **HK Supervisor** APPROVE/REJECT. | After physical receipt + approval, resolve original obligation and create exactly one new physical `ItemUnit`. |
+| `COMPENSATION` (money) | Amount, notes, optional supporting evidence as appropriate; **HK Supervisor** APPROVE/REJECT. | Resolve original guest obligation; **does not create inventory**. No payments, cashier workflow, or billing integration. |
+| `WRITE_OFF` | Only **HK Supervisor** can propose; **Management** approves/rejects, with rationale/audit. | Resolve original guest obligation without creating inventory. System Admin alone cannot approve. |
 
-Security baseline: validate input on the server, authorize every state-changing operation, protect uploads, keep secrets in environment variables, and never trust client-submitted stock or status. Never expose database credentials in browser code. Do not add dependencies without a clear use case.
+- Whether an item is a suitable/equivalent replacement, whether payment was received, and the physical handoff process are **decided operationally outside the web app**. **Do not implement item equivalence checks, quality scoring, approval eligibility restrictions by condition, or cashier/location-transfer workflows.**
+- A pending or rejected replacement **does not create an ItemUnit, change stock, or resolve the guest obligation**.
+- Only **after** receipt is confirmed and Supervisor approves, atomically approve the settlement, create the new ItemUnit, link it to the original lost ItemUnit and borrowing line, resolve the obligation, and write audit. Prevent duplicate approvals/duplicate units.
+- Replacement-created ItemUnit starts with location **`HK Main Storage`** and custody **`HOUSEKEEPING`** automatically; no location-selection form. Initial condition comes from the submitted record. GOOD can become ready if other rules permit; non-GOOD becomes `PENDING_INSPECTION`. Supervisor's acceptance of the replacement is **not** a FIT_FOR_USE inspection.
+- An original lost unit stays LOST after its guest obligation is settled by replacement or compensation unless physically recovered; the replacement is a **different physical unit**.
+- A guest-LOST borrowing unit has at most **one finalized resolution**. Rejected proposals remain in history, and new proposals may be recorded.
 
-## 9. Delivery plan
+### 10.3 Missing/unborrowed stock and physical recovery
 
-| Phase | Output | Acceptance checkpoint |
-|---|---|---|
-| 0 — Foundation | Repository review, project conventions, schema proposal, environment setup | Architecture and schema are reviewed before migrations |
-| 1 — Master data | Item types, categories, conditions, locations, physical units | Adding existing stock increases the correct item type's unit count |
-| 2 — Borrowings | Guest selection, borrowing form, multiple unit lines | Borrowing changes only selected `AVAILABLE` units to `BORROWED` |
-| 3 — Returns | Partial/full returns, conditions, unit transitions, history | Returned `GOOD` units become available; damaged/lost units do not |
-| 4 — Operational UI | Dashboard, filtering, search, detail views, responsive polish | Operators can trace one unit through borrowing and return |
-| 5 — Hardening | Authorization, validation, testing, audit safeguards, deployment | Duplicate borrowing/return and inconsistent stock are blocked |
+- Missing Housekeeping stock has **no fake guest liability**. Staff reports MISSING immediately as above; Supervisor confirms LOST or supports restoration when found.
+- HK Staff can record `FOUND` recovery of previously LOST unborrowed stock **without new Supervisor approval**, with actual location, condition, who/time and notes. GOOD can become ready if otherwise eligible; non-GOOD requires inspection. `FOUND` is a recovery **event**, not a permanent lifecycle status.
+- If a physical unit lost **during an active guest borrowing** is found and physically received by Housekeeping, record recovery and **resolve that unit's open guest obligation simultaneously** as `PHYSICAL_RECOVERY`, **not** as a fictitious guest RETURNED. Other units remain outstanding. Update actual custody/location/condition, readiness and audit.
+- If compensation/replacement already **finalized** the obligation, later discovery of the original unit **does not reopen settlement, auto-refund, or reassign responsibility**. Record a new recovery event; if physically eligible it may join inventory again. The original and replacement may coexist as different ItemUnits.
 
-Phases may be adjusted after schema review. Do not generate the whole application in one unreviewed step.
+## 11. Auditing and photos
 
-## 10. Critical acceptance scenarios
+- Capture actors through authenticated sessions, authoritative server timestamps, and domain-event histories for creation, edits, transfers, borrowing, returns, holds, repair, inspection, lost decisions, settlements, retirements, and recovery.
+- Store **old/new values for administrative corrections**, required reasons for room/primary-guest changes and registration duplicate overrides, and required Supervisor verification notes/photos.
+- Photos must be tied to the **specific ItemUnit/event/borrowing line/return line** they document, not just the header or Item type. Photo upload must succeed before finalizing any operation requiring it. Keep finalized evidence/history immutable or append a traceable correction event rather than silently overwrite it.
+- Avoid leaking personal guest records or private evidence URLs. Actual storage provider, limits and retention are technical/operational configuration items; they are **not new business approval workflows**.
+- Atomic DB transactions for business records, coupled stock/custody/readiness changes and audit; use idempotency/constraints where retries or concurrency can duplicate operations.
 
-- Creating `Hair Dryer` and adding two units produces **one item type** with two physical units.
-- Entering `hair dryer` as a new type triggers duplicate protection against `Hair Dryer` under the agreed uniqueness rule.
-- Borrowing unit `HD-001` decreases Hair Dryer available count by exactly one.
-- Borrowing `HD-001` again while still borrowed is rejected, even under concurrent requests.
-- A borrowing containing two units allows one unit to be returned without automatically returning the other.
-- Returning a `GOOD` unit makes it `AVAILABLE`; returning `DAMAGED` sends it to `MAINTENANCE`; returning `LOST` sets `LOST`.
-- Returning the same borrowing line twice is rejected without changing stock.
-- After the last outstanding line is returned, the borrowing is visibly and logically complete.
-- A checked-out guest's existing borrowing remains visible for return and audit.
-- No AppSheet connection, shared database, or sync is required for any feature.
+## 12. Core UI and screens
 
-## 11. Open decisions — do not assume
+Prioritize a responsive, practical UI with these capabilities (exact layout is flexible):
 
-1. Exact web-specific role names and access matrix.
-2. Complete fields and required/optional validation for `Guests`, `Returns`, `ReturnItems`, and master tables.
-3. Whether a borrowing must include a room number and where to store it.
-4. Item-name uniqueness scope and item/unit code generation rules.
-5. Whether new stock defaults to `AVAILABLE` only when condition is `GOOD`.
-6. Photo limits, formats, privacy, and retention policy.
-7. Database, ORM, authentication provider, and hosting.
-8. Whether maintenance-to-available and lost-recovery workflows belong in the first release.
-9. Any reporting/export needs and whether a demo environment needs sample data.
+- **Dashboard:** registered/ready/borrowed/held/lost summaries and links to filtered lists.
+- **Inventory:** Master Items and ItemUnits searchable lists, Add New Item Type, **Bulk Add Stock** with quantity + optional details per unit, direct ItemUnit corrections, unit history.
+- **Guests / GuestVisit detail:** check-in/out, current room, primary guest, duplicate flag, guest borrowing/return/settlement history and outstanding unit list.
+- **Borrowing:** one or more exact ready units, **mandatory photo per unit** and visible issuer/guest information.
+- **Combined Return:** choose outstanding units across borrowings for one visit, default GOOD per line, conditional mandatory photo for non-GOOD, receiving location default + per-line override, one atomic Save.
+- **Inspection / Maintenance:** simple issue/hold entry, record actual repair work, Supervisor verification with Result/Notes/Photo, optional batch verification.
+- **LOST / Settlement:** simple method selector (money/replacement/write-off), conditional fields, role-appropriate approval, separate physical recovery events.
+- **History / Audit / Admin:** trace physical units and responsible staff, role-limited technical/admin actions.
 
-When implementation encounters an unresolved decision, propose a small number of explicit options and document the chosen rule before building it.
+Use labels and default values instead of unnecessary questions, wizard steps, or separate forms. User-facing language primarily Indonesian; readable codes/labels rather than opaque DB IDs.
 
-## 12. Instructions for OpenCode contributors
+## 13. Technical direction (review at implementation)
 
-- Read this document and `AGENTS.md` before modifying code.
-- Treat the **confirmed business rules** as constraints; treat **proposed technical choices** as negotiable.
-- Inspect existing repository structure and dependencies before proposing changes.
-- Start each significant feature with a short implementation plan and expected files.
-- Implement one vertical slice at a time; avoid unrelated refactors.
-- Keep database changes in migrations and state-dependent mutations in transactions.
-- Add automated tests for stock and return invariants.
-- Run lint/typecheck/tests relevant to each change and report the results honestly.
-- Update this document when a product decision changes; do not silently redefine requirements.
-- Never attempt an AppSheet integration unless the project owner explicitly changes the scope.
+**Known project foundation:** Next.js App Router, TypeScript (strict), Tailwind CSS. The existing repository was last assessed as a starter with Next.js 16; verify actual checked-out versions before editing code.
+
+**Architecture proposal, not an approved implementation:** a single Next.js full-stack/modular-monolith app, server-side domain services, PostgreSQL, an ORM such as Prisma/Drizzle, controlled private photo storage, authenticated sessions and server-side RBAC. Database/ORM/auth provider/hosting/storage still require *technical selection*, not another extended business-rule questionnaire.
+
+Implementation expectations:
+
+- Inspect repository and `AGENTS.md` before modifying code; use the existing `src/` structure and Next.js version-specific conventions.
+- Use schema constraints, validated server mutations, concurrency-safe unit-code generation, and transactions for multi-entity state changes.
+- Avoid free-form stock counters and contradictory duplicated status fields; define derived availability and borrowing completion consistently.
+- Prefer the smallest working implementation; do not create microservices, integrations, repair-ticket modules, cashier/payment systems or new approval stages.
+- Keep technical/design choices traceable but **do not block progress on nonessential cosmetic decisions**. When a rule isn't specified and can be safely changed later, apply a sensible default consistent with this document.
+
+## 14. Suggested incremental delivery
+
+1. **Foundation:** inspect starter, confirm technical stack/schema/RBAC strategy, set up database/auth/roles and baseline testing.
+2. **Inventory:** master Items, ItemUnits, locations, Bulk Add Stock, stock derivation, audited corrections.
+3. **Guests + Borrowing:** visit-based guests, primary-guest/room snapshots, borrowable unit selection, required issue photos.
+4. **Combined Return:** partial return across multiple borrowing headers, per-unit condition/photo, receiving location and atomic status updates.
+5. **Inspection + Maintenance:** holds, physical custody handovers, simple actual-repair logs, Supervisor verification/batch verification.
+6. **LOST + Lifecycle:** missing/lost reports, settlement approval, replacement creation, recovery, retirement/reactivation.
+7. **Operational polish:** dashboard, search/history/audit, access-hardening, tests, responsive UI and deployment.
+
+Implement one vertical slice at a time and verify it; **do not build the full app in one enormous unreviewed change**.
+
+## 15. Minimum acceptance tests
+
+- `Hair Dryer` vs `hair dryer` does not create duplicate types; all HK Staff can create one and Supervisor can edit it without approval.
+- Bulk Add Stock quantity 10 creates **exactly 10 unique physical units**, linked to one Item type, with default `HK Main Storage` and no partial results on error. Staff can correct a typo on 2 of those units directly; audit shows who/when/what changed.
+- Two concurrent requests cannot borrow the same unit; issuance without photo **for each** selected unit is rejected.
+- A guest can receive multiple separately recorded borrowing occasions; check-out and room changes preserve old borrowing/room/primary-guest snapshots and outstanding units.
+- Combined Return can return units from different borrowings for the same visit in one atomic operation; default GOOD photo is optional; any non-GOOD line **requires** a photo and enters PENDING_INSPECTION.
+- A DAMAGED physical return closes the specific borrowing line but does **not** create guest damage liability; other lines remain open, ready stock remains correct.
+- Staff can immediately ON_HOLD a newly discovered problem; recording maintenance completion does not bypass Supervisor verification, which requires Result + Notes + Photo for **every** unit, saved atomically in a batch.
+- An approved physically received LOST replacement creates **one** new ItemUnit (default location HK Main Storage), settles that borrowing obligation and is tracked separately from the original LOST unit. Rejection creates no unit. Non-GOOD replacement is pending inspection, not ready stock.
+- Money compensation settles obligation without adding inventory; WRITE_OFF requires Management approval; late physical recovery does not undo finalized settlement.
+- No business flow depends on AppSheet, a PMS, an external cashier, or a payment provider.
+
+## 16. Decision policy for OpenCode
+
+- Treat Sections 1–12 and their **explicit confirmations** as the agreed scope. The precise DB schema/table names and Section 13 technologies remain design details until reviewed.
+- **Do not repeat already settled questions**, notably default `HK Main Storage` for newly added/replacement units, routine staff edits without approval, and Supervisor involvement only in explicitly required workflows.
+- Ask only **essential blocking questions** where two plausible paths would have a major effect on integrity, permissions or the business outcome. Otherwise document and apply the simplest reasonable default; surface it briefly in a plan or review.
+- Do not add a business workflow because an edge case is theoretically possible. Preserve simple UI and real operational boundaries.
+- Update `PROJECT.md` only when the project owner requests documentation changes or explicitly confirms a meaningful change. Avoid unrelated edits to `AGENTS.md`.
 
 ---
 
-**Specification status:** This is a practical starting contract for development, not a claim that every feature, schema field, or technology decision is already finalized.
+**Current state:** Product rules consolidated. Next step is a focused technical schema/architecture review and phased implementation, **not** another exhaustive business-rules interview.
