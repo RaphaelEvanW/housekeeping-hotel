@@ -3,11 +3,9 @@
 
 ## This is NOT the Next.js you know
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data.
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
 
-Before writing any Next.js code, read the relevant documentation in `node_modules/next/dist/docs/`.
-
-Follow the installed Next.js version's documentation and heed deprecation notices.
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
 
@@ -24,8 +22,8 @@ Follow the installed Next.js version's documentation and heed deprecation notice
 Build a maintainable **independent Next.js web application** for hotel Housekeeping inventory, guest borrowing, and item returns.
 
 Before making changes:
-1. Read this file and `PROJECT.md` in full.
-2. Inspect `package.json`, the existing `src/` tree, configuration, and relevant code.
+1. Read this file and `docs/CONTEXT.md` (if present). Read `PROJECT.md` in full on first project orientation, when its requirements change, or when cross-domain scope/uncertainty requires it. For subsequent focused work, read the relevant sections and preserve all domain invariants below. Do not reread unchanged content already available in the current context.
+2. Check current Git status and the context snapshot's freshness, then inspect relevant code, tests, and configuration using its file map. Inspect `package.json` and the `src/` tree on initial orientation or when structure/dependencies change. A context summary never replaces inspecting code being changed.
 3. Check the installed Next.js/React versions; use documentation and conventions appropriate to those versions, including any Next.js-generated agent rules already in this file.
 4. Distinguish **confirmed business requirements** from **proposals/open decisions** in `PROJECT.md`.
 5. Check the latest relevant entries in `docs/DEVLOG.md` before continuing development, and append a concise, verified entry after each completed development step. `PROJECT.md` remains the business source of truth; never record secrets in the devlog.
@@ -125,3 +123,20 @@ Unless the user specifies otherwise, follow the milestones in `PROJECT.md`:
 5. Implement dashboard, history, usability improvements, and hardening.
 
 **Default behavior on first read:** Analyze the repository and propose the next smallest step. Do **not** build the entire application in one pass.
+
+<!-- antislop:start -->
+## Project-local antislop
+
+- Owner preference (2026-10-15): automatically use `.agents/skills/antislop/SKILL.md` for relevant UI/visual design, interface copy, accessibility, responsive layout, and code-comment tasks, or when explicitly requested.
+- This project-specific scope overrides the upstream description's broad "Load always" wording. Do not activate it for unrelated prompts or database/backend-only work.
+- Only the standalone core is installed; skip the first-run install wizard. Optional companion skills have not been installed.
+- Automatic activation does not select a `during`/`after` usage mode. Follow the core's mode resolution when relevant work begins; no mode preference was selected during installation.
+- Explicit user instructions and the confirmed business requirements in `PROJECT.md` take precedence. Preserve existing Next.js instructions.
+<!-- antislop:end -->
+
+## Project context and additional skills
+
+- Use `.agents/skills/housekeeping-context/SKILL.md` when resuming development or preparing a project status/handoff. Keep `docs/CONTEXT.md` compact and current after verified work; use `docs/DEVLOG.md` for historical detail. Read-only requests do not authorize documentation writes.
+- Use `.agents/skills/playwright/SKILL.md` for relevant browser automation/UI-flow checks. Its local Windows note uses `npx.cmd` without requiring Bash. Installing a skill does not install its runtime/browser binaries.
+- Use `.agents/skills/security-best-practices/SKILL.md` for explicit security review or secure-by-default guidance requests, following its trigger scope. Do not turn ordinary development into a full security audit.
+- All three are project-local. Context notes are navigation aids, not new business requirements, proof of current test results, or permission for the next milestone.
