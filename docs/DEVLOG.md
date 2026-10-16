@@ -135,3 +135,20 @@ Retrospective entry based on the implementation and verification recorded when S
 - Agent verification: lint and typecheck passed; full test suite passed 43/43 tests in 6 files; production build passed. First sandboxed build failed fetching Google Fonts; authorized network-enabled retry succeeded.
 - Agent browser verification at desktop 1440x960, tablet 820x1180, and mobile 390x844/320x740: responsive layout and no horizontal overflow at tablet/mobile sizes; empty required-email validation, password visibility type toggle, keyboard focus, pending disabled submit, invalid-credential alert and submit recovery. Successful login/logout and account deactivation were not manually repeated; existing regression tests passed.
 - Assets/provenance in `docs/LOGIN-DESIGN.md`. Context updated with approval and actual evidence. Screenshots saved in the conversation visualization directory. No commit created. Next.js refreshed its generated AGENTS block when the development server started; project-specific instructions remain intact.
+
+## 2026-10-16 | Owner-requested smaller login proportions
+
+- Owner authorized direct CSS edits to reduce the current login UI approximately 15%. Scaled panel/column widths, heading sizes, emblem/icons, spacing, and control heights across existing breakpoints in `src/app/login/login.module.css`, preserving the owner's latest edits.
+- Desktop panel maximum changed from 420px to 357px; mobile maximum from 440px to 374px. Input text remains 16px, body/form text has a 14px floor, small existing labels/footer remain unchanged, and password-toggle target remains 44px. No page zoom/transform or overflow clipping introduced.
+- Agent ran lint and typecheck successfully. No new browser screenshots or visual-fit claims for this adjustment; owner review at 100% browser zoom remains pending. Background crop on mobile remains a separate unresolved visual request.
+
+## 2026-10-16 | Portrait mobile asset prepared
+
+- Owner confirmed the smaller UI is acceptable, then selected a supplied portrait image for a full-screen mobile background with compact glass form. Owner will type application code; agent authorized only to place the image and provide guidance.
+- Copied supplied PNG to `public/images/login/hotel-background-portrait.png`; verified source/destination SHA256 match. No application source changed in this step. Responsive picture/getImageProps and compact mobile CSS are proposed, not implemented or tested.
+
+## 2026-10-16 | Owner-confirmed responsive login checks
+
+- Owner supplied typecheck success and initial lint output with one alt-text warning. After guidance to add explicit `alt=""` to the decorative picture fallback, owner confirmed lint is clean.
+- Owner then explicitly confirmed all five manual checks: empty-field validation, incorrect-password error/layout, successful login/dashboard navigation, logout/login navigation, and mobile field/submit access with keyboard open.
+- Evidence is owner-reported; no new agent browser/test run is claimed. Login presentation accepted for now, including mobile portrait background and form-only layout. Next proposed frontend step is a dashboard shell; operational counts require real domain data and are not yet implemented.

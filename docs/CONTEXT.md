@@ -45,3 +45,13 @@ Last verified: 2026-10-15. HEAD: `c5de801` (`set up auth`). Check current status
 - PROJECT technology proposals can lag implemented code; do not silently rewrite confirmed business rules.
 - Historical dependency-audit findings are in DEVLOG; no fresh dependency audit was run.
 - Latest work is ready for owner visual review at `/login`; no new milestone is implicitly authorized.
+
+## Latest adjustment: 2026-10-16
+
+- Owner authorized direct CSS sizing edits: approximately 15% smaller current login proportions at all existing breakpoints (desktop panel 420px to 357px). Input font retained at 16px and toggle target at 44px. Lint/typecheck passed; visual confirmation pending. Mobile background crop remains unresolved. Owner normally resumes typing code after this specific authorized edit.
+
+- Owner subsequently confirmed smaller UI is acceptable. Mobile direction now approved: supplied portrait photo full-screen plus compact glass form. Asset prepared at `public/images/login/hotel-background-portrait.png` (verified identical copy). Owner will write suggested application changes; portrait switching is not implemented yet.
+
+## Owner confirmation: 2026-10-16
+
+- Supersedes the pending mobile notes above: owner implemented portrait switching and mobile form-only presentation, fixed explicit decorative image alt, and confirmed lint/typecheck plus all five requested login/manual mobile-keyboard checks pass. This is owner-reported evidence, not a new agent test run. Login UI accepted for now. Next proposed work: guided frontend dashboard shell; no operational metrics or backend work authorized by this confirmation alone.

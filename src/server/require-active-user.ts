@@ -21,6 +21,15 @@ export async function requireActiveUser() {
       id: true,
       name: true,
       isActive: true,
+      roles: {
+        select: {
+          role: {
+            select: {
+              code: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -28,5 +37,10 @@ export async function requireActiveUser() {
     redirect("/login");
   }
 
-  return user;
+  return {
+    id: user.id,
+    name: user.name,
+    isActive: user.isActive,
+    roles: user.roles.map(({ role }) => role.code),
+  };
 }

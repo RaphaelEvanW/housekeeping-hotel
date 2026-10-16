@@ -1,17 +1,45 @@
 import type { Metadata } from "next";
-import Image from "next/image";
+import Image, { getImageProps } from "next/image";
 import { LoginForm } from "./login-form";
 import styles from "./login.module.css";
 
 export const metadata: Metadata = {
   title: "Masuk | Housekeeping",
-  description: "Portal internal Housekeeping untuk peminjaman dan pengembalian barang hotel.",
-};
+    description: "Portal internal Housekeeping untuk peminjaman dan pengembalian barang hotel.",
+  };
 
-export default function LoginPage() {
+  export default function LoginPage() {
+    const common = {
+    alt: "",
+    fill: true,
+    sizes: "100vw",
+  };
+
+  const { props: desktopBackground } = getImageProps({
+    ...common,
+    src: "/images/login/hotel-background.png",
+  });
+
+  const { props: portraitBackground } = getImageProps({
+    ...common,
+    src: "/images/login/hotel-background-portrait.png",
+  });
   return (
     <main className={styles.page}>
-      <Image src="/images/login/hotel-background.png" alt="" fill sizes="100vw" preload className={styles.background} />
+      <picture className={styles.backgroundLayer}>
+        <source
+          media="(max-width: 760px)"
+          srcSet={portraitBackground.srcSet}
+          sizes="100vw"
+        />
+        <img
+          {...desktopBackground}
+          alt=""
+          className={styles.background}
+          loading="eager"
+          fetchPriority="high"
+        />
+      </picture>
       <div className={styles.scrim} aria-hidden="true" />
       <div className={styles.content}>
         <section className={styles.introduction} aria-labelledby="login-introduction">
