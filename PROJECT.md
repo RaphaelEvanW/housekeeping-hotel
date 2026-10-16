@@ -50,10 +50,12 @@ Four business/access roles:
 
 - **Housekeeping Staff:** routine guest visit registration, room transfers, primary guest changes, borrowing/return processing, creating master items and stock, direct correction of clerical inventory errors, reporting damage/missing/lost, recording actually completed repairs, recording recoveries, proposing guest-LOST replacement or money compensation.
 - **HK Supervisor:** all relevant Housekeeping capabilities plus required operational verification/inspection and approval/rejection of LOST reports and replacement/compensation settlements, retiring/reactivating units. Can correct master data without an approval chain. **Only Supervisor proposes WRITE_OFF.**
-- **Management:** business approval for WRITE_OFF and approvals required to grant/revoke Management role.
+- **Management:** read-only access to operational summaries and records for oversight; business approval for WRITE_OFF and approvals required to grant/revoke Management role. Read access does not grant routine operational mutation permissions.
 - **System Admin / IT:** technical account/access administration; **does not automatically have authority to approve business decisions** such as WRITE_OFF or Supervisor inspections.
 
 Management role grants/revocations require in-app Management authorization and IT execution; exceptional emergency Management access is temporary and fully audited, with authorization by the Head/Manager IT (including self-authorization if appropriate). This exceptional-access procedure is **not a blocker for the operational MVP**: defer detailed recovery UX until account administration is being implemented.
+
+Owner-confirmed access decisions (16 October 2026): users may hold multiple roles; permissions combine across their assigned roles. A single shared IT/admin account is acceptable under the owner's internal accountability process; application audit identifies that account, while individual operator attribution relies on the internal process. The admin role grants account/access administration, not implicit operational access or business approval. Additional roles remain subject to the authorization requirements above.
 
 Enforce permissions **on the server**. Do not add approvals to routine staff data entry, corrections, Master Item creation, stock addition, location updates, or routine returns.
 

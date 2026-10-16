@@ -159,3 +159,10 @@ Retrospective entry based on the implementation and verification recorded when S
 - Created PRODUCT.md as durable Impeccable context subordinate to PROJECT.md, separating confirmed requirements from implementation evidence and open decisions. Saved buildPath=comp in .impeccable/config.json and configured the existing Next.js layout in .impeccable/live/config.json. Added the context file map pointer.
 - Agent verification: product schema/platform/device-context assertions, JSON parsing, selected workflow, live target existence and insertion anchor passed. Impeccable detect-csp returned shape=null and no signals; no CSP change needed. Live mode was not started or browser-tested. No application code changed and no application tests were run.
 - Full git diff --check reported existing trailing whitespace in tests/integration/require-active-user.test.ts (lines 74 and 106), outside this task. Existing permission/auth work was preserved. Scoped documentation whitespace check is recorded separately by the completion command.
+
+## 2026-10-16 | RBAC foundation and owner-confirmed access policy
+
+- Inspected permission map and server helper. Existing three action permissions distinguish borrowing creation, inspection verification, and write-off approval. requirePermission calls requireActiveUser and throws PermissionDeniedError on denial; no HTTP 403 mapping or sidebar/page enforcement is established by the helper alone.
+- Owner confirmed helper tests work after correcting implementation/test file placement; no new agent-run verification or inferred test totals.
+- Owner confirmed Management read-only operational oversight plus its specified approvals; IT account/access administration without implicit business powers; multi-role users; shared IT/admin account acceptable with individual accountability handled by internal process. Recorded these decisions in PROJECT section 3 without relaxing Management-role grant approvals.
+- Next guided change is page-view permissions in src/lib/permissions.ts. Application code remains owner-authored. Agent changed documentation only.

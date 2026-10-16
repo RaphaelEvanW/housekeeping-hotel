@@ -56,3 +56,8 @@ Last verified: 2026-10-15. HEAD: `c5de801` (`set up auth`). Check current status
 ## Owner confirmation: 2026-10-16
 
 - Supersedes the pending mobile notes above: owner implemented portrait switching and mobile form-only presentation, fixed explicit decorative image alt, and confirmed lint/typecheck plus all five requested login/manual mobile-keyboard checks pass. This is owner-reported evidence, not a new agent test run. Login UI accepted for now. Next proposed work: guided frontend dashboard shell; no operational metrics or backend work authorized by this confirmation alone.
+
+## RBAC checkpoint: 2026-10-16
+
+- Owner is working on feature/backend. Inspected src/lib/permissions.ts (three action permissions) and src/server/require-permission.ts; owner confirmed helper tests work after file-placement correction. No fresh agent-run tests. Helper alone does not yet protect pages/endpoints or map denial to HTTP 403.
+- PROJECT section 3 now records confirmed Management operational read access, IT account/access administration, multiple roles, and permitted shared admin account with account-level audit. Management-role grant approvals still apply. Next: owner adds page-view permissions, then tests and sidebar/server integration.
