@@ -62,3 +62,70 @@ describe("hasPermission", () => {
     expect(hasPermission([], "write-off:approve")).toBe(false);
   });
 });
+
+describe("page permissions", () => {
+  const operationalPermissions = [
+    "dashboard:view",
+    "inventory:view",
+    "guests:view",
+    "borrowing:view",
+    "returns:view",
+    "maintenance:view",
+    "loss:view",
+    "history:view",
+  ] as const;
+
+  it.each(operationalPermissions)(
+    "allows operational roles and denies IT-only access to %s",
+    (permission) => {
+      expect(hasPermission(["HK_STAFF"], permission)).toBe(true);
+      expect(hasPermission(["HK_SUPERVISOR"], permission)).toBe(true);
+      expect(hasPermission(["MANAGEMENT"], permission)).toBe(true);
+
+      expect(hasPermission(["SYSTEM_ADMIN"], permission)).toBe(false);
+      expect(hasPermission([], permission)).toBe(false);
+    },
+  );
+
+  it("does not grant operational actions through Management read access", () => {
+    expect(
+      hasPermission(["MANAGEMENT"], "borrowing:create"),
+    ).toBe(false);
+
+    expect(
+      hasPermission(["MANAGEMENT"], "inspection:verify"),
+    ).toBe(false);
+  });
+
+  it("reserves administration access for IT", () => {
+    expect(
+      hasPermission(["SYSTEM_ADMIN"], "administration:view"),
+    ).toBe(true);
+
+    expect(
+      hasPermission(["HK_STAFF"], "administration:view"),
+    ).toBe(false);
+
+    expect(
+      hasPermission(["HK_SUPERVISOR"], "administration:view"),
+    ).toBe(false);
+
+    expect(
+      hasPermission(["MANAGEMENT"], "administration:view"),
+    ).toBe(false);
+
+    expect(
+      hasPermission([], "administration:view"),
+    ).toBe(false);
+  });
+
+  it("combines IT and operational access when both roles are assigned", () => {
+    const roles = ["SYSTEM_ADMIN", "HK_STAFF"] as const;
+
+    expect(hasPermission(roles, "administration:view")).toBe(true);
+    expect(hasPermission(roles, "inventory:view")).toBe(true);
+    expect(hasPermission(roles, "borrowing:create")).toBe(true);
+
+    expect(hasPermission(roles, "write-off:approve")).toBe(false);
+  });
+});

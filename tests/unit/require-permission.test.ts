@@ -21,7 +21,7 @@ describe("requirePermission", () => {
     const user = {
       id: "test-staff",
       name: "Test Staff",
-      isActive: true,
+      isActive: true as const,
       roles: ["HK_STAFF"] as const,
     };
 

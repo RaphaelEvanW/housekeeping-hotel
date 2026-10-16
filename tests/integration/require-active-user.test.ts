@@ -5,6 +5,10 @@ import { afterAll, afterEach, expect, it, vi } from "vitest";
 import { auth } from "../../src/server/auth";
 import { db } from "../../src/server/db";
 import { requireActiveUser } from "../../src/server/require-active-user";
+import {
+  PermissionDeniedError,
+  requirePermission,
+} from "../../src/server/require-permission";
 
 const request = vi.hoisted(() => ({
   headers: new Headers(),
@@ -71,7 +75,11 @@ it("reads current roles and rejects a deactivated account with the same session"
       isActive: true,
       roles: [],
     });
-    
+
+    await expect(
+      requirePermission("borrowing:create"),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
     const staffRole = await db.role.upsert({
       where: { code: "HK_STAFF" },
       update: {},
@@ -82,15 +90,15 @@ it("reads current roles and rejects a deactivated account with the same session"
     });
 
     const supervisorRole = await db.role.upsert({
-          where: { code: "HK_SUPERVISOR" },
-          update: {},
-          create: {
-            code: "HK_SUPERVISOR",
-            name: "HK Supervisor",
-          },
-        });
+      where: { code: "HK_SUPERVISOR" },
+      update: {},
+      create: {
+        code: "HK_SUPERVISOR",
+        name: "HK Supervisor",
+      },
+    });
 
-        await db.userRole.createMany({
+    await db.userRole.createMany({
       data: [
         { userId, roleId: staffRole.id },
         { userId, roleId: supervisorRole.id },
@@ -100,11 +108,17 @@ it("reads current roles and rejects a deactivated account with the same session"
     const userWithRoles = await requireActiveUser();
 
     expect([...userWithRoles.roles].sort()).toEqual([
-          "HK_STAFF",
-          "HK_SUPERVISOR",
-        ]);
-        
-        await db.userRole.delete({
+      "HK_STAFF",
+      "HK_SUPERVISOR",
+    ]);
+
+    await expect(
+      requirePermission("inspection:verify"),
+    ).resolves.toMatchObject({
+      id: userId,
+    });
+
+    await db.userRole.delete({
       where: {
         userId_roleId: {
           userId,
@@ -117,6 +131,16 @@ it("reads current roles and rejects a deactivated account with the same session"
 
     expect(userAfterRevocation.roles).toEqual(["HK_STAFF"]);
 
+    await expect(
+      requirePermission("inspection:verify"),
+    ).rejects.toBeInstanceOf(PermissionDeniedError);
+
+    await expect(
+      requirePermission("borrowing:create"),
+    ).resolves.toMatchObject({
+      id: userId,
+    });
+
     await db.user.update({
       where: { id: userId },
       data: { isActive: false },
@@ -128,7 +152,13 @@ it("reads current roles and rejects a deactivated account with the same session"
 
     expect(existingSession?.user.id).toBe(userId);
 
-    await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/login");
+    await expect(requireActiveUser()).rejects.toThrow(
+      "REDIRECT:/login",
+    );
+
+    await expect(
+      requirePermission("borrowing:create"),
+    ).rejects.toThrow("REDIRECT:/login");
   } finally {
     await db.user.delete({
       where: { id: userId },
