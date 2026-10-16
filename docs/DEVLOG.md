@@ -152,3 +152,10 @@ Retrospective entry based on the implementation and verification recorded when S
 - Owner supplied typecheck success and initial lint output with one alt-text warning. After guidance to add explicit `alt=""` to the decorative picture fallback, owner confirmed lint is clean.
 - Owner then explicitly confirmed all five manual checks: empty-field validation, incorrect-password error/layout, successful login/dashboard navigation, logout/login navigation, and mobile field/submit access with keyboard open.
 - Evidence is owner-reported; no new agent browser/test run is claimed. Login presentation accepted for now, including mobile portrait background and form-only layout. Next proposed frontend step is a dashboard shell; operational counts require real domain data and are not yet implemented.
+
+## 2026-10-16 | Impeccable product initialization
+
+- Owner confirmed mixed phone use during operations and computer use at the HK desk, and selected comp-first for future new surfaces.
+- Created PRODUCT.md as durable Impeccable context subordinate to PROJECT.md, separating confirmed requirements from implementation evidence and open decisions. Saved buildPath=comp in .impeccable/config.json and configured the existing Next.js layout in .impeccable/live/config.json. Added the context file map pointer.
+- Agent verification: product schema/platform/device-context assertions, JSON parsing, selected workflow, live target existence and insertion anchor passed. Impeccable detect-csp returned shape=null and no signals; no CSP change needed. Live mode was not started or browser-tested. No application code changed and no application tests were run.
+- Full git diff --check reported existing trailing whitespace in tests/integration/require-active-user.test.ts (lines 74 and 106), outside this task. Existing permission/auth work was preserved. Scoped documentation whitespace check is recorded separately by the completion command.

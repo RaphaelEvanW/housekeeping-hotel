@@ -5,6 +5,7 @@ Last verified: 2026-10-15. HEAD: `c5de801` (`set up auth`). Check current status
 ## Scope and preferences
 
 - Business source of truth: `PROJECT.md`; instructions: `AGENTS.md`; historical evidence: `docs/DEVLOG.md`.
+- Impeccable product context: `PRODUCT.md` (initialized 2026-10-16). Owner confirmed mixed phone/desk-computer use. Workflow default is stored only in `.impeccable/config.json`; live injection target is configured in `.impeccable/live/config.json`, but live mode has not been launched or browser-verified.
 - Owner normally types application code with step-by-step Indonesian guidance. Explicitly authorized agent implementation and local image assets for this login redesign.
 - Owner says branch is `feature/frontend`; notify before backend work. This redesign changed frontend only, including the CSS-loader configuration.
 - Antislop mode `during` was selected for this conversation. Approved visual direction: continuous warm hotel photo, translucent champagne glass form, espresso/brown typography and antique-gold accents. Earlier Ringkas/Dua kolom drafts are superseded.

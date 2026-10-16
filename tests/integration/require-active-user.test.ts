@@ -30,7 +30,7 @@ it("redirects visitors without a session to login", async () => {
   await expect(requireActiveUser()).rejects.toThrow("REDIRECT:/login");
 });
 
-it("rejects an existing session after the account is deactivated", async () => {
+it("reads current roles and rejects a deactivated account with the same session", async () => {
   const userId = randomUUID();
   const email = `${userId}@example.test`;
   const password = randomUUID();
@@ -69,7 +69,53 @@ it("rejects an existing session after the account is deactivated", async () => {
     await expect(requireActiveUser()).resolves.toMatchObject({
       id: userId,
       isActive: true,
+      roles: [],
     });
+    
+    const staffRole = await db.role.upsert({
+      where: { code: "HK_STAFF" },
+      update: {},
+      create: {
+        code: "HK_STAFF",
+        name: "Housekeeping Staff",
+      },
+    });
+
+    const supervisorRole = await db.role.upsert({
+          where: { code: "HK_SUPERVISOR" },
+          update: {},
+          create: {
+            code: "HK_SUPERVISOR",
+            name: "HK Supervisor",
+          },
+        });
+
+        await db.userRole.createMany({
+      data: [
+        { userId, roleId: staffRole.id },
+        { userId, roleId: supervisorRole.id },
+      ],
+    });
+
+    const userWithRoles = await requireActiveUser();
+
+    expect([...userWithRoles.roles].sort()).toEqual([
+          "HK_STAFF",
+          "HK_SUPERVISOR",
+        ]);
+        
+        await db.userRole.delete({
+      where: {
+        userId_roleId: {
+          userId,
+          roleId: supervisorRole.id,
+        },
+      },
+    });
+
+    const userAfterRevocation = await requireActiveUser();
+
+    expect(userAfterRevocation.roles).toEqual(["HK_STAFF"]);
 
     await db.user.update({
       where: { id: userId },
