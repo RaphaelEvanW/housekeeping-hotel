@@ -55,8 +55,16 @@ const navigationItems = [
   },
 ] as const satisfies readonly NavigationItem[];
 
+const availableRoutes = new Set<string>([
+  "/dashboard",
+  "/administration",
+]);
+
 export function getNavigationItems(roles: readonly RoleCode[]) {
-  return navigationItems.filter((item) =>
-    hasPermission(roles, item.permission),
-  );
+  return navigationItems
+    .filter((item) => hasPermission(roles, item.permission))
+    .map((item) => ({
+      ...item,
+      available: availableRoutes.has(item.href),
+    }));
 }

@@ -30,7 +30,7 @@ export function LoginForm() {
         return;
       }
 
-      window.location.replace("/dashboard");
+      window.location.replace("/start");
     } catch {
       setMessage("Tidak dapat menghubungi server. Coba lagi.");
     } finally {
