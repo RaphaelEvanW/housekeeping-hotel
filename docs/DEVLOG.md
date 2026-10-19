@@ -160,9 +160,27 @@ Retrospective entry based on the implementation and verification recorded when S
 - Agent verification: product schema/platform/device-context assertions, JSON parsing, selected workflow, live target existence and insertion anchor passed. Impeccable detect-csp returned shape=null and no signals; no CSP change needed. Live mode was not started or browser-tested. No application code changed and no application tests were run.
 - Full git diff --check reported existing trailing whitespace in tests/integration/require-active-user.test.ts (lines 74 and 106), outside this task. Existing permission/auth work was preserved. Scoped documentation whitespace check is recorded separately by the completion command.
 
+<<<<<<< HEAD
 ## 2026-10-16 | RBAC foundation and owner-confirmed access policy
 
 - Inspected permission map and server helper. Existing three action permissions distinguish borrowing creation, inspection verification, and write-off approval. requirePermission calls requireActiveUser and throws PermissionDeniedError on denial; no HTTP 403 mapping or sidebar/page enforcement is established by the helper alone.
 - Owner confirmed helper tests work after correcting implementation/test file placement; no new agent-run verification or inferred test totals.
 - Owner confirmed Management read-only operational oversight plus its specified approvals; IT account/access administration without implicit business powers; multi-role users; shared IT/admin account acceptable with individual accountability handled by internal process. Recorded these decisions in PROJECT section 3 without relaxing Management-role grant approvals.
 - Next guided change is page-view permissions in src/lib/permissions.ts. Application code remains owner-authored. Agent changed documentation only.
+=======
+## 2026-10-16 | RBAC type-error correction, owner will verify
+
+- Owner supplied typecheck errors and explicitly requested agent edits while reserving test execution for themselves. Added the nine previously agreed page-view permissions missing from src/lib/permissions.ts; retained action permission boundaries. Corrected the unit fixture to isActive: true as const.
+- Cleaned integration-test indentation and removed duplicate session/deactivation assertions, retaining no-role denial, role grant/revocation, retained Staff permission, and account-deactivation checks.
+- No typecheck or tests executed by agent per owner's request. Source diff inspected; repository whitespace check reported pre-existing trailing whitespace in src/server/require-active-user.ts. Verification remains pending owner execution.
+
+## 2026-10-16 | Owner-confirmed RBAC correction checks
+
+- Owner reported the requested typecheck and focused permission/helper unit and integration test run passed after the previous correction. No full output or totals supplied; no agent rerun claimed.
+- Inspected current permission map and tests. Page-view entries exist, but current permission unit tests only cover action permissions. Next guided coverage targets Management read-only access, IT-only administration, no-role denial and combined roles. Actual route enforcement and HTTP denial responses remain pending.
+
+## 2026-10-16 | Owner-confirmed active-user lookup extraction
+
+- Owner confirmed typecheck and focused requirePermission unit / active-user integration tests passed after extracting getActiveUser. Agent inspected current source; no agent-run verification claimed.
+- getActiveUser returns current active account/roles or null; requireActiveUser preserves page login redirects. Next guided backend step: an API authorization result with explicit JSON 401/403, without adding an operational endpoint prematurely.
+>>>>>>> e06ed5bbe3740157614eed135ec1f7652818298b

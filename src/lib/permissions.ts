@@ -1,7 +1,10 @@
 import type { RoleCode } from "@/generated/prisma/enums";
 
 export const permissionRoles = {
+<<<<<<< HEAD
   // View only
+=======
+>>>>>>> e06ed5bbe3740157614eed135ec1f7652818298b
   "dashboard:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
   "inventory:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
   "guests:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
@@ -10,11 +13,16 @@ export const permissionRoles = {
   "maintenance:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
   "loss:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
   "history:view": ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"],
+<<<<<<< HEAD
 
   // Account and full access
   "administration:view": ["SYSTEM_ADMIN"],
 
   // Business Action
+=======
+  "administration:view": ["SYSTEM_ADMIN"],
+
+>>>>>>> e06ed5bbe3740157614eed135ec1f7652818298b
   "borrowing:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inspection:verify": ["HK_SUPERVISOR"],
   "write-off:approve": ["MANAGEMENT"],
