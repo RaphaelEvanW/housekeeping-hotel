@@ -16,6 +16,7 @@ export const permissionRoles = {
 
   // Business actions
   "borrowing:create": ["HK_STAFF", "HK_SUPERVISOR"],
+  "inventory:item:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inspection:verify": ["HK_SUPERVISOR"],
   "write-off:approve": ["MANAGEMENT"],
 } as const satisfies Record<string, readonly RoleCode[]>;

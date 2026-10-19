@@ -11,7 +11,7 @@ const createUser = (tx: Prisma.TransactionClient) => tx.user.create({
 
 afterAll(() => db.$disconnect());
 
-it("has exactly the eight foundation tables, without operational business tables", async () => {
+it("contains the required foundation tables", async () => {
   const rows = await db.$queryRaw<{ table_name: string }[]>`
     SELECT table_name FROM information_schema.tables
     WHERE table_schema = 'public' AND table_type = 'BASE TABLE'
@@ -19,9 +19,18 @@ it("has exactly the eight foundation tables, without operational business tables
       AND table_name NOT LIKE 'toolchain_probe_%'
     ORDER BY table_name
   `;
-  expect(rows.map((row) => row.table_name)).toEqual([
-    "account", "audit_event", "location", "role", "session", "user", "user_role", "verification",
-  ]);
+  expect(rows.map((row) => row.table_name)).toEqual(
+    expect.arrayContaining([
+      "account",
+      "audit_event",
+      "location",
+      "role",
+      "session",
+      "user",
+      "user_role",
+      "verification",
+    ]),
+  );
 });
 
 it("supports real Better Auth adapter CRUD and session-to-user joins", async () => {

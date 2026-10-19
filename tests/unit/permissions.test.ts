@@ -13,6 +13,26 @@ describe("hasPermission", () => {
     ).toBe(true);
   });
 
+  it("allows staff and supervisors to create master items", () => {
+    expect(
+      hasPermission(["HK_STAFF"], "inventory:item:create"),
+    ).toBe(true);
+
+    expect(
+      hasPermission(["HK_SUPERVISOR"], "inventory:item:create"),
+    ).toBe(true);
+
+    expect(
+      hasPermission(["MANAGEMENT"], "inventory:item:create"),
+    ).toBe(false);
+
+    expect(
+      hasPermission(["SYSTEM_ADMIN"], "inventory:item:create"),
+    ).toBe(false);
+  });
+
+  
+
   it("reserves inspection verification for supervisors", () => {
     expect(
       hasPermission(["HK_SUPERVISOR"], "inspection:verify"),
