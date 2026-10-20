@@ -415,3 +415,78 @@ it("creates distinct unit numbers for concurrent different batches", async () =>
   expect(new Set(units.map((unit) => unit.unitNumber)).size).toBe(4);
   await expectCounts(4, 2);
 });
+
+it.each([
+  {
+    label: "missing Origin",
+    header: "Origin",
+    value: null,
+    status: 403,
+    error: "FORBIDDEN_ORIGIN",
+  },
+  {
+    label: "untrusted Origin",
+    header: "Origin",
+    value: "https://untrusted.example",
+    status: 403,
+    error: "FORBIDDEN_ORIGIN",
+  },
+  {
+    label: "missing Content-Type",
+    header: "Content-Type",
+    value: null,
+    status: 415,
+    error: "UNSUPPORTED_MEDIA_TYPE",
+  },
+  {
+    label: "text/plain Content-Type",
+    header: "Content-Type",
+    value: "text/plain",
+    status: 415,
+    error: "UNSUPPORTED_MEDIA_TYPE",
+  },
+])("rejects $label without adding stock", async (testCase) => {
+  const request = new Request(
+    "http://localhost:3000/api/stock-batches",
+    {
+      method: "POST",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(stockInput()),
+    },
+  );
+
+  if (testCase.value === null) {
+    request.headers.delete(testCase.header);
+  } else {
+    request.headers.set(testCase.header, testCase.value);
+  }
+
+  const response = await POST(request);
+
+  expect(response.status).toBe(testCase.status);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+
+  await expect(response.json()).resolves.toMatchObject({
+    error: testCase.error,
+  });
+
+  await expectCounts(0, 0);
+});
+
+it("rejects oversized JSON without adding stock", async () => {
+  const response = await postStock({
+    ...stockInput(),
+    extra: "A".repeat(256 * 1024),
+  });
+
+  expect(response.status).toBe(413);
+
+  await expect(response.json()).resolves.toMatchObject({
+    error: "PAYLOAD_TOO_LARGE",
+  });
+
+  await expectCounts(0, 0);
+});

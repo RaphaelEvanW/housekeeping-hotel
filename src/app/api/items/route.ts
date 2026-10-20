@@ -1,6 +1,11 @@
 import { createItemInputSchema } from "@/server/item-input";
 import { validateMutationRequest } from "@/server/validate-mutation-request";
 
+import {
+  PayloadTooLargeError,
+  readJsonBody,
+} from "@/server/read-json-body";
+
 import { authorizeApi } from "@/server/authorize-api";
 import {
   createItem,
@@ -45,17 +50,24 @@ export async function POST(request: Request) {
     return rejectedRequest;
   }
 
-  let body: unknown;
+    let body: unknown;
 
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonBody(request);
+  } catch (error) {
+    const tooLarge = error instanceof PayloadTooLargeError;
+
     return Response.json(
       {
-        error: "INVALID_INPUT",
-        message: "Format data tidak valid.",
+        error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_INPUT",
+        message: tooLarge
+          ? "Ukuran data maksimal 256 KiB."
+          : "Format JSON tidak valid.",
       },
-      { status: 400 },
+      {
+        status: tooLarge ? 413 : 400,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 

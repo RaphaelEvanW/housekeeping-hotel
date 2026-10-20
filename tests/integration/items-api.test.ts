@@ -270,3 +270,89 @@ it("accepts a name with exactly 100 characters", async () => {
     item: { name },
   });
 });
+
+it.each([
+  {
+    label: "missing Origin",
+    header: "Origin",
+    value: null,
+    status: 403,
+    error: "FORBIDDEN_ORIGIN",
+  },
+  {
+    label: "untrusted Origin",
+    header: "Origin",
+    value: "https://untrusted.example",
+    status: 403,
+    error: "FORBIDDEN_ORIGIN",
+  },
+  {
+    label: "missing Content-Type",
+    header: "Content-Type",
+    value: null,
+    status: 415,
+    error: "UNSUPPORTED_MEDIA_TYPE",
+  },
+  {
+    label: "text/plain Content-Type",
+    header: "Content-Type",
+    value: "text/plain",
+    status: 415,
+    error: "UNSUPPORTED_MEDIA_TYPE",
+  },
+])("rejects $label without creating an item", async (testCase) => {
+  const request = new Request("http://localhost:3000/api/items", {
+    method: "POST",
+    headers: {
+      Origin: "http://localhost:3000",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      name: `Guard test ${randomUUID()}`,
+    }),
+  });
+
+  if (testCase.value === null) {
+    request.headers.delete(testCase.header);
+  } else {
+    request.headers.set(testCase.header, testCase.value);
+  }
+
+  const response = await POST(request);
+
+  expect(response.status).toBe(testCase.status);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+
+  await expect(response.json()).resolves.toMatchObject({
+    error: testCase.error,
+  });
+
+  expect(
+    await db.item.count({ where: { createdById: actor.id } }),
+  ).toBe(0);
+
+  expect(
+    await db.auditEvent.count({ where: { actorId: actor.id } }),
+  ).toBe(0);
+});
+
+it("rejects oversized JSON without creating an item", async () => {
+  const response = await postItem({
+    name: `Body limit test ${randomUUID()}`,
+    extra: "A".repeat(256 * 1024),
+  });
+
+  expect(response.status).toBe(413);
+
+  await expect(response.json()).resolves.toMatchObject({
+    error: "PAYLOAD_TOO_LARGE",
+  });
+
+  expect(
+    await db.item.count({ where: { createdById: actor.id } }),
+  ).toBe(0);
+
+  expect(
+    await db.auditEvent.count({ where: { actorId: actor.id } }),
+  ).toBe(0);
+});

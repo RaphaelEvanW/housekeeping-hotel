@@ -4,6 +4,11 @@ import { authorizeApi } from "@/server/authorize-api";
 import { addStock, AddStockError } from "@/server/add-stock";
 import { validateMutationRequest } from "@/server/validate-mutation-request";
 
+import {
+  PayloadTooLargeError,
+  readJsonBody,
+} from "@/server/read-json-body";
+
 const responseHeaders = {
   "Cache-Control": "no-store",
 };
@@ -20,18 +25,23 @@ export async function POST(request: Request) {
     return rejectedRequest;
   }
 
-  let body: unknown;
+    let body: unknown;
+
   try {
-    body = await request.json();
-  } catch {
+    body = await readJsonBody(request);
+  } catch (error) {
+    const tooLarge = error instanceof PayloadTooLargeError;
+
     return Response.json(
       {
-        error: "INVALID_INPUT",
-        message: "Format JSON tidak valid.",
+        error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_INPUT",
+        message: tooLarge
+          ? "Ukuran data maksimal 256 KiB."
+          : "Format JSON tidak valid.",
       },
       {
-        status: 400,
-        headers: responseHeaders,
+        status: tooLarge ? 413 : 400,
+        headers: { "Cache-Control": "no-store" },
       },
     );
   }

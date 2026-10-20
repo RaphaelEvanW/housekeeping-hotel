@@ -206,3 +206,9 @@ Retrospective entry based on the implementation and verification recorded when S
 - Owner confirmed the Add Stock checks passed after correcting the test command filename, including integration tests, typecheck and lint. Detailed output/totals were not supplied; no agent rerun claimed.
 - Inspected commit 86f0291, current ItemUnit/StockBatch schema and master-item API. Add Stock is committed; root redirect, docs and an owner change in next.config.ts remain uncommitted.
 - Next guided step is a paginated per-item unit read service and endpoint with derived total registered count. Readable codes will be formatted from unitNumber. Total registered is not borrowable stock; unresolved borrowing obligations must be included when implementing eligibility.
+
+## 2026-10-20 | Owner-confirmed mutation request guard checks
+
+- Owner reported the requested checks passed after adding missing/untrusted Origin and missing/text-plain Content-Type cases to both inventory mutation integration suites. Detailed output and totals were not supplied; no agent rerun claimed.
+- Inspected HEAD 50a317d and the modified integration tests. Both POST routes invoke validateMutationRequest after authorization and before JSON parsing; rejection tests assert no new inventory or audit records.
+- Next guided change: bounded JSON body reading for both routes. This remains proposed implementation, not verified behavior.
