@@ -160,14 +160,12 @@ Retrospective entry based on the implementation and verification recorded when S
 - Agent verification: product schema/platform/device-context assertions, JSON parsing, selected workflow, live target existence and insertion anchor passed. Impeccable detect-csp returned shape=null and no signals; no CSP change needed. Live mode was not started or browser-tested. No application code changed and no application tests were run.
 - Full git diff --check reported existing trailing whitespace in tests/integration/require-active-user.test.ts (lines 74 and 106), outside this task. Existing permission/auth work was preserved. Scoped documentation whitespace check is recorded separately by the completion command.
 
-<<<<<<< HEAD
 ## 2026-10-16 | RBAC foundation and owner-confirmed access policy
 
 - Inspected permission map and server helper. Existing three action permissions distinguish borrowing creation, inspection verification, and write-off approval. requirePermission calls requireActiveUser and throws PermissionDeniedError on denial; no HTTP 403 mapping or sidebar/page enforcement is established by the helper alone.
 - Owner confirmed helper tests work after correcting implementation/test file placement; no new agent-run verification or inferred test totals.
 - Owner confirmed Management read-only operational oversight plus its specified approvals; IT account/access administration without implicit business powers; multi-role users; shared IT/admin account acceptable with individual accountability handled by internal process. Recorded these decisions in PROJECT section 3 without relaxing Management-role grant approvals.
 - Next guided change is page-view permissions in src/lib/permissions.ts. Application code remains owner-authored. Agent changed documentation only.
-=======
 ## 2026-10-16 | RBAC type-error correction, owner will verify
 
 - Owner supplied typecheck errors and explicitly requested agent edits while reserving test execution for themselves. Added the nine previously agreed page-view permissions missing from src/lib/permissions.ts; retained action permission boundaries. Corrected the unit fixture to isActive: true as const.
@@ -183,4 +181,17 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Owner confirmed typecheck and focused requirePermission unit / active-user integration tests passed after extracting getActiveUser. Agent inspected current source; no agent-run verification claimed.
 - getActiveUser returns current active account/roles or null; requireActiveUser preserves page login redirects. Next guided backend step: an API authorization result with explicit JSON 401/403, without adding an operational endpoint prematurely.
->>>>>>> e06ed5bbe3740157614eed135ec1f7652818298b
+
+## 2026-10-20 | Resume after owner-confirmed master item API checks
+
+- Inspected feature/backend at 93eac36 (add master item API), following 72dc3ed (role-aware workspace navigation). Working tree was clean before documentation maintenance.
+- Owner implemented Item schema/migration, inventory:item:create permission, GET/POST /api/items, normalized-name uniqueness, and transactional creation/audit. Owner reported tests passed after correcting the misplaced test closure; detailed results and totals were not supplied. No fresh agent-run application checks are claimed.
+- Frontend includes workspace navigation, access-denied and Administration starter pages, shared logout, and /start role-aware login routing. Owner confirmed frontend checks and development-account role assignment worked.
+- Removed three committed merge-marker lines from this devlog while preserving both sets of historical entries. Updated context to current paths and evidence.
+- Next guided backend slice: ItemUnit schema and atomic Add Stock. Physical-unit fields/code strategy are proposed guidance, not implemented or verified by this entry.
+
+## 2026-10-20 | ItemUnit relation correction and schema review
+
+- Owner added ItemUnit and enums, then explicitly authorized correction of misplaced inverse relations. Added Item.units and Location.units and removed the accidental ItemUnit self-relation; retained owner work. Owner subsequently reported Prisma commands and tests passed without detailed output/totals.
+- Inspected schema and migration 20261020014500_item_units: SERIAL unitNumber with unique index; distinct operational dimensions; foreign keys with deletion restrictions. Agent reran npm run db:validate successfully. No application tests or database migration-state query executed in this review.
+- Schema is a foundation for Add Stock. The server must still enforce immutable identifiers, default storage, condition-driven inspection, authorization, atomic audit, and retry handling. Add Stock input contract and permission are the next guided step.

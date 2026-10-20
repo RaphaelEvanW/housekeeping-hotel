@@ -24,6 +24,9 @@ model User {
   auditEvents   AuditEvent[]
   itemsCreated  Item[] @relation("ItemCreatedBy")
   itemsUpdated  Item[] @relation("ItemUpdatedBy")
+  unitsCreated ItemUnit[] @relation("ItemUnitCreatedBy")
+  unitsUpdated ItemUnit[] @relation("ItemUnitUpdatedBy")
+  stockBatches StockBatch[]
 
   @@map("user")
 }
@@ -113,6 +116,7 @@ model Location {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
+  units     ItemUnit[]
 
   @@map("location")
 }
@@ -129,9 +133,92 @@ model Item {
 
   createdBy User @relation("ItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy User @relation("ItemUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  units     ItemUnit[]
+  stockBatches StockBatch[]
 
   @@index([isActive, name])
   @@map("item")
+}
+
+enum UnitLifecycle {
+  ACTIVE
+  RETIRED
+}
+
+enum UnitCustody {
+  HOUSEKEEPING
+  GUEST
+  ENGINEERING
+  EXTERNAL_VENDOR
+}
+
+enum UnitCondition {
+  GOOD
+  MINOR_DAMAGE
+  DAMAGED
+  MISSING_PART
+}
+
+enum UnitReadiness {
+  CLEAR
+  ON_HOLD
+  PENDING_INSPECTION
+  PENDING_VERIFICATION
+}
+
+enum UnitLossState {
+  NONE
+  MISSING
+  LOST
+}
+
+model ItemUnit {
+  id           String        @id @default(uuid())
+  unitNumber   Int           @unique @default(autoincrement())
+  itemId       String
+  stockBatchId String?
+  serialNumber String?
+  notes        String?
+
+  lifecycle    UnitLifecycle @default(ACTIVE)
+  custody      UnitCustody   @default(HOUSEKEEPING)
+  condition    UnitCondition @default(GOOD)
+  readiness    UnitReadiness @default(CLEAR)
+  lossState    UnitLossState @default(NONE)
+  locationId   String?
+
+  createdById  String
+  updatedById  String
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime      @updatedAt @db.Timestamptz(3)
+
+  item      Item      @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  location  Location? @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  createdBy User      @relation("ItemUnitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy User      @relation("ItemUnitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  stockBatch StockBatch? @relation(fields: [stockBatchId], references: [id], onDelete: Restrict)
+
+  @@index([itemId])
+  @@index([locationId])
+  @@index([stockBatchId])
+  @@map("item_unit")
+}
+
+model StockBatch {
+  id          String   @id
+  itemId      String
+  quantity    Int
+  requestHash String
+  createdById String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  item      Item       @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  createdBy User       @relation(fields: [createdById], references: [id], onDelete: Restrict)
+  units     ItemUnit[]
+
+  @@index([itemId, createdAt])
+  @@index([createdById])
+  @@map("stock_batch")
 }
 
 model AuditEvent {
