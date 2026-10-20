@@ -32,7 +32,10 @@ function postStock(body: unknown) {
   return POST(
     new Request("http://localhost/api/stock-batches", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:3000",
+      },
       body: JSON.stringify(body),
     }),
   );
@@ -89,6 +92,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
+  vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "http://localhost:3000");
   mockGetActiveUser.mockReset();
 
   const user = await db.user.create({
@@ -124,6 +129,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
+
   if (!userId) return;
 
   await db.$transaction([
@@ -299,7 +306,10 @@ it("rejects malformed JSON", async () => {
   const response = await POST(
     new Request("http://localhost/api/stock-batches", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:3000",
+      },
       body: "{",
     }),
   );

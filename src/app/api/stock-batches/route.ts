@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 
 import { authorizeApi } from "@/server/authorize-api";
 import { addStock, AddStockError } from "@/server/add-stock";
+import { validateMutationRequest } from "@/server/validate-mutation-request";
 
 const responseHeaders = {
   "Cache-Control": "no-store",
@@ -9,13 +10,17 @@ const responseHeaders = {
 
 export async function POST(request: Request) {
   const authorization = await authorizeApi("inventory:stock:add");
-
   if (!authorization.authorized) {
     return authorization.response;
   }
 
-  let body: unknown;
+  const rejectedRequest = validateMutationRequest(request);
 
+  if (rejectedRequest) {
+    return rejectedRequest;
+  }
+
+  let body: unknown;
   try {
     body = await request.json();
   } catch {

@@ -1,4 +1,5 @@
-import { z } from "zod";
+import { createItemInputSchema } from "@/server/item-input";
+import { validateMutationRequest } from "@/server/validate-mutation-request";
 
 import { authorizeApi } from "@/server/authorize-api";
 import {
@@ -6,14 +7,6 @@ import {
   DuplicateItemNameError,
 } from "@/server/items";
 import { db } from "@/server/db";
-
-const createItemSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(1)
-    .transform((name) => name.replace(/\s+/gu, " ")),
-});
 
 export async function GET() {
   const authorization = await authorizeApi("inventory:view");
@@ -46,6 +39,12 @@ export async function POST(request: Request) {
     return authorization.response;
   }
 
+  const rejectedRequest = validateMutationRequest(request);
+
+  if (rejectedRequest) {
+    return rejectedRequest;
+  }
+
   let body: unknown;
 
   try {
@@ -60,15 +59,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const parsed = createItemSchema.safeParse(body);
+  const parsed = createItemInputSchema.safeParse(body);
 
   if (!parsed.success) {
     return Response.json(
       {
         error: "INVALID_INPUT",
-        message: "Nama jenis barang wajib diisi.",
+        message:
+          parsed.error.issues[0]?.message ??
+          "Data jenis barang tidak valid.",
       },
-      { status: 400 },
+      {
+        status: 400,
+        headers: { "Cache-Control": "no-store" },
+      },
     );
   }
 

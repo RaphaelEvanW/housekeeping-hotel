@@ -195,3 +195,14 @@ Retrospective entry based on the implementation and verification recorded when S
 - Owner added ItemUnit and enums, then explicitly authorized correction of misplaced inverse relations. Added Item.units and Location.units and removed the accidental ItemUnit self-relation; retained owner work. Owner subsequently reported Prisma commands and tests passed without detailed output/totals.
 - Inspected schema and migration 20261020014500_item_units: SERIAL unitNumber with unique index; distinct operational dimensions; foreign keys with deletion restrictions. Agent reran npm run db:validate successfully. No application tests or database migration-state query executed in this review.
 - Schema is a foundation for Add Stock. The server must still enforce immutable identifiers, default storage, condition-driven inspection, authorization, atomic audit, and retry handling. Add Stock input contract and permission are the next guided step.
+
+## 2026-10-20 | Send root route directly to login
+
+- Replaced the starter home page with a server-side redirect from `/` to `/login`, as requested. Post-login routing through `/start` remains unchanged.
+- Updated `docs/CONTEXT.md` to reflect the root route. Agent ran `npm run typecheck` successfully (exit 0); browser behavior was not independently checked.
+
+## 2026-10-20 | Owner-confirmed Add Stock checks and next inventory read slice
+
+- Owner confirmed the Add Stock checks passed after correcting the test command filename, including integration tests, typecheck and lint. Detailed output/totals were not supplied; no agent rerun claimed.
+- Inspected commit 86f0291, current ItemUnit/StockBatch schema and master-item API. Add Stock is committed; root redirect, docs and an owner change in next.config.ts remain uncommitted.
+- Next guided step is a paginated per-item unit read service and endpoint with derived total registered count. Readable codes will be formatted from unitNumber. Total registered is not borrowable stock; unresolved borrowing obligations must be included when implementing eligibility.

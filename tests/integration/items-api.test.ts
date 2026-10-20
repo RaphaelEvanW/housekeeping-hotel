@@ -29,13 +29,18 @@ function postItem(body: unknown) {
   return POST(
     new Request("http://localhost/api/items", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:3000",
+      },
       body: JSON.stringify(body),
     }),
   );
 }
 
 beforeEach(async () => {
+  vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
+  vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "http://localhost:3000");
   mockGetActiveUser.mockReset();
 
   const user = await db.user.create({
@@ -58,6 +63,8 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  vi.unstubAllEnvs();
+
   if (!userId) return;
 
   await db.$transaction([
@@ -189,7 +196,10 @@ it("rejects malformed JSON", async () => {
   const response = await POST(
     new Request("http://localhost/api/items", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:3000",
+      },
       body: "{",
     }),
   );
@@ -219,4 +229,44 @@ it("creates only one item and audit for concurrent normalized duplicates", async
   expect(
     await db.auditEvent.count({ where: { actorId: actor.id } }),
   ).toBe(1);
+});
+
+it.each([101, 200_000])(
+  "rejects a name with %i characters without writing records",
+  async (length) => {
+    const response = await postItem({
+      name: "A".repeat(length),
+    });
+
+    expect(response.status).toBe(400);
+
+    await expect(response.json()).resolves.toMatchObject({
+      error: "INVALID_INPUT",
+      message: "Nama jenis barang maksimal 100 karakter.",
+    });
+
+    expect(
+      await db.item.count({
+        where: { createdById: actor.id },
+      }),
+    ).toBe(0);
+
+    expect(
+      await db.auditEvent.count({
+        where: { actorId: actor.id },
+      }),
+    ).toBe(0);
+  },
+);
+
+it("accepts a name with exactly 100 characters", async () => {
+  const name = randomUUID().padEnd(100, "A");
+
+  const response = await postItem({ name });
+
+  expect(response.status).toBe(201);
+
+  await expect(response.json()).resolves.toMatchObject({
+    item: { name },
+  });
 });

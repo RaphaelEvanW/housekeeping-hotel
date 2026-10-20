@@ -1,6 +1,7 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
+import { itemNameSchema } from "@/server/item-input";
 import { db } from "@/server/db";
 
 export class DuplicateItemNameError extends Error {
@@ -11,7 +12,7 @@ export class DuplicateItemNameError extends Error {
 }
 
 export function prepareItemName(input: string) {
-  const name = input.trim().replace(/\s+/gu, " ");
+  const name = itemNameSchema.parse(input);
 
   return {
     name,
