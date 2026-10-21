@@ -136,7 +136,10 @@ Unless the user specifies otherwise, follow the milestones in `PROJECT.md`:
 
 ## Project context and additional skills
 
+- The global skill-routing rule applies to the full Skills list provided to the current session. The Housekeeping-specific skill notes below add project triggers; they are not an allowlist.
 - Use `.agents/skills/housekeeping-context/SKILL.md` when resuming development or preparing a project status/handoff. Keep `docs/CONTEXT.md` compact and current after verified work; use `docs/DEVLOG.md` for historical detail. Read-only requests do not authorize documentation writes.
 - Use `.agents/skills/playwright/SKILL.md` for relevant browser automation/UI-flow checks. Its local Windows note uses `npx.cmd` without requiring Bash. Installing a skill does not install its runtime/browser binaries.
 - Use `.agents/skills/security-best-practices/SKILL.md` for explicit security review or secure-by-default guidance requests, following its trigger scope. Do not turn ordinary development into a full security audit.
+- Ponytail is installed globally at `~/.agents/skills/ponytail/SKILL.md`. Automatically use it for coding tasks; default to `full`. The owner can request `lite`, `ultra`, or normal mode in chat. This is the standalone skill, so do not claim Ponytail plugin commands or hooks are available.
+- Use the global `humanizer` skill at `~/.agents/skills/humanizer/SKILL.md` when drafting, editing, or reviewing reader-facing prose where a natural voice matters, including interface copy and project documentation. Preserve source facts and the writer's voice; do not alter code, data, frontmatter, commands, paths, or link targets, and do not use it to evade AI detectors.
 - All three are project-local. Context notes are navigation aids, not new business requirements, proof of current test results, or permission for the next milestone.

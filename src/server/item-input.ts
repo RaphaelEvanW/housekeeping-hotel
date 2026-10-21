@@ -10,3 +10,9 @@ export const itemNameSchema = z
 export const createItemInputSchema = z.object({
   name: itemNameSchema,
 });
+
+export const updateItemInputSchema = z
+  .object({
+    name: itemNameSchema,
+  })
+  .strict();

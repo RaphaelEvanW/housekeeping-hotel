@@ -28,6 +28,11 @@ model User {
   unitsUpdated ItemUnit[] @relation("ItemUnitUpdatedBy")
   stockBatches StockBatch[]
 
+  itemDeactivationRequests  ItemDeactivationRequest[] @relation("ItemDeactivationRequestedBy")
+  itemDeactivationDecisions ItemDeactivationRequest[] @relation("ItemDeactivationDecidedBy")
+  guestVisitsCreated GuestVisit[] @relation("GuestVisitCreatedBy")
+  guestVisitsUpdated GuestVisit[] @relation("GuestVisitUpdatedBy")
+
   @@map("user")
 }
 
@@ -135,6 +140,7 @@ model Item {
   updatedBy User @relation("ItemUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   units     ItemUnit[]
   stockBatches StockBatch[]
+  deactivationRequests ItemDeactivationRequest[]
 
   @@index([isActive, name])
   @@map("item")
@@ -236,4 +242,63 @@ model AuditEvent {
   @@index([actorId, createdAt])
   @@index([entityType, entityId, createdAt])
   @@map("audit_event")
+}
+
+
+enum ItemDeactivationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+model ItemDeactivationRequest {
+  id            String                  @id @default(uuid())
+  itemId        String
+  status        ItemDeactivationStatus  @default(PENDING)
+  reason        String
+  requestedById String
+  decidedById   String?
+  decidedAt     DateTime?               @db.Timestamptz(3)
+  createdAt     DateTime                @default(now()) @db.Timestamptz(3)
+
+  item        Item  @relation(fields: [itemId], references: [id], onDelete: Restrict)
+  requestedBy User  @relation("ItemDeactivationRequestedBy", fields: [requestedById], references: [id], onDelete: Restrict)
+  decidedBy   User? @relation("ItemDeactivationDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  @@index([itemId, createdAt])
+  @@index([status, createdAt])
+  @@index([requestedById])
+  @@index([decidedById])
+  @@map("item_deactivation_request")
+}
+
+enum GuestVisitStatus {
+  STAYING
+  CHECKED_OUT
+}
+
+model GuestVisit {
+  id                         String           @id @default(uuid())
+  primaryGuestName           String
+  normalizedPrimaryGuestName String
+  roomNumber                 String
+  checkInDate                DateTime         @db.Date
+  plannedCheckoutDate        DateTime         @db.Date
+  status                     GuestVisitStatus @default(STAYING)
+  checkedOutAt               DateTime?        @db.Timestamptz(3)
+  isDuplicate                Boolean          @default(false)
+
+  createdById String
+  updatedById String
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(3)
+
+  createdBy User @relation("GuestVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
+  updatedBy User @relation("GuestVisitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+
+  @@index([status, roomNumber, checkInDate])
+  @@index([createdById])
+  @@index([updatedById])
+  @@map("guest_visit")
 }

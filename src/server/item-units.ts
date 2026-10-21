@@ -2,13 +2,11 @@ import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
+import { updateItemUnitInputSchema } from "@/server/item-unit-input";
 
 const PAGE_SIZE = 50;
 
-export async function getItemUnits(
-  itemId: string,
-  after?: number,
-) {
+export async function getItemUnits(itemId: string, after?: number) {
   return db.$transaction(
     async (tx) => {
       const item = await tx.item.findUnique({
@@ -23,10 +21,7 @@ export async function getItemUnits(
             },
           },
           units: {
-            where:
-              after === undefined
-                ? {}
-                : { unitNumber: { gt: after } },
+            where: after === undefined ? {} : { unitNumber: { gt: after } },
             orderBy: {
               unitNumber: "asc",
             },
@@ -74,12 +69,88 @@ export async function getItemUnits(
           ...unit,
           unitCode: `HK-${String(unit.unitNumber).padStart(6, "0")}`,
         })),
-        nextCursor:
-          hasMore && lastUnit ? lastUnit.unitNumber : null,
+        nextCursor: hasMore && lastUnit ? lastUnit.unitNumber : null,
       };
     },
     {
       isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
     },
   );
+}
+
+export class ItemUnitNotFoundError extends Error {
+  constructor() {
+    super("Unit barang tidak ditemukan.");
+    this.name = "ItemUnitNotFoundError";
+  }
+}
+
+export async function updateItemUnitDetails(
+  unitId: string,
+  rawInput: unknown,
+  actorId: string,
+) {
+  const input = updateItemUnitInputSchema.parse(rawInput);
+
+  return db.$transaction(async (tx) => {
+    const lockedUnits = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id"
+      FROM "item_unit"
+      WHERE "id" = ${unitId}
+      FOR UPDATE
+    `;
+
+    if (lockedUnits.length === 0) {
+      throw new ItemUnitNotFoundError();
+    }
+
+    const before = await tx.itemUnit.findUniqueOrThrow({
+      where: { id: unitId },
+    });
+
+    const serialNumber =
+      input.serialNumber === undefined
+        ? before.serialNumber
+        : input.serialNumber;
+
+    const notes =
+      input.notes === undefined
+        ? before.notes
+        : input.notes;
+
+    if (
+      serialNumber === before.serialNumber &&
+      notes === before.notes
+    ) {
+      return before;
+    }
+
+    const unit = await tx.itemUnit.update({
+      where: { id: unitId },
+      data: {
+        serialNumber,
+        notes,
+        updatedById: actorId,
+      },
+    });
+
+    await tx.auditEvent.create({
+      data: {
+        actorId,
+        action: "ITEM_UNIT_DETAILS_UPDATED",
+        entityType: "ITEM_UNIT",
+        entityId: unit.id,
+        oldValues: {
+          serialNumber: before.serialNumber,
+          notes: before.notes,
+        },
+        newValues: {
+          serialNumber: unit.serialNumber,
+          notes: unit.notes,
+        },
+      },
+    });
+
+    return unit;
+  });
 }

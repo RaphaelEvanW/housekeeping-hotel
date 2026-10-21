@@ -11,30 +11,43 @@ import {
   createItem,
   DuplicateItemNameError,
 } from "@/server/items";
-import { db } from "@/server/db";
 
-export async function GET() {
+import { listItems } from "@/server/list-items";
+import { listItemsInputSchema } from "@/server/list-items-input";
+
+export async function GET(request: Request) {
   const authorization = await authorizeApi("inventory:view");
 
   if (!authorization.authorized) {
     return authorization.response;
   }
 
-  const items = await db.item.findMany({
-    orderBy: [{ isActive: "desc" }, { name: "asc" }],
-    select: {
-      id: true,
-      name: true,
-      isActive: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  const searchParams = new URL(request.url).searchParams;
+
+  const parsed = listItemsInputSchema.safeParse({
+    page: searchParams.get("page") ?? undefined,
+    pageSize: searchParams.get("pageSize") ?? undefined,
+    q: searchParams.get("q") ?? undefined,
   });
 
-  return Response.json(
-    { items },
-    { headers: { "Cache-Control": "no-store" } },
-  );
+  if (!parsed.success) {
+    return Response.json(
+      {
+        error: "INVALID_INPUT",
+        message: "Parameter pencarian atau halaman tidak valid.",
+      },
+      {
+        status: 400,
+        headers: { "Cache-Control": "no-store" },
+      },
+    );
+  }
+
+  const result = await listItems(parsed.data);
+
+  return Response.json(result, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 export async function POST(request: Request) {

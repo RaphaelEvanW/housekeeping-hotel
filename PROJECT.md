@@ -57,7 +57,7 @@ Management role grants/revocations require in-app Management authorization and I
 
 Owner-confirmed access decisions (16 October 2026): users may hold multiple roles; permissions combine across their assigned roles. A single shared IT/admin account is acceptable under the owner's internal accountability process; application audit identifies that account, while individual operator attribution relies on the internal process. The admin role grants account/access administration, not implicit operational access or business approval. Additional roles remain subject to the authorization requirements above.
 
-Enforce permissions **on the server**. Do not add approvals to routine staff data entry, corrections, Master Item creation, stock addition, location updates, or routine returns.
+Enforce permissions **on the server**. Do not add approvals to routine staff data entry, corrections, Master Item creation, stock addition, location updates, or routine returns. Master Item deactivation follows the specific request/approval exception in section 5.1.1.
 
 ## 4. Guest visits and registration
 
@@ -77,7 +77,15 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 - `Add New Item Type` and `Add Stock` are **different operations**, even if reachable on the same Inventory screen.
 - On new type creation, check normalized names (case insensitive, trim/collapse whitespace) so `Hair Dryer`, `hair dryer`, and `Hair  Dryer` are not registered as distinct types. Prefer selecting the existing type; preserve readable display names.
 - Master Item creation/renaming **does not create stock or trigger physical inspection**.
-- Record `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt`; track old/new values for edits. No approval queue.
+- Record `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt`; track old/new values for edits. Creation and name corrections have no approval queue.
+
+### 5.1.1 Master Item deactivation (owner-confirmed 21 October 2026)
+
+- HK Staff and HK Supervisor may submit a deactivation request with a mandatory reason. Submitting a request leaves the Item active.
+- Only HK Supervisor may approve or reject a pending request. Supervisor may approve their own request; submitting and approving must be separate deliberate actions with an opportunity to inspect the Item, reason, and effect.
+- The requester may cancel their own pending request. Cancellation and rejection leave the Item active.
+- Approval sets the Item inactive atomically with the request decision and audit. Record requester/reason and decision actor/time. Preserve physical units and historical records; this action does not retire units or change their operational dimensions.
+- Existing Add Stock behavior rejects inactive Items. Whether deactivation also blocks new borrowing of otherwise eligible units, and the Item reactivation workflow, remain open decisions; do not infer them from deactivation.
 
 ### 5.2 Bulk Add Stock
 
@@ -257,4 +265,6 @@ Implement one vertical slice at a time and verify it; **do not build the full ap
 
 ---
 
-**Current state:** Product rules consolidated. Next step is a focused technical schema/architecture review and phased implementation, **not** another exhaustive business-rules interview.
+**Implementation status (21 October 2026):** Authentication/access foundations and the accepted login are implemented. Backend inventory includes master-item creation, physical-unit Add Stock and reads, item search/pagination, audited name corrections, deactivation submission/approval/rejection/cancellation plus paginated request history, audited physical-unit serial-number/notes corrections, and paginated unit audit-history reads. The owner reports focused history tests, typecheck/lint, and the subsequent full suite passed; detailed totals were not supplied. Other inventory requirements, guest visits/borrowing, returns, inspection/maintenance, lost handling, lifecycle workflows, and operational frontend work remain. Detailed verification and current file paths are maintained in [docs/DEVLOG.md](./docs/DEVLOG.md) and [docs/CONTEXT.md](./docs/CONTEXT.md).
+
+GuestVisit under section 4 now has a schema, migration, and owner-confirmed database constraint tests; its registration service/API is not implemented. The owner selected frontend inventory using existing APIs as the next milestone, following an owner-made backend commit. The frontend transition has been announced. New frontend styling uses Tailwind and a dark workspace, with a dark-brown frame and dark content surfaces instead of white/cream panels. Visual proposals are in `docs/INVENTORY-DESIGN.md`; implementation and visual approval remain pending.

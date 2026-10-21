@@ -212,3 +212,170 @@ Retrospective entry based on the implementation and verification recorded when S
 - Owner reported the requested checks passed after adding missing/untrusted Origin and missing/text-plain Content-Type cases to both inventory mutation integration suites. Detailed output and totals were not supplied; no agent rerun claimed.
 - Inspected HEAD 50a317d and the modified integration tests. Both POST routes invoke validateMutationRequest after authorization and before JSON parsing; rejection tests assert no new inventory or audit records.
 - Next guided change: bounded JSON body reading for both routes. This remains proposed implementation, not verified behavior.
+
+## 2026-10-21 | Owner-confirmed bounded JSON checks
+
+- Owner reported all requested checks passed for the 256 KiB streaming JSON reader and oversized-body rejection cases in both mutation suites. No detailed output/totals or agent rerun claimed.
+- Inspected clean feature/backend at 34fdde8 and the committed reader. Refreshed the stale context snapshot with owner confirmations and current next step.
+- Next guided coverage: exact byte boundary, accumulated stream size, UTF-8 split between chunks, and malformed/empty input. No application source or tests changed by agent in this step.
+
+## 2026-10-21 | Owner-confirmed item list pagination checks
+
+- Owner reported all tests passed after restoring test database availability and applying test migrations. No detailed final output/totals or agent rerun claimed.
+- Inspected GET /api/items pagination/search work and permission requirements for the next guided slice. List implementation remains uncommitted at HEAD 34fdde8.
+- Next scoped implementation: audited master-item name correction. Item deactivation policy/permissions are not established by this entry.
+
+## 2026-10-21 | Ponytail skill and usage routing
+
+- Installed the standalone `ponytail` skill from `DietrichGebert/ponytail` (`skills/ponytail`) globally at `C:\Users\user\.agents\skills\ponytail`; this does not install the separate Ponytail plugin, hooks, or review commands.
+- Updated global Codex instructions to use Ponytail for coding tasks with `full` as the default, honor chat-level requests for `lite`, `ultra`, or normal mode, and describe the skill actually used. Added the same project-local routing note and refreshed the compact context snapshot without changing application code.
+- Updated the home-PC install prompt with the Ponytail CLI command and an idempotent merge instruction for global `~/.codex/AGENTS.md`, preserving existing contents and avoiding plugin hook setup.
+- Verified the installed skill file and reviewed affected docs/diffs. No application tests were run; no application code was changed by this task.
+
+## 2026-10-21 | Deactivation approval decision and owner-confirmed rename tests
+
+- Owner reported rename endpoint tests passed; final output/totals were not supplied, and agent has not rerun them.
+- Recorded explicit owner approval of a deactivation request workflow in PROJECT 5.1.1: Staff/Supervisor submission, separate Supervisor decision with self-approval allowed, requester cancellation, preserved unit/history records. New-borrowing effects and reactivation remain open.
+- Inspected existing User/Item relations before proposing a separate request model. No schema migration or application tests executed in this documentation/guidance step.
+
+## 2026-10-21 | Deactivation request schema completion
+
+- Owner authorized direct schema edits after partially applying the guidance. Corrected multiline relation attributes on User and ItemDeactivationRequest; added the missing Item.deactivationRequests inverse relation. Preserved existing models and owner changes.
+- Agent ran npm run db:validate successfully (exit 0). No migration, client generation, or application tests executed.
+- Next: create and inspect a versioned migration, including a partial unique index for one pending request per Item and decision-state consistency constraints, before applying it.
+
+## 2026-10-21 | Owner-confirmed deactivation schema checks
+
+- Owner reported the deactivation schema integration tests passed without errors after migration/client generation. Detailed totals and agent rerun are not claimed.
+- Inspected the versioned SQL migration and rollback test helper. Next guided slice: Staff/Supervisor request submission with Item locking, one pending request, and atomic request/audit creation. Approval remains a separate subsequent action.
+
+## 2026-10-21 | Owner-confirmed deactivation submission checks
+
+- Owner reported the submission API integration tests passed without errors; detailed output/totals and agent rerun are not claimed.
+- Inspected the current request service, input schema, and permissions. Next guided slice: Supervisor approval/rejection with an atomic Item update, decision, and audit; prevent repeated decisions and preserve self-approval policy.
+
+## 2026-10-21 | Owner-confirmed Supervisor decision tests
+
+- Owner reported all requested decision tests passed, including self-approval and competing approve/reject requests; detailed totals and agent rerun are not claimed.
+- Agent previously ran typecheck successfully after inspecting the decision endpoint. Next guided slice: requester-only cancellation, with the same Item-first lock ordering and pending-only transition used by decisions.
+
+## 2026-10-21 | Owner-confirmed cancellation checks
+
+- Owner reported cancellation tests passed, including requester ownership and cancellation competing with approval; detailed totals and agent rerun are not claimed.
+- Refreshed the stale next-step context. Next guided slice: inventory-authorized request list, bounded pagination and status/item filters, safe related Item/User fields for review/history. No new list endpoint verification yet.
+
+## 2026-10-21 | Humanizer skill installation and routing
+
+- Installed the standalone `humanizer` skill from `blader/humanizer` globally at `C:\Users\user\.agents\skills\humanizer`; its scope is prose editing, not application code.
+- Added automatic routing for reader-facing prose, UI copy, and project documentation to global Codex instructions, Housekeeping `AGENTS.md`, and this context file. Routing preserves facts/voice, leaves code and structured content intact, and excludes AI-detector evasion.
+- Updated the home-PC global skill install prompt to include Humanizer. No application source, schema, or tests were changed; no application tests were run.
+
+## 2026-10-21 | Deactivation list checks confirmed and development handoff refreshed
+
+- Read the recent `Login page` conversation and reconciled its progress with the current source and working tree at HEAD `34fdde8`, branch `feature/backend`. Today's work covers JSON-reader boundary tests, item search/pagination, audited name corrections, and deactivation schema, submission, decisions, cancellation, and filtered/paginated request reads. Existing master-item, Add Stock, and unit-read foundations predate this sequence.
+- Confirmed the invalid-query cases in `tests/integration/item-deactivation-api.test.ts` use `Record<string, string>[]`. The owner supplied successful `npm.cmd run typecheck` output, then confirmed `docker compose up -d --wait postgres-test`, `npm.cmd run db:migrate:test`, `npm.cmd run test:integration -- tests/integration/item-deactivation-api.test.ts`, and `npm.cmd run lint` succeeded. Test totals were not supplied; no agent rerun or current full-suite/build result is claimed.
+- GET `/api/item-deactivation-requests` supports status/item filters and bounded pagination through `src/server/list-item-deactivation.ts` (singular). Tests cover read permissions, defaults, filtering, pagination, invalid queries, and approved requests remaining readable after item deactivation.
+- The previous chat's final owner message already reported tests passed, while its handoff retained the prior TS2345 warning. This chat's reported checks reconfirm the status. Documentation now reflects completion of this API slice, not completion of the entire inventory/backend milestone.
+- Owner authorized routine progress-documentation updates after reported checks and completed steps. Keep owner evidence distinct from agent-run checks; update CONTEXT for the latest state, DEVLOG for history, and PROJECT for confirmed requirements or material milestone status. Application code remains owner-edited unless explicitly requested otherwise.
+- Recommended next backend slice: audited clerical correction of ItemUnit serial number and notes under PROJECT 5.2. No implementation or frontend transition occurred. Owner wants a backend commit before frontend work; no commit, staging, or branch change was performed.
+
+## 2026-10-21 | ItemUnit correction input: owner-run RED
+
+- Owner created `src/server/item-unit-input.ts` with a temporary `z.unknown()` export and `tests/unit/item-unit-input.test.ts` for trimming, partial corrections, clearing values, and invalid/extra-field rejection.
+- Supplied output from `npm.cmd run test:unit -- tests/unit/item-unit-input.test.ts` shows 6 files: 5 passed and 1 failed; 61 tests: 50 passed and 11 failed. The new file has 14 tests with 11 failures, consistent with missing normalization and validation in the scaffold. This npm script runs the whole unit-test directory as well as the supplied filter.
+- Inspected source after the report. The empty-array case in `it.each` is unpacked as zero callback arguments and appears as undefined in the output; wrap each case in an object to test the array itself. Next guidance supplies the real schema and this test correction. No agent test run, service, endpoint, permission, or database migration was performed in this step.
+
+## 2026-10-21 | ItemUnit correction input: owner-confirmed pass
+
+- Owner reported tests passed without errors after the validation guidance. Final totals and separate typecheck/lint outputs were not supplied; no agent rerun is claimed.
+- Inspected the actual schema: serial number and notes accept partial updates, trim strings, convert blanks to null, accept explicit null, reject extra fields, and require at least one supplied detail. No migration is required for these existing ItemUnit fields.
+- Next guided step is a service integration test for stored changes and audit, followed by transactional implementation. Permission, endpoint, and full correction-flow verification remain pending.
+
+## 2026-10-21 | ItemUnit correction service: owner-run RED
+
+- Owner supplied output from `npx.cmd vitest run tests/integration/update-item-unit.test.ts`: 1 file and 1 test failed. Setup reached PostgreSQL successfully; the failure is the expected stored-details assertion, with OLD-SERIAL and the original notes still present.
+- Inspected the current test and `updateItemUnitDetails` scaffold, which still returns null. The test also checks audit old/new values and preservation of all other unit fields, including DAMAGED/PENDING_INSPECTION; these assertions are not yet established as passing.
+- Next guidance replaces the scaffold with validation before the transaction, a unit row lock, details-only updates, and audit in the same transaction. No agent test rerun or application code edit was performed; service GREEN, edge cases, permissions, and the endpoint remain pending.
+
+## 2026-10-21 | Owner-confirmed guidance without temporary production stubs
+
+- Owner requested complete intended implementations instead of temporary functions or permissive schemas introduced solely to fail tests and then be replaced. Identify test-preparation steps explicitly and wait until required implementation exists before requesting checks.
+- Recorded this preference in CONTEXT for subsequent guided work. Meaningful tests remain required; the explicit owner workflow takes precedence over conflicting skill scaffolding instructions. No new check result, application code edit, or service completion is claimed.
+
+## 2026-10-21 | ItemUnit correction service: initial owner-confirmed pass
+
+- Owner reported the previous service test succeeded. Final output/totals and separate typecheck/lint outputs were not supplied; no agent rerun is claimed.
+- Inspected the actual transactional service: validates input, locks the unit row with FOR UPDATE, throws ItemUnitNotFoundError for a missing target, preserves omitted fields, skips unchanged values, and writes details plus audit in one transaction.
+- The existing integration test covers stored corrections, audit old/new values, and preservation of operational fields. Next guidance extends the existing file for partial updates, clearing, unchanged requests, missing targets, and concurrent partial corrections. No temporary implementation or production edit was introduced; endpoint and permissions remain pending.
+
+## 2026-10-21 | ItemUnit correction service: extended owner-confirmed pass
+
+- Owner reported the extended service tests succeeded. Inspected the added tests for serial-only/notes-only changes, clearing with blanks/null, unchanged normalized requests, missing-unit rejection, and concurrent partial updates with audit snapshots. Final output/totals and separate typecheck/lint results were not supplied; no agent rerun is claimed.
+- Next guidance adds Staff/Supervisor permission `inventory:unit:update` and PATCH `/api/item-units/[unitId]` using existing authorization, Origin/Content-Type guard, bounded JSON reader, and transactional service. Read installed Next.js Route Handler documentation for PATCH support and asynchronous params.
+- Route and permission are not yet claimed as implemented. API-level authorization/input/request-guard coverage remains the subsequent step. No application code, branch, staging, or commit was changed by the agent.
+
+## 2026-10-21 | ItemUnit correction route present; owner reports checks succeeded
+
+- Owner reported the preceding checks succeeded after adding the route; the requested commands were typecheck and lint. Detailed output was not supplied; this does not establish new API integration results.
+- Inspected `inventory:unit:update` permission for Staff/Supervisor and PATCH `src/app/api/item-units/[unitId]/route.ts`. The route uses authenticated authorization, Origin/Content-Type validation, UUID validation, bounded JSON reading, the transactional service, safe response fields/readable unit code, and 400/404/413 error mapping.
+- Next guidance extends `tests/integration/update-item-unit.test.ts` using the existing fixtures, mocking only active-user lookup. API permissions, stored actor, invalid input/IDs, and request guards remain to be verified. No agent application edit or test rerun was performed.
+
+## 2026-10-21 | ItemUnit correction API: owner-confirmed focused pass
+
+- Owner reported the API tests succeeded after adding the proposed coverage. Inspected the actual cases for Staff/Supervisor success, anonymous/Management/IT rejection, persisted actor, invalid bodies/IDs, missing units, Origin/Content-Type guards, malformed JSON, oversized body, and unchanged records/audit on rejection. Final output/totals were not supplied; no agent rerun or current full-suite success is claimed.
+- Refreshed PROJECT milestone status and CONTEXT to include audited serial-number/notes correction. Broader inventory and operational workflows remain incomplete.
+- Inspected full-suite prerequisites. Seed tests assert global user/account/assignment counts, while other integration files create temporary users; request serial file execution with `npm.cmd test -- --no-file-parallelism`. Existing migrated test database is required, and fixtures/reference seed operations are prepared by tests. No new migration or manual seed is needed.
+- Recommended next backend slice after regression checks: paginated read-only audit history for a physical unit using existing ITEM_UNIT events and inventory read permissions. No frontend transition, application code edit, staging, or commit was performed.
+
+## 2026-10-21 | Full suite owner-confirmed pass after unit correction API
+
+- Initial full-suite invocation used the misspelled `--no-file-parellelism` flag and stopped during CLI argument parsing; tests did not run. After receiving the corrected `npm.cmd test -- --no-file-parallelism` command, the owner reported all tests passed. Final output/totals were not supplied; no agent rerun or production build result is claimed.
+- Refreshed PROJECT/CONTEXT to reflect the implemented unit serial-number/notes correction slice and owner-confirmed regression success.
+- Inspected AuditEvent fields, actor relation, existing entityType/entityId/createdAt index/migration, STOCK_UNIT_CREATED and ITEM_UNIT_DETAILS_UPDATED writers, and existing bounded pagination. Next guidance starts complete history input/query code, followed by route and tests. This reads recorded unit events; it does not fabricate history or imply broader operational workflows exist.
+- No new migration, application code edit, staging, commit, or frontend transition was performed by the agent.
+
+## 2026-10-21 | ItemUnit history schema/query present; owner-confirmed typecheck
+
+- Owner reported the prior check succeeded; the preceding requested command was `npm.cmd run typecheck`, so this is recorded as an owner-confirmed typecheck, not as new history test evidence. Detailed output and agent rerun were not supplied.
+- Inspected `itemUnitHistoryInputSchema` and `getItemUnitHistory`: bounded pagination/UUID input, unit existence lookup, ITEM_UNIT plus entityId event filtering, stable descending ordering, safe actor fields, and RepeatableRead for the unit/events/count snapshot.
+- Next guidance adds GET `/api/item-units/[unitId]/history` using existing `inventory:view`, no-store responses, 400 invalid-input and 404 missing-unit mapping. The route and history integration tests are still pending; no agent application code edit was performed.
+
+## 2026-10-21 | ItemUnit history route present; owner reports checks passed
+
+- Owner reported the preceding route checks passed; requested commands were typecheck and lint. Detailed output was not supplied; no new history integration result or agent rerun is claimed.
+- Inspected GET `src/app/api/item-units/[unitId]/history/route.ts`: existing inventory read authorization precedes input/query work; no-store headers, async params, and 400/404 mapping follow the current project patterns.
+- Next guidance extends the existing unit-correction integration suite to reuse user/item/unit fixtures and cleanup. Planned cases cover read roles, writer-to-history reads, safe actor projection, pagination, isolation by entity type/unit, empty/missing/invalid input, and inactive/retired history. No agent application code edit or new migration was performed.
+
+## 2026-10-21 | Unit audit history checks confirmed; GuestVisit schema guidance next
+
+- Owner reported all requested checks passed after adding history tests: focused unit-correction/history integration suite, typecheck, lint, and full suite with `--no-file-parallelism`. Detailed output/totals were not supplied; no agent rerun or current production build is claimed.
+- Inspected the history integration cases in the working tree: denied/allowed roles, correction writer-to-reader behavior, safe actor fields, empty results, pagination, unit/entity isolation, inactive/retired history, and invalid/missing input. Updated PROJECT/CONTEXT to reflect this completed read slice.
+- Inspected PROJECT 4 and current Prisma/User relations before selecting the next backend slice, GuestVisit registration. One stay is one visit; planned checkout never changes status automatically, and duplicate overrides require reasons/audit without auto-merge or a uniqueness ban.
+- Next guidance provides a complete proposed GuestVisit model/status enum and User inverse relations, with date-only stay dates and timestamped actual checkout/audit. Schema validation precedes migration creation/application. No GuestVisit implementation, migration, test, application edit, frontend transition, staging, or commit was performed by the agent.
+
+## 2026-10-21 | GuestVisit schema owner-confirmed valid; migration guidance next
+
+- Owner reported `db:validate` succeeded. Inspected the actual GuestVisit model, STAYING/CHECKED_OUT enum, and creator/updater User inverse relations. Detailed validation output and agent rerun were not supplied.
+- Next guidance creates migration `20261021100000_guest_visits` matching the Prisma schema, with required nonblank names/room, planned checkout on or after check-in, and checkedOutAt nullability consistent with status. Same-date check-in/planned checkout remains permitted; no uniqueness ban is added for duplicate visits.
+- Migration application is planned for the dedicated test database before Prisma client generation and schema tests. Duplicate detection/override audit remains a future service responsibility. No GuestVisit migration or application code was edited/applied by the agent in this step.
+
+## 2026-10-21 | GuestVisit migration/client setup owner-confirmed successful
+
+- Owner reported the previous commands succeeded: test database startup, `db:migrate:test`, `db:generate`, and typecheck. Detailed outputs/totals were not supplied; migration application was not independently queried by the agent.
+- Inspected the stored GuestVisit migration and confirmed generated GuestVisit model/status enum files are present. Migration matches the schema and adds nonblank text, date-order, and checkout-state checks without a duplicate-visit uniqueness ban.
+- Next guidance adds `tests/integration/guest-visit-schema.test.ts` with the existing withRollback helper for defaults/date-only values, same-day dates, allowed duplicate rows, invalid updates, valid checkout storage, and retained actor references. This is database constraint coverage; role authorization, duplicate override reasons/audit, registration service, and endpoints remain pending. No agent application code or test execution occurred.
+
+## 2026-10-21 | GuestVisit schema tests confirmed; next milestone choice requested
+
+- Owner reported all preceding checks passed after adding GuestVisit schema tests; requested commands were the focused schema integration test, typecheck, and lint. Inspected the stored tests for default/date values, same-day dates, duplicate records, checkout consistency, invalid updates, and actor retention. Final output/totals and agent rerun are not claimed.
+- GuestVisit registration remains incomplete: input validation, duplicate detection/override audit service, authorization, and endpoint/integration coverage are not implemented.
+- Owner asked how much backend work remains and expressed concern about the continuing backend sequence. Explained that the full PROJECT scope still spans guests, borrowing, returns, inspections/maintenance, lost/settlement/recovery, lifecycle, and administration; these are not prerequisites for an inventory UI using existing APIs.
+- Recommended a current backend checkpoint/owner commit followed by FE inventory. Asked the owner to choose FE inventory now or finish GuestVisit registration first; no answer is assumed and no frontend transition or application code change occurred. Refreshed milestone documentation without changing business requirements.
+
+## 2026-10-21 | Owner selected dark inventory frontend
+
+- Owner selected FE inventory and requested Tailwind, dark-brown framing, dark content surfaces without white/cream panels, and installed design skills to avoid generic UI. Announced transition; GuestVisit registration remains paused at schema foundation.
+- Inspected Git status/HEAD, workspace layout, global CSS, navigation, login page, item-list service, product context, and login design notes. HEAD remains `34fdde8`; backend changes remain uncommitted. Existing workspace is light and the inventory route is absent.
+- Ran Impeccable context/setup for the inventory route; comp-first configuration exists, DESIGN.md and matching surface brief do not. Concept seed initially had no catalog access; network-enabled retry succeeded. No direction or comp has been approved.
+- Added `docs/INVENTORY-DESIGN.md` as a proposed espresso/charcoal/brass palette and inventory list composition. Refreshed milestone/context notes. Backend checkpoint commit remains owner-operated before frontend application code.
+- No application code, migrations, branch, staging, or commits changed; no app tests or browser checks run. Visual and contrast verification remain pending.
