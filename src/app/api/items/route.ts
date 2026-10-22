@@ -14,6 +14,8 @@ import {
 
 import { listItems } from "@/server/list-items";
 import { listItemsInputSchema } from "@/server/list-items-input";
+import { readItemForm } from "@/server/read-item-form";
+import { InvalidItemPhotoError, prepareItemPhoto } from "@/server/item-photo";
 
 export async function GET(request: Request) {
   const authorization = await authorizeApi("inventory:view");
@@ -57,16 +59,27 @@ export async function POST(request: Request) {
     return authorization.response;
   }
 
-  const rejectedRequest = validateMutationRequest(request);
+  const rejectedRequest = validateMutationRequest(request, ["application/json", "multipart/form-data"]);
 
   if (rejectedRequest) {
     return rejectedRequest;
   }
 
-    let body: unknown;
+  let body: unknown;
+  let photo: File | undefined;
+  const multipart = request.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data") ?? false;
 
   try {
-    body = await readJsonBody(request);
+    if (multipart) {
+      const form = await readItemForm(request);
+      if (["name", "description", "photo"].some(key => form.getAll(key).length > 1)) throw new SyntaxError("Duplicate fields");
+      body = { name: form.get("name"), description: form.get("description") ?? undefined };
+      const entry = form.get("photo");
+      if (entry !== null && !(entry instanceof File)) throw new SyntaxError("Invalid photo field");
+      if (entry instanceof File && (entry.size > 0 || entry.name)) photo = entry;
+    } else {
+      body = await readJsonBody(request);
+    }
   } catch (error) {
     const tooLarge = error instanceof PayloadTooLargeError;
 
@@ -74,8 +87,8 @@ export async function POST(request: Request) {
       {
         error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_INPUT",
         message: tooLarge
-          ? "Ukuran data maksimal 256 KiB."
-          : "Format JSON tidak valid.",
+          ? (multipart ? "Foto maksimal 2 MiB dan data form harus sesuai batas." : "Ukuran data maksimal 256 KiB.")
+          : (multipart ? "Data form tidak valid." : "Format JSON tidak valid."),
       },
       {
         status: tooLarge ? 413 : 400,
@@ -102,7 +115,9 @@ export async function POST(request: Request) {
   }
 
   try {
-    const item = await createItem(parsed.data.name, authorization.user.id);
+    const preparedPhoto = photo ? await prepareItemPhoto(photo) : undefined;
+    const { photoKey, ...created } = await createItem(parsed.data.name, authorization.user.id, { description: parsed.data.description, photo: preparedPhoto });
+    const item = { ...created, photoUrl: photoKey ? `/api/items/${created.id}/photo` : null };
 
     return Response.json(
       { item },
@@ -112,6 +127,9 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+    if (error instanceof InvalidItemPhotoError) {
+      return Response.json({ error: "INVALID_PHOTO", message: error.message }, { status: 400, headers: { "Cache-Control": "no-store" } });
+    }
     if (error instanceof DuplicateItemNameError) {
       return Response.json(
         {

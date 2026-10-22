@@ -1,0 +1,12 @@
+async page => {
+  return await page.evaluate(() => ({
+    overflow: document.documentElement.scrollWidth > innerWidth,
+    font: getComputedStyle(document.querySelector('h1')).fontFamily,
+    body: getComputedStyle(document.querySelector('main')).fontFamily,
+    fontVariable: getComputedStyle(document.querySelector('h1')).getPropertyValue('--font-jakarta'),
+    fontStatus: document.fonts.status,
+    names: [...document.querySelectorAll('[aria-label="Katalog jenis barang"] h3')].map(e => e.textContent.length),
+    sidebar: document.querySelector('aside').getBoundingClientRect().width,
+    availableLinks: [...document.querySelectorAll('nav a')].filter(e => e.offsetParent).map(e => ({text:e.textContent, href:e.getAttribute('href')}))
+  }));
+}

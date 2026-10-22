@@ -1,0 +1,46 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1440,height:960});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ const controls=await page.locator('button:not(:disabled)').evaluateAll(es=>es.filter(e=>e.getClientRects().length).map(e=>({text:e.getAttribute('aria-label')||e.textContent,cursor:getComputedStyle(e).cursor})));
+ assert(controls.length>3&&controls.every(e=>e.cursor==='pointer'),'all visible enabled buttons use pointer');
+ const disabled=await page.getByRole('button',{name:'Sebelumnya',exact:true}).evaluate(e=>getComputedStyle(e).cursor);
+ assert(disabled==='not-allowed','disabled pagination uses not-allowed');
+ const data=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();
+ const item=data.items.find(i=>i.isActive&&i.name.length<=100);if(!item)throw new Error('Need active existing type');
+ await page.goto(`http://localhost:3000/inventory?q=${encodeURIComponent(item.name.toLowerCase())}&page=1&item=${item.id}`);await page.waitForLoadState('networkidle');
+ const panel=page.locator('#inventory-unit-panel');await panel.waitFor();
+ const positions=await panel.evaluate(e=>({name:e.querySelector('h2').getBoundingClientRect().top,count:[...e.querySelectorAll('p')].find(p=>p.textContent==='Unit fisik terdaftar').getBoundingClientRect().top,stock:e.querySelector('button[aria-label^="Tambah stok"]').getBoundingClientRect().top,table:e.querySelector('table').getBoundingClientRect().top}));
+ assert(positions.name<positions.count&&positions.count<positions.stock&&positions.stock<positions.table,'detail order is name, registered count, stock action, unit table');
+ assert(await panel.getByRole('table').count()===1,'unit table exists even when no units');
+ assert(!((await panel.textContent()).includes('Jumlah terdaftar bukan jumlah siap dipinjam'))&&!((await panel.textContent()).includes('Setiap kode di daftar ini')),'redundant detail explanations removed');
+ const plus=panel.getByRole('button',{name:`Tambah stok ${item.name}`,exact:true});assert(await plus.getByText('Tambah stok',{exact:true}).count()===1,'panel action combines plus and text inside one button');
+ await plus.click();const form=page.getByRole('dialog',{name:'Tambah stok',exact:true});await form.waitFor();
+ assert(await form.locator('details').count()===0,'unit fields are visible without disclosure');
+ assert(await form.getByLabel(/Nomor seri/).first().isVisible(),'optional serial field is directly visible');
+ assert(!(await form.getByLabel(/Nomor seri/).first().getAttribute('required')),'serial is optional');
+ assert(await form.getByLabel(/Deskripsi/).first().isVisible(),'description is directly visible');
+ assert(await form.locator('select').count()===1&&!(await form.textContent()).includes('Kondisi awal'),'one condition selector per unit without initial-condition duplicate');
+ await form.getByLabel(/Jumlah unit/).fill('2');
+ assert(await form.locator('select').count()===2,'two units each have their own condition');
+ await form.getByLabel(/Kondisi unit/).nth(0).selectOption('MINOR_DAMAGE');
+ await form.getByLabel(/Deskripsi/).nth(1).fill('Gelas tanpa nomor seri');
+ let payload;await page.route('**/api/stock-batches',async route=>{payload=route.request().postDataJSON();await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({batch:{id:payload.requestId,itemId:payload.itemId,quantity:payload.quantity}})});});
+ await form.getByRole('button',{name:'Simpan stok',exact:true}).click();await form.getByRole('status').filter({hasText:'2 unit berhasil'}).waitFor();
+ assert(payload.units[0].condition==='MINOR_DAMAGE'&&payload.units[1].condition==='GOOD','per-unit condition is the only condition sent');
+ assert(payload.units.every(u=>u.serialNumber==='')&&payload.units[1].notes==='Gelas tanpa nomor seri','optional serial stays empty and Deskripsi maps to unchanged notes API field');
+ await form.getByRole('button',{name:'Selesai',exact:true}).click();await form.waitFor({state:'hidden'});await page.unroute('**/api/stock-batches');
+ await panel.getByRole('button',{name:'Tutup daftar unit'}).click();await panel.waitFor({state:'hidden'});await page.waitForURL(u=>!u.searchParams.has('item'));
+ const long=data.items.find(i=>i.name.length>100);
+ if(long){await page.goto(`http://localhost:3000/inventory?item=${long.id}`);await page.waitForLoadState('networkidle');await panel.waitFor();const summary=panel.locator('summary');assert(await summary.innerText()==='Selengkapnya','long-name disclosure is Selengkapnya');assert(await summary.evaluate(e=>getComputedStyle(e).justifyContent)==='flex-end','long-name disclosure is aligned right');await summary.click();assert(await summary.innerText()==='Ringkas','expanded disclosure offers Ringkas');await summary.click();await panel.getByRole('button',{name:'Tutup daftar unit'}).click();await panel.waitFor({state:'hidden'});await page.waitForURL(u=>!u.searchParams.has('item'));}
+ for(const width of [320,390,1440]){
+  await page.setViewportSize({width,height:960});await page.goto(`http://localhost:3000/inventory?q=${encodeURIComponent(item.name.toLowerCase())}&page=1&item=${item.id}`);await page.waitForLoadState('networkidle');await panel.waitFor();await panel.evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+  assert(!(await panel.evaluate(e=>e.scrollWidth>e.clientWidth)),`detail fits ${width}px`);
+  if(width!==320)await page.screenshot({path:`output/playwright/unit-detail-revised-${width}.png`,caret:'initial'});
+  await panel.getByRole('button',{name:`Tambah stok ${item.name}`,exact:true}).click();await form.waitFor();
+  assert(!(await form.evaluate(e=>e.scrollWidth>e.clientWidth)),`visible unit form fits ${width}px`);
+  if(width!==320)await page.screenshot({path:`output/playwright/unit-form-revised-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await form.waitFor({state:'hidden'});assert(await panel.isVisible(),`form Escape preserves detail at ${width}px`);
+  await panel.getByRole('button',{name:'Tutup daftar unit'}).click();await panel.waitFor({state:'hidden'});await page.waitForURL(u=>!u.searchParams.has('item'));
+ }
+ return{checks,mutations:'browser interception only'};
+}

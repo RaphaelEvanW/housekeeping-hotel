@@ -15,6 +15,8 @@ export async function getItemUnits(itemId: string, after?: number) {
           id: true,
           name: true,
           isActive: true,
+          description: true,
+          photoKey: true,
           _count: {
             select: {
               units: true,
@@ -63,6 +65,8 @@ export async function getItemUnits(itemId: string, after?: number) {
           id: item.id,
           name: item.name,
           isActive: item.isActive,
+          description: item.description,
+          photoUrl: item.photoKey ? `/api/items/${item.id}/photo` : null,
         },
         totalRegistered: item._count.units,
         units: pageUnits.map((unit) => ({

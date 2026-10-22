@@ -1,0 +1,67 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1366,height:960});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ const listing=await page.request.get('http://localhost:3000/api/items?pageSize=50');
+ assert(listing.status()===200,'live catalog API reads migrated description/photo fields');
+ const data=await listing.json();const existing=data.items.find(i=>i.isActive&&i.name.length<=100);
+ if(!existing)throw new Error('Need one active existing type for read-only UI verification');
+ const name=existing.name;
+ const create=page.getByRole('dialog',{name:'Tambah jenis barang',exact:true});
+ await page.getByRole('button',{name:'Tambah jenis barang',exact:true}).click();
+ await create.getByLabel('Nama jenis barang',{exact:true}).fill(name);
+ await create.getByLabel(/Deskripsi/).fill('Deskripsi antarmuka pengujian');
+ await create.getByLabel(/Foto katalog/).setInputFiles({name:'test.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=','base64')});
+ assert(await create.getByAltText('Pratinjau foto katalog').isVisible(),'photo preview is visible');
+ let multipart=false;
+ await page.route('**/api/items',async route=>{multipart=route.request().headers()['content-type'].startsWith('multipart/form-data; boundary=');await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({item:existing})});});
+ await create.getByRole('button',{name:'Simpan jenis barang',exact:true}).click();await create.waitFor({state:'hidden'});
+ const q=name.replace(/\s+/g,' ').trim().toLowerCase();
+ await page.waitForURL(u=>u.searchParams.get('q')===q&&u.searchParams.get('page')==='1');
+ await page.waitForLoadState('networkidle');await page.unroute('**/api/items');
+ assert(multipart,'create sends multipart with name/description/photo');
+ assert(await page.getByRole('status').filter({hasText:/^Jenis barang berhasil ditambahkan\.$/}).count()===1,'success text is exactly the requested short sentence');
+ const card=page.getByRole('list',{name:'Katalog jenis barang'}).locator('li').filter({has:page.getByRole('heading',{name,exact:true})}).first();
+ await card.waitFor();checks.push('success navigation filters catalog so the returned item card is visible');
+ const plus=card.getByRole('button',{name:`Tambah stok ${name}`,exact:true});
+ const geometry=await plus.evaluate(e=>({width:e.getBoundingClientRect().width,height:e.getBoundingClientRect().height,color:getComputedStyle(e).backgroundColor}));
+ assert(geometry.width===44&&geometry.height===44&&geometry.color==='rgb(144, 77, 0)','plus is square 44px with current gold primary');
+ const stock=page.getByRole('dialog',{name:'Tambah stok',exact:true});
+ await plus.click();await stock.waitFor();await stock.getByLabel('Jumlah unit',{exact:true}).fill('2');
+ await stock.getByLabel('Kondisi awal',{exact:true}).selectOption('MINOR_DAMAGE');
+ await stock.locator('summary').click();
+ await stock.getByLabel('Nomor seri',{exact:true}).nth(0).fill('SERIAL-1');
+ await stock.getByLabel('Catatan',{exact:true}).nth(1).fill('Kabel diperiksa');
+ await stock.getByLabel('Kondisi unit',{exact:true}).nth(1).selectOption('GOOD');
+ let firstPayload;let submissions=0;
+ await page.route('**/api/stock-batches',async route=>{
+  submissions++;const payload=route.request().postDataJSON();
+  if(submissions===1){firstPayload=payload;await route.fulfill({status:500,contentType:'application/json',body:'{}'});}
+  else{assert(JSON.stringify(payload)===JSON.stringify(firstPayload),'uncertain retry keeps exact requestId and payload');await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({batch:{id:payload.requestId,itemId:payload.itemId,quantity:payload.quantity},replayed:true})});}
+ });
+ await stock.getByRole('button',{name:'Simpan stok',exact:true}).click();
+ await stock.getByRole('alert').filter({hasText:'belum dapat dipastikan'}).waitFor();
+ assert(await stock.getByLabel('Jumlah unit',{exact:true}).isDisabled(),'uncertain batch freezes inputs');
+ await stock.getByRole('button',{name:'Tutup',exact:true}).click();await stock.waitFor({state:'hidden'});
+ await plus.click();await stock.waitFor();await stock.getByRole('button',{name:'Periksa ulang penyimpanan',exact:true}).click();
+ await stock.getByRole('status').filter({hasText:'2 unit berhasil ditambahkan.'}).waitFor();
+ assert(firstPayload.itemId===existing.id&&firstPayload.quantity===2&&firstPayload.units.length===2,'stock request references existing type and exact quantity');
+ assert(firstPayload.units[0].serialNumber==='SERIAL-1'&&firstPayload.units[0].condition==='MINOR_DAMAGE'&&firstPayload.units[1].condition==='GOOD'&&firstPayload.units[1].notes==='Kabel diperiksa','unit details and condition overrides are preserved');
+ await stock.getByRole('button',{name:'Selesai',exact:true}).click();await stock.waitFor({state:'hidden'});await page.unroute('**/api/stock-batches');
+ await card.getByRole('link',{name:`Detail barang ${name}`,exact:true}).click();
+ const detail=page.getByRole('dialog',{name:/^Unit fisik/});await detail.waitFor();
+ await detail.getByRole('button',{name:`Tambah stok ${name}`,exact:true}).click();await stock.waitFor();
+ await page.keyboard.press('Escape');await stock.waitFor({state:'hidden'});assert(await detail.isVisible(),'stock Escape preserves item detail behind it');
+ await detail.getByRole('button',{name:'Tutup daftar unit'}).click();await detail.waitFor({state:'hidden'});
+ await page.waitForURL(u=>!u.searchParams.has('item'));
+ for(const width of [320,390,768,1366]){
+  await page.setViewportSize({width,height:960});await plus.click();await stock.waitFor();
+  assert(!(await stock.evaluate(e=>e.scrollWidth>e.clientWidth))&&!(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth)),`stock UI fits ${width}px`);
+  if(width===390||width===1366)await page.screenshot({path:`output/playwright/add-stock-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await stock.waitFor({state:'hidden'});
+  await page.getByRole('button',{name:'Tambah jenis barang',exact:true}).click();await create.waitFor();
+  assert(!(await create.evaluate(e=>e.scrollWidth>e.clientWidth)),`extended create form fits ${width}px`);
+  if(width===390||width===1366)await page.screenshot({path:`output/playwright/catalog-form-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await create.waitFor({state:'hidden'});
+ }
+ return {checks,stockSubmissions:submissions,productionWrites:0};
+}

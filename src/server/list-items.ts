@@ -39,6 +39,8 @@ export async function listItems(input: ListItemsInput) {
           id: true,
           name: true,
           isActive: true,
+          description: true,
+          photoKey: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -51,7 +53,7 @@ export async function listItems(input: ListItemsInput) {
   );
 
   return {
-    items,
+    items: items.map(({ photoKey, ...item }) => ({ ...item, photoUrl: photoKey ? `/api/items/${item.id}/photo` : null })),
     pagination: {
       page,
       pageSize,

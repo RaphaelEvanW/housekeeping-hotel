@@ -1,0 +1,21 @@
+async page => {
+  await page.goto('http://localhost:3000/login');
+  await page.waitForLoadState('networkidle');
+  const results = [];
+  for (const width of [1280,390]) {
+    await page.setViewportSize({width,height:900});
+    await page.screenshot({path:'output/playwright/login-glass-'+width+'.png',caret:'initial'});
+    results.push(await page.evaluate(() => ({
+      width:innerWidth, overflow:document.documentElement.scrollWidth>innerWidth,
+      panel:getComputedStyle(document.querySelector('[aria-labelledby="login-heading"]')).backgroundColor,
+      button:getComputedStyle(document.querySelector('button[type="submit"]')).backgroundColor,
+      introVisible:!!document.querySelector('#login-introduction').getBoundingClientRect().width
+    })));
+  }
+  const input = page.getByRole('textbox',{name:'Kata sandi',exact:true});
+  await page.getByRole('button',{name:'Tampilkan kata sandi'}).click();
+  if (await input.getAttribute('type') !== 'text') throw new Error('Password visibility did not toggle');
+  await page.getByRole('button',{name:'Sembunyikan kata sandi'}).click();
+  if (await input.getAttribute('type') !== 'password') throw new Error('Password visibility did not restore');
+  return {results,passwordToggle:true};
+}

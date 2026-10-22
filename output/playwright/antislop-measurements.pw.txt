@@ -1,0 +1,43 @@
+async page => {
+  const results = [];
+  const errors=[];
+  page.on('console',m=>{if(m.type()==='error') errors.push(m.text().slice(0,180));});
+  for (const route of ['dashboard','inventory']) {
+    await page.goto('http://localhost:3000/'+route);
+    await page.waitForLoadState('networkidle');
+    for (const width of [1280,768,390,320]) {
+      await page.setViewportSize({width,height:900});
+      results.push(await page.evaluate(({route,width})=>{
+        const card=document.querySelector('[aria-label="Katalog jenis barang"] li');
+        const inputs=[...document.querySelectorAll('a,button,input,summary')].filter(e=>e.getBoundingClientRect().width && !e.closest('[hidden]') && !e.classList.contains('sr-only') && !e.closest('nextjs-portal'));
+        const shortTargets=inputs.filter(e=>e.getBoundingClientRect().height<44).map(e=>({tag:e.tagName,text:(e.textContent||'').trim().slice(0,25),height:e.getBoundingClientRect().height}));
+        return {route,width,overflow:document.documentElement.scrollWidth>innerWidth,title:document.title,shortTargets,
+          cardHeight:card?Math.round(card.getBoundingClientRect().height):null,
+          photoHeight:card?Math.round(card.firstElementChild.getBoundingClientRect().height):null};
+      },{route,width}));
+      if (width===1280 || width===390) await page.screenshot({path:'output/playwright/antislop-'+route+'-'+width+'.png',caret:'initial'});
+    }
+    const contrast=await page.evaluate(()=>{
+      const cv=document.createElement('canvas');cv.width=cv.height=1;
+      const cx=cv.getContext('2d',{willReadFrequently:true});
+      const rgb=c=>{cx.clearRect(0,0,1,1);cx.fillStyle=c;cx.fillRect(0,0,1,1);return [...cx.getImageData(0,0,1,1).data].map((v,i)=>i===3?v/255:v);};
+      const blend=(a,b)=>a.slice(0,3).map((v,i)=>v*a[3]+b[i]*(1-a[3]));
+      const lum=c=>c.map(v=>{v/=255;return v<=.04045?v/12.92:((v+.055)/1.055)**2.4;}).reduce((v,n,i)=>v+n*[.2126,.7152,.0722][i],0);
+      const unique=new Map();
+      for (const e of document.querySelectorAll('main *,aside *,header *')) {
+        if(![...e.childNodes].some(n=>n.nodeType===3&&n.textContent.trim()))continue;
+        const s=getComputedStyle(e);
+        if(!e.getBoundingClientRect().width||e.closest('[hidden]')||e.closest('button:disabled')||s.visibility==='hidden')continue;
+        let bg=[255,255,255]; const chain=[];for(let a=e;a;a=a.parentElement)chain.unshift(a);
+        for(const a of chain)bg=blend(rgb(getComputedStyle(a).backgroundColor),bg);
+        const fg=blend(rgb(s.color),bg); const l1=lum(fg),l2=lum(bg); const ratio=(Math.max(l1,l2)+.05)/(Math.min(l1,l2)+.05);
+        const threshold=parseFloat(s.fontSize)>=24||(parseFloat(s.fontSize)>=18.67&&parseInt(s.fontWeight)>=700)?3:4.5;
+        const key=s.color+'|'+bg.join(',')+'|'+s.fontSize;
+        if(!unique.has(key))unique.set(key,{text:e.textContent.trim().slice(0,35),ratio:+ratio.toFixed(2),threshold,color:s.color});
+      }
+      return {testedCombinations:unique.size,failures:[...unique.values()].filter(x=>x.ratio<x.threshold),minimumRatio:Math.min(...[...unique.values()].map(x=>x.ratio))};
+    });
+    results.push({route,contrast});
+  }
+  return {results,errors};
+}

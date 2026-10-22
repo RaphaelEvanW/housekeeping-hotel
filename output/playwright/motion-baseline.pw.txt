@@ -1,0 +1,15 @@
+async page => {
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  const start=Date.now();
+  await page.getByRole('list',{name:'Katalog jenis barang'}).getByRole('link',{name:/Lihat unit/}).first().click();
+  const panel=page.getByRole('dialog',{name:/^Unit /});
+  await panel.waitFor();
+  const opening=Date.now()-start;
+  const style=await panel.evaluate(e=>({transition:getComputedStyle(e).transitionDuration,font:getComputedStyle(e).fontFamily,animations:e.getAnimations().map(a=>a.effect.getTiming().duration)}));
+  const closeStart=Date.now();
+  await panel.getByRole('button',{name:'Tutup daftar unit'}).click();
+  await panel.waitFor({state:'hidden'});
+  return {openingMs:opening,closingMs:Date.now()-closeStart,style};
+}

@@ -1,0 +1,41 @@
+async page => {
+  const checks = [];
+  const focus = () => page.evaluate(() => {
+    const e=document.activeElement, s=getComputedStyle(e);
+    return {tag:e.tagName,text:(e.textContent || '').trim().slice(0,45),id:e.id,outline:s.outlineStyle+' '+s.outlineWidth+' '+s.outlineColor};
+  });
+  await page.setViewportSize({width:1280,height:900});
+  await page.goto('http://localhost:3000/dashboard');
+  await page.waitForLoadState('networkidle');
+  await page.keyboard.press('Tab');
+  checks.push({state:'first-tab',focus:await focus()});
+  await page.keyboard.press('Enter');
+  checks.push({state:'skip-link-target',focus:await focus()});
+  await page.keyboard.press('Tab');
+  checks.push({state:'dashboard-primary-focus',focus:await focus()});
+  await page.keyboard.press('Enter');
+  await page.waitForURL('**/inventory');
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('button',{name:'Tabel',exact:true}).focus();
+  await page.keyboard.press('Space');
+  checks.push({state:'keyboard-table-toggle',tableVisible:await page.getByRole('table').isVisible(),focus:await focus()});
+  await page.getByRole('textbox',{name:'Cari nama barang'}).fill('zz-antislop-no-result');
+  await page.keyboard.press('Enter');
+  await page.getByRole('heading',{name:'Barang tidak ditemukan',exact:true}).waitFor();
+  checks.push({state:'keyboard-search-empty',urlHasQuery:new URL(page.url()).searchParams.has('q')});
+  await page.getByRole('link',{name:'Hapus pencarian',exact:true}).focus();
+  await page.keyboard.press('Enter');
+  await page.getByRole('list',{name:'Katalog jenis barang'}).waitFor();
+  await page.setViewportSize({width:390,height:900});
+  await page.locator('summary').focus();
+  await page.keyboard.press('Space');
+  checks.push({state:'keyboard-mobile-menu',open:await page.locator('details').getAttribute('open'),focus:await focus()});
+  await page.keyboard.press('Space');
+  checks.push({state:'keyboard-mobile-menu-close',open:await page.locator('details').getAttribute('open')});
+  await page.goto('http://localhost:3000/inventory?page=bad');
+  await page.getByRole('alert').waitFor();
+  await page.getByRole('link',{name:'Reset tampilan',exact:true}).click();
+  await page.getByRole('list',{name:'Katalog jenis barang'}).waitFor();
+  checks.push({state:'invalid-query-reset',url:new URL(page.url()).pathname});
+  return checks;
+}

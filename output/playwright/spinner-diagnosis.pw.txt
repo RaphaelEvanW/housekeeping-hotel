@@ -1,0 +1,25 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1366,height:960});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ const data=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();
+ const item=data.items.find(i=>i.isActive&&i.name.length<=100);if(!item)throw new Error('Need an active existing item');
+ await page.goto(`http://localhost:3000/inventory?q=${encodeURIComponent(item.name.toLowerCase())}`);await page.waitForLoadState('networkidle');
+ const plus=page.getByRole('list',{name:'Katalog jenis barang'}).getByRole('button',{name:`Tambah stok ${item.name}`,exact:true}).first();
+ await plus.click();const dialog=page.getByRole('dialog',{name:'Tambah stok',exact:true});await dialog.waitFor();
+ const quantity=dialog.getByLabel(/Jumlah unit/),location=dialog.getByLabel(/Lokasi awal/),units=dialog.locator('details[name="stock-units"]');
+ const available=await location.locator('option').evaluateAll(es=>es.filter(e=>e.value&&!e.disabled).map(e=>({id:e.value,name:e.textContent})));
+ if(!available.length)throw new Error('No active locations in dev database; form correctly blocks save, but selection check needs real master data');
+ assert(await location.getAttribute('required')!==null,'one batch location is required');
+ assert(await location.inputValue()==='','no hardcoded initial location is preselected');
+ await dialog.getByRole('button',{name:'Simpan stok',exact:true}).click();
+ assert(!(await location.evaluate(e=>e.checkValidity())),'missing location is rejected by native validation');
+ await location.selectOption(available[0].id);
+ assert(await dialog.getByText('1-100 unit per penambahan',{exact:true}).isVisible(),'quantity help matches requested text');
+ assert(!(await dialog.textContent()).includes('Kode unit dibuat otomatis; lokasi awal'),'old fixed-storage helper removed');
+ await quantity.hover();
+ const numeric=await quantity.evaluate(e=>{
+ const rules=[];const visit=list=>{for(const r of list){if(r.cssRules)visit(r.cssRules);else if(r.selectorText&&r.selectorText.includes('spin-button')&&r.style.appearance==='none'){const selector=r.selectorText.replace(/::-webkit-(inner|outer)-spin-button/g,'');if(e.matches(selector))rules.push(r.selectorText);}}};
+ for(const sheet of document.styleSheets){try{visit(sheet.cssRules);}catch{}}
+ return {appearance:getComputedStyle(e).appearance,type:e.type,inner:rules.some(s=>s.includes('inner-spin')),outer:rules.some(s=>s.includes('outer-spin'))};
+});
+ return numeric; }

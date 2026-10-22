@@ -1,0 +1,33 @@
+async page => {
+ const results=[];
+ for(const width of [390,1280,1366]) {
+  await page.setViewportSize({width,height:960});
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  const grid=page.getByRole('list',{name:'Katalog jenis barang'});
+  const dimensions=await grid.evaluate(e=>{
+   const area=e.getBoundingClientRect();
+   const cards=[...e.children].map(c=>c.getBoundingClientRect());
+   const row=cards.filter(r=>r.top===cards[0].top);
+   return {card:cards[0].width,photo:e.firstElementChild.firstElementChild.getBoundingClientRect().height,columns:row.length,left:row[0].left-area.left,right:area.right-row.at(-1).right,overflow:document.documentElement.scrollWidth>innerWidth};
+  });
+  if(dimensions.photo!==144||dimensions.card!==264||Math.abs(dimensions.left-dimensions.right)>1||dimensions.overflow)throw new Error(JSON.stringify({width,dimensions}));
+  await grid.getByRole('link',{name:/Detail barang/}).first().click();
+  const panel=page.getByRole('dialog',{name:/^Unit fisik/});
+  await panel.waitFor();
+  await panel.getByRole('button',{name:'Tutup daftar unit'}).click();
+  await panel.waitFor({state:'hidden'});
+  await page.waitForURL(u=>!u.searchParams.has('item'));
+  if(width===1366)await page.screenshot({path:'output/playwright/catalog-centered-1366.png',caret:'initial'});
+  results.push({width,...dimensions});
+ }
+ const login=await page.context().newPage();
+ await login.goto('http://localhost:3000/login');
+ await login.waitForLoadState('networkidle');
+ const password=login.getByLabel('Kata sandi',{exact:true});
+ if(await password.getAttribute('type')!=='password')throw new Error('Password must remain masked');
+ if(await login.getByRole('button',{name:/Tampilkan|Sembunyikan/}).count())throw new Error('Reveal control still exists');
+ await login.screenshot({path:'output/playwright/login-without-reveal.png',caret:'initial'});
+ await login.close();
+ return {catalog:results,password:'masked, no reveal button'};
+}

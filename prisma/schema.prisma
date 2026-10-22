@@ -130,6 +130,8 @@ model Item {
   id             String   @id @default(uuid())
   name           String
   normalizedName String   @unique
+  description    String?
+  photoKey       String?
   isActive       Boolean  @default(true)
   createdById    String
   updatedById    String

@@ -11,13 +11,14 @@ export default async function AdministrationPage() {
   }
 
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-semibold">Administrasi</h1>
+    <main className="p-4 md:p-6">
+      <h1 className="text-2xl font-semibold tracking-tight text-ws-strong">
+        Administrasi
+      </h1>
 
-      <p className="mt-2 text-stone-600">
+      <p className="mt-2 text-sm text-ws-text">
         Pengelolaan akun dan akses akan tersedia di halaman ini.
       </p>
-
     </main>
   );
 }

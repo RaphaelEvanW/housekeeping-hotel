@@ -1,0 +1,16 @@
+async page => {
+ const results=[];
+ for(const width of [390,1366]){
+  await page.setViewportSize({width,height:900});
+  await page.goto('http://localhost:3000/dashboard');
+  await page.waitForLoadState('networkidle');
+  const link=page.getByRole('link',{name:'Buka inventaris',exact:true});
+  const style=await link.evaluate(e=>{const s=getComputedStyle(e);return{font:s.fontFamily,size:s.fontSize,line:s.lineHeight,weight:s.fontWeight,spacing:s.letterSpacing,height:e.getBoundingClientRect().height,href:e.getAttribute('href'),overflow:document.documentElement.scrollWidth>innerWidth};});
+  if(!style.font.includes('Inter')||style.size!=='14px'||style.weight!=='500'||style.line!=='20px'||parseFloat(style.spacing)<0.13||style.height<44||style.href!=='/inventory'||style.overflow)throw new Error(JSON.stringify(style));
+  await page.screenshot({path:`output/playwright/dashboard-button-${width}.png`,caret:'initial'});
+  results.push({width,...style});
+ }
+ await page.getByRole('link',{name:'Buka inventaris',exact:true}).click();
+ await page.waitForURL('**/inventory');
+ return{results,navigation:'inventory reached'};
+}

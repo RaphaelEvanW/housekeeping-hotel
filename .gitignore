@@ -43,3 +43,6 @@ next-env.d.ts
 
 # generated Prisma client
 /src/generated/prisma/
+
+# Private, persistent catalogue photos (back up separately from Git)
+/.data/

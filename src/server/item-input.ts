@@ -9,6 +9,7 @@ export const itemNameSchema = z
 
 export const createItemInputSchema = z.object({
   name: itemNameSchema,
+  description: z.string().trim().max(2000, "Deskripsi maksimal 2000 karakter.").optional(),
 });
 
 export const updateItemInputSchema = z

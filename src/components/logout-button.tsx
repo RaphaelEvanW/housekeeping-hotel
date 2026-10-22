@@ -3,8 +3,9 @@
 import { useState } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { WorkspaceControlIcon } from "./workspace-control-icon";
 
-export function LogoutButton() {
+export function LogoutButton({ compact = false }: { compact?: boolean }) {
   const [isPending, setIsPending] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -31,17 +32,19 @@ export function LogoutButton() {
   }
 
   return (
-    <div className="mt-6">
+    <div>
       <button
         type="button"
         onClick={handleLogout}
         disabled={isPending}
-        className="rounded-lg border px-4 py-2 disabled:opacity-50"
+        title={compact ? "Keluar" : undefined}
+        className={`inline-flex min-h-11 shrink-0 items-center justify-center rounded-md py-2 text-sm font-medium text-inherit focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current disabled:cursor-wait disabled:opacity-50 ${compact ? "w-11 hover:bg-white/10" : "border border-current px-4 hover:opacity-80"}`}
       >
-        {isPending ? "Sedang keluar…" : "Keluar"}
+        {compact ? <WorkspaceControlIcon name="logout" /> : null}
+        <span className={compact ? "sr-only" : undefined}>{isPending ? "Sedang keluar…" : "Keluar"}</span>
       </button>
 
-      <p role="status" className="mt-2">
+      <p role="status" className={`${message ? "mt-2" : ""} max-w-64 break-words text-sm text-inherit`}>
         {message}
       </p>
     </div>

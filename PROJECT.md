@@ -26,7 +26,7 @@ Build a **standalone Next.js full-stack web app** for hotel Housekeeping invento
 | `BorrowingItems` | Original issued **physical units**, linked to a borrowing and responsible-guest/room snapshot. |
 | `Returns` / `ReturnLines` | Actual physical return events; one Combined Return can refer to units from **multiple Borrowings of the same GuestVisit**. |
 | `ItemPhotos` / evidence | Photos attached to the specific transaction/unit/event, with uploader/time and immutable history after finalization. |
-| `Locations` | Operational Housekeeping storage/custody locations; `HK Main Storage` is the default for newly registered units. |
+| `Locations` | Active Housekeeping storage/custody locations selectable once per Add Stock batch; replacement units retain the `HK Main Storage` default. |
 | `MaintenanceRecords` / `VerificationRecords` | Actual work performed and Supervisor inspection outcomes; preserve repeated rounds. |
 | `LostReports` / `Settlements` / `RecoveryEvents` | Lost/missing events, authorized resolution, and subsequent recoveries. |
 | `AuditEvents` | Who changed what, when, and (where relevant) old/new values and required reasons. |
@@ -63,7 +63,7 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 
 - Only **registered hotel guests** borrow items. Employees/staff never borrow through guest borrowing.
 - Create a new `GuestVisit` **per stay**, without cross-stay guest-identity merging. Manual guest check-in/check-out for MVP; no PMS sync.
-- Minimum registration: **Primary Guest name, room number, check-in date, planned checkout date**, plus a generated immutable `GuestVisitID`. No reservation/folio reference required. Planned checkout date does not automatically checkout a guest.
+- Minimum registration: **Primary Guest name, room number, booking number, check-in date, planned checkout date**, plus a generated immutable `GuestVisitID`. Owner confirmed on 22 October 2026 that the booking number is entered manually; it does not imply PMS integration. Booking-number schema/API/form implementation is pending a separate backend slice. Planned checkout date does not automatically checkout a guest.
 - A guest must be `STAYING` to receive **new** borrowing. Checkout is allowed with outstanding units after warning, and does **not** automatically classify remaining units as LOST; returns and settlement remain possible after checkout.
 - Where multiple guests share a room, one **Primary Guest** is responsible for borrowing under that stay. HK Staff may change the Primary Guest **with mandatory reason and audit**. Existing borrowings keep the **original responsible guest snapshot**, while subsequent borrowings use the new primary guest.
 - HK Staff may directly transfer the visit's room **with reason and audit**, even with outstanding borrowing. Update the current visit room; each prior borrowing's original room snapshot remains unchanged. A room transfer does not create a new borrowing or falsely relocate guest-held units to Housekeeping.
@@ -77,6 +77,8 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 - `Add New Item Type` and `Add Stock` are **different operations**, even if reachable on the same Inventory screen.
 - On new type creation, check normalized names (case insensitive, trim/collapse whitespace) so `Hair Dryer`, `hair dryer`, and `Hair  Dryer` are not registered as distinct types. Prefer selecting the existing type; preserve readable display names.
 - Master Item creation/renaming **does not create stock or trigger physical inspection**.
+- Owner-confirmed 22 October 2026: the item-type form includes name, optional catalog photo, and description. Existing/name-only clients and records remain valid; description may be blank. Catalog photos represent the type, not per-unit inspection or borrowing/return evidence. Categories remain out of scope.
+- Owner selected persistent local disk outside public/ for catalog photos. Storage/access/limits and deployment backup requirements are documented in docs/ITEM-CATALOG-STORAGE.md. This is not a PMS or external storage integration.
 - Record `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt`; track old/new values for edits. Creation and name corrections have no approval queue.
 
 ### 5.1.1 Master Item deactivation (owner-confirmed 21 October 2026)
@@ -92,7 +94,7 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 - HK Staff chooses **an existing master Item** and a `Quantity`. The app creates exactly that number of new **physical `ItemUnits`** in a **single atomic transaction**.
 - Each unit receives a **unique, immutable internal ID** and automatically generated, readable **UnitCode** (e.g. `HD-001`); code generation must be concurrency-safe and never reuse a previously assigned code for another physical unit.
 - Optional **per-unit SerialNumber and Notes**, editable in a simple batch form/expandable rows. Do not require staff to fill each row when all details are blank.
-- **Default initial location = HK Main Storage**, custody = `HOUSEKEEPING`. Do not reopen an extra location-choice debate/form for stock registration. After registration, internal Housekeeping moves use the existing simple audited location-update mechanism when necessary.
+- **Initial location is selected once for the entire Add Stock batch** from existing active locations (owner confirmation, 22 October 2026). Every unit in that batch uses the selected location, with custody = `HOUSEKEEPING`. The frontend requires an explicit selection; the server rechecks location activity atomically. Legacy API requests without `initialLocationId` retain the `HK_MAIN_STORAGE` fallback. Stock registration does not create locations. After registration, internal Housekeeping moves use the existing simple audited location-update mechanism when necessary.
 - Use the existing condition/readiness rules for the physical units, with a practical default of `GOOD` and override only when needed. Non-GOOD units are not automatically borrowable.
 - **Stock is computed from registered physical units and their current state**, never from a writable total stock counter. A batch insert that fails partway must not create partial stock.
 - HK Staff **corrects input errors directly** by editing the affected unit(s), without Supervisor approval. Mistakes like serial-number typos or notes do not need inspection. Never silently rewrite finalized borrowing/return evidence or use a clerical edit to bypass an actual ON_HOLD/inspection. A mistaken unused phantom registration may be corrected/removed with an audit trail; historical operational records must not be destroyed.
@@ -245,7 +247,7 @@ Implement one vertical slice at a time and verify it; **do not build the full ap
 ## 15. Minimum acceptance tests
 
 - `Hair Dryer` vs `hair dryer` does not create duplicate types; all HK Staff can create one and Supervisor can edit it without approval.
-- Bulk Add Stock quantity 10 creates **exactly 10 unique physical units**, linked to one Item type, with default `HK Main Storage` and no partial results on error. Staff can correct a typo on 2 of those units directly; audit shows who/when/what changed.
+- Bulk Add Stock quantity 10 creates **exactly 10 unique physical units**, linked to one Item type and one selected active initial location, with no partial results on error. Missing/inactive selected locations are rejected. Legacy requests without a selection retain `HK Main Storage`. Staff can correct a typo on 2 of those units directly; audit shows who/when/what changed.
 - Two concurrent requests cannot borrow the same unit; issuance without photo **for each** selected unit is rejected.
 - A guest can receive multiple separately recorded borrowing occasions; check-out and room changes preserve old borrowing/room/primary-guest snapshots and outstanding units.
 - Combined Return can return units from different borrowings for the same visit in one atomic operation; default GOOD photo is optional; any non-GOOD line **requires** a photo and enters PENDING_INSPECTION.
@@ -258,7 +260,7 @@ Implement one vertical slice at a time and verify it; **do not build the full ap
 ## 16. Decision policy for OpenCode
 
 - Treat Sections 1–12 and their **explicit confirmations** as the agreed scope. The precise DB schema/table names and Section 13 technologies remain design details until reviewed.
-- **Do not repeat already settled questions**, notably default `HK Main Storage` for newly added/replacement units, routine staff edits without approval, and Supervisor involvement only in explicitly required workflows.
+- **Do not repeat already settled questions**, notably one selected initial location per Add Stock batch, default `HK Main Storage` for replacement units, routine staff edits without approval, and Supervisor involvement only in explicitly required workflows.
 - Ask only **essential blocking questions** where two plausible paths would have a major effect on integrity, permissions or the business outcome. Otherwise document and apply the simplest reasonable default; surface it briefly in a plan or review.
 - Do not add a business workflow because an edge case is theoretically possible. Preserve simple UI and real operational boundaries.
 - Update `PROJECT.md` only when the project owner requests documentation changes or explicitly confirms a meaningful change. Avoid unrelated edits to `AGENTS.md`.
@@ -267,4 +269,12 @@ Implement one vertical slice at a time and verify it; **do not build the full ap
 
 **Implementation status (21 October 2026):** Authentication/access foundations and the accepted login are implemented. Backend inventory includes master-item creation, physical-unit Add Stock and reads, item search/pagination, audited name corrections, deactivation submission/approval/rejection/cancellation plus paginated request history, audited physical-unit serial-number/notes corrections, and paginated unit audit-history reads. The owner reports focused history tests, typecheck/lint, and the subsequent full suite passed; detailed totals were not supplied. Other inventory requirements, guest visits/borrowing, returns, inspection/maintenance, lost handling, lifecycle workflows, and operational frontend work remain. Detailed verification and current file paths are maintained in [docs/DEVLOG.md](./docs/DEVLOG.md) and [docs/CONTEXT.md](./docs/CONTEXT.md).
 
-GuestVisit under section 4 now has a schema, migration, and owner-confirmed database constraint tests; its registration service/API is not implemented. The owner selected frontend inventory using existing APIs as the next milestone, following an owner-made backend commit. The frontend transition has been announced. New frontend styling uses Tailwind and a dark workspace, with a dark-brown frame and dark content surfaces instead of white/cream panels. Visual proposals are in `docs/INVENTORY-DESIGN.md`; implementation and visual approval remain pending.
+GuestVisit under section 4 has a schema, migration, and owner-confirmed database constraint tests; its registration service/API is not implemented. The owner selected frontend inventory using existing APIs after a backend checkpoint. The approved UI source is `docs/DESIGN_SYSTEM.md`. On 22 October 2026, inventory read was implemented with server-authorized item search/pagination and physical-unit cursor reads, loading/empty/error states, navigation icons and readable logout. Agent typecheck/lint and 83 unit tests passed; authenticated browser verification remains pending. Item photos/storage, mutation UI and the selected-unit detail/history panel remain unimplemented. These are implementation notes, not changes to business requirements.
+
+## 2026-10-22 — Approved Figma implementation scope
+
+- Figma file `1zcG8yCxhIVZlx50938se0` supplies the workspace visual reference. Use **Mövenpick Hotel** as the requested display name; do not use the reference's hotel, guest, or staff identities as real records.
+- Preserve existing server authorization, APIs, queries, pagination, selected-item state, unit cursors and logout. This approval covers presentation changes, not backend workflows or schema changes.
+- Borrowing statistics and occupancy may use explicitly labelled **Data demonstrasi** while their actual services are pending. Inventory records and counts continue to come from existing services; do not substitute demonstration inventory.
+- No barcode, PMS sync, pantry distribution or category feature in this slice. Relevant action feedback may use popups; no notification subsystem is requested. Report export is a future step, not a working feature implied by a Figma button.
+- Forms should follow the Figma visual direction when their existing or separately authorized functional implementation is available. Do not expose decorative controls as working workflows.

@@ -1,0 +1,63 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1366,height:960});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ const data=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();
+ const item=data.items.find(i=>i.isActive&&i.name.length<=100);if(!item)throw new Error('Need an active existing item');
+ await page.goto(`http://localhost:3000/inventory?q=${encodeURIComponent(item.name.toLowerCase())}`);await page.waitForLoadState('networkidle');
+ const plus=page.getByRole('list',{name:'Katalog jenis barang'}).getByRole('button',{name:`Tambah stok ${item.name}`,exact:true}).first();
+ await plus.click();const dialog=page.getByRole('dialog',{name:'Tambah stok',exact:true});await dialog.waitFor();
+ const quantity=dialog.getByLabel(/Jumlah unit/),location=dialog.getByLabel(/Lokasi awal/),units=dialog.locator('details[name="stock-units"]');
+ const available=await location.locator('option').evaluateAll(es=>es.filter(e=>e.value&&!e.disabled).map(e=>({id:e.value,name:e.textContent})));
+ if(!available.length)throw new Error('No active locations in dev database; form correctly blocks save, but selection check needs real master data');
+ assert(await location.getAttribute('required')!==null,'one batch location is required');
+ assert(await location.inputValue()==='','no hardcoded initial location is preselected');
+ await dialog.getByRole('button',{name:'Simpan stok',exact:true}).click();
+ assert(!(await location.evaluate(e=>e.checkValidity())),'missing location is rejected by native validation');
+ await location.selectOption(available[0].id);
+ assert(await dialog.getByText('1-100 unit per penambahan',{exact:true}).isVisible(),'quantity help matches requested text');
+ assert(!(await dialog.textContent()).includes('Kode unit dibuat otomatis; lokasi awal'),'old fixed-storage helper removed');
+ await quantity.hover();
+ const numeric=await quantity.evaluate(e=>{
+ const rules=[];const visit=list=>{for(const r of list){if(r.cssRules)visit(r.cssRules);if(r.selectorText&&r.selectorText.includes('spin-button')&&r.style.appearance==='none'){const selector=r.selectorText.replace(/::-webkit-(inner|outer)-spin-button/g,'');if(e.matches(selector))rules.push(r.selectorText);}}};
+ for(const sheet of document.styleSheets){try{visit(sheet.cssRules);}catch{}}
+ return {appearance:getComputedStyle(e).appearance,type:e.type,inner:rules.some(s=>s.includes('inner-spin')),outer:rules.some(s=>s.includes('outer-spin'))};
+});
+ assert(numeric.type==='number'&&numeric.appearance==='textfield'&&numeric.inner&&numeric.outer,'native numeric validation kept while spinner is hidden');
+ await units.first().getByLabel(/Nomor seri/).fill('SERIAL-A');
+ await units.first().getByLabel(/Deskripsi/).fill('Deskripsi unit pertama');
+ await quantity.fill('3');await page.waitForFunction(()=>[...document.querySelectorAll('details[name="stock-units"]')].every(e=>!e.open));
+ assert(await units.count()===3,'quantity creates three unit accordions');
+ assert(await units.first().getByLabel(/Nomor seri/).inputValue()==='SERIAL-A','adding unit preserves prior serial');
+ await units.nth(0).locator('summary').click();await units.nth(0).getByLabel(/Kondisi unit/).selectOption('MINOR_DAMAGE');
+ await units.nth(1).locator('summary').click();
+ assert(await units.evaluateAll(es=>es.filter(e=>e.open).length)===1&&await units.nth(1).evaluate(e=>e.open),'opening unit2 closes unit1');
+ await units.nth(1).getByLabel(/Deskripsi/).fill('Unit kedua tanpa nomor seri');
+ await quantity.fill('4');await page.waitForFunction(()=>[...document.querySelectorAll('details[name="stock-units"]')].every(e=>!e.open));
+ assert(await units.nth(1).getByLabel(/Deskripsi/).inputValue()==='Unit kedua tanpa nomor seri','closing during quantity change retains entered description');
+ await units.nth(2).locator('summary').focus();await page.keyboard.press('Enter');
+ assert(await units.nth(2).evaluate(e=>e.open),'unit accordion opens with keyboard');
+ await units.nth(2).locator('summary').press('Enter');
+ assert(!(await units.nth(2).evaluate(e=>e.open)),'user can collapse completed unit');
+ assert(await dialog.locator('textarea').evaluateAll(es=>es.every(e=>getComputedStyle(e).resize==='none')),'unit descriptions cannot be manually resized');
+ let payload,attempts=0;
+ await page.route('**/api/stock-batches',async route=>{attempts++;const body=route.request().postDataJSON();if(attempts===1){payload=body;await route.fulfill({status:500,contentType:'application/json',body:'{}'});}else{assert(JSON.stringify(payload)===JSON.stringify(body),'retry preserves chosen location and all unit values');await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({batch:{id:body.requestId,itemId:body.itemId,quantity:body.quantity},replayed:true})});}});
+ await dialog.getByRole('button',{name:'Simpan stok',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'belum dapat dipastikan'}).waitFor();
+ assert(await location.isDisabled(),'uncertain request freezes location');
+ await dialog.getByRole('button',{name:'Periksa ulang penyimpanan',exact:true}).click();await dialog.getByRole('status').filter({hasText:'4 unit berhasil'}).waitFor();
+ assert(payload.initialLocationId===available[0].id&&payload.units.length===4,'selected batch location and exact quantity reach API');
+ assert(payload.units[0].serialNumber==='SERIAL-A'&&payload.units[0].condition==='MINOR_DAMAGE'&&payload.units[0].notes==='Deskripsi unit pertama'&&payload.units[1].notes==='Unit kedua tanpa nomor seri','closed accordions still submit all unit data');
+ await dialog.getByRole('button',{name:'Selesai',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.unroute('**/api/stock-batches');
+ for(const width of [320,390,1366]){
+  await page.setViewportSize({width,height:960});await plus.click();await dialog.waitFor();await location.selectOption(available[0].id);await quantity.fill('3');
+  await units.nth(1).locator('summary').click();
+  assert(!(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth)),`accordion/location modal fits ${width}px`);
+  if(width!==320)await page.screenshot({path:`output/playwright/stock-accordion-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+ }
+ await page.getByRole('button',{name:'Tambah jenis barang',exact:true}).click();const catalog=page.getByRole('dialog',{name:'Tambah jenis barang',exact:true});await catalog.waitFor();
+ assert(await catalog.getByLabel(/Deskripsi/).evaluate(e=>getComputedStyle(e).resize)==='none','catalog description uses the same no-resize convention');
+ await page.keyboard.press('Escape');await catalog.waitFor({state:'hidden'});
+ return{checks,locations:available,productionWrites:0};
+}
+
+

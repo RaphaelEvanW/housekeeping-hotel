@@ -1,0 +1,7 @@
+async page => {
+ const href=await page.locator('link[rel=stylesheet]').first().getAttribute('href');
+ const css=await (await page.request.get(new URL(href,page.url()).href)).text();
+ const e=page.getByRole('button',{name:'Tambah jenis barang',exact:true});
+ const rules=await e.evaluate(e=>{const found=[];function visit(rules){for(const r of rules){if(r.cssRules)visit(r.cssRules);if(r.selectorText&&r.cssText.includes('cursor')&&e.matches(r.selectorText))found.push(r.cssText);}}for(const sheet of document.styleSheets)visit(sheet.cssRules);return found;});
+ return {rules,where:css.includes(':where(button'),body:css.slice(css.indexOf('body {')-100,css.indexOf('body {')+1000),sidebar:css.indexOf('.sidebar-glass'),selectors:css.split('\n').filter(l=>l.includes('cursor:')||l.includes(':where(button')).slice(-30)};
+}

@@ -1,0 +1,23 @@
+- generic [active] [ref=f2e1]:
+  - main [ref=f2e2]:
+    - generic [ref=f2e4]:
+      - region [ref=f2e5]:
+        - heading "Peminjaman barang lebih tertata." [level=1] [ref=f2e6]
+        - paragraph [ref=f2e7]: Catat peminjaman, pengembalian, dan ketersediaan barang operasional hotel.
+      - region [ref=f2e8]:
+        - generic [ref=f2e9]:
+          - heading "Housekeeping" [level=2] [ref=f2e10]
+          - paragraph [ref=f2e11]: Masuk dengan akun staf Anda.
+        - generic [ref=f2e12]:
+          - generic [ref=f2e13]:
+            - generic [ref=f2e14]: Email
+            - textbox "Email" [ref=f2e15]:
+              - /placeholder: nama@hotel.com
+          - generic [ref=f2e16]:
+            - generic [ref=f2e17]: Kata sandi
+            - generic [ref=f2e18]:
+              - textbox "Kata sandi" [ref=f2e19]:
+                - /placeholder: Masukkan kata sandi
+              - button "Tampilkan kata sandi" [ref=f2e20]: Tampilkan
+          - button "Masuk" [ref=f2e21]
+  - button "Open Next.js Dev Tools" [ref=f2e27] [cursor=pointer]

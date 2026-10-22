@@ -77,6 +77,7 @@ export async function POST(request: Request) {
         ITEM_NOT_FOUND: 404,
         ITEM_INACTIVE: 409,
         STORAGE_UNAVAILABLE: 409,
+        LOCATION_UNAVAILABLE: 409,
       } as const;
 
       return Response.json(

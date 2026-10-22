@@ -1,0 +1,31 @@
+async page => {
+  const observations = [];
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  await page.setViewportSize({width:390,height:900});
+  const cards = page.getByRole('list',{name:'Katalog jenis barang'});
+  const firstName = await cards.locator('h3').first().textContent();
+  await cards.getByRole('link',{name:/Lihat unit/}).first().click();
+  await page.waitForURL(url=>url.searchParams.has('item'));
+  await page.locator('#units-heading').waitFor();
+  observations.push(await page.evaluate(() => ({
+    state:'selected-long-name-mobile', width:innerWidth, scrollWidth:document.documentElement.scrollWidth,
+    headingWidth:Math.round(document.querySelector('#units-heading').getBoundingClientRect().width),
+    headingLength:document.querySelector('#units-heading').textContent.length,
+    unitsTop:Math.round(document.querySelector('#units-heading').getBoundingClientRect().top)
+  })));
+  await page.screenshot({path:'output/playwright/audit-selected-long-mobile.png',caret:'initial'});
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  await page.getByRole('button',{name:'Tabel',exact:true}).click();
+  observations.push(await page.evaluate(() => ({state:'table-mobile',width:innerWidth,scrollWidth:document.documentElement.scrollWidth,firstRowHeight:Math.round(document.querySelector('tbody tr').getBoundingClientRect().height)})));
+  await page.goto('http://localhost:3000/dashboard');
+  await page.waitForLoadState('networkidle');
+  await page.getByText('Menu navigasi',{exact:true}).click();
+  await page.getByRole('link',{name:'Inventaris & Aset',exact:true}).click();
+  await page.waitForURL('**/inventory');
+  await page.getByRole('list',{name:'Katalog jenis barang'}).waitFor();
+  observations.push(await page.evaluate(() => ({state:'after-mobile-navigation',menuOpen:document.querySelector('details').open,firstCardTop:Math.round(document.querySelector('[aria-label="Katalog jenis barang"] li').getBoundingClientRect().top),viewportHeight:innerHeight})));
+  await page.screenshot({path:'output/playwright/audit-navigation-open-mobile.png',caret:'initial'});
+  return observations;
+}

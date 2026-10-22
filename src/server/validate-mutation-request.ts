@@ -38,6 +38,7 @@ function readAllowedOrigins() {
 
 export function validateMutationRequest(
   request: Request,
+  allowedMediaTypes: readonly string[] = ["application/json"],
 ): Response | null {
   const allowedOrigins = readAllowedOrigins();
   const origin = request.headers.get("origin");
@@ -61,7 +62,7 @@ export function validateMutationRequest(
     .trim()
     .toLowerCase();
 
-  if (mediaType !== "application/json") {
+  if (!mediaType || !allowedMediaTypes.includes(mediaType)) {
     return Response.json(
       {
         error: "UNSUPPORTED_MEDIA_TYPE",

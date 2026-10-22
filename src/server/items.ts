@@ -1,8 +1,9 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { itemNameSchema } from "@/server/item-input";
+import { createItemInputSchema, itemNameSchema } from "@/server/item-input";
 import { db } from "@/server/db";
+import { removeItemPhoto, storeItemPhoto } from "@/server/item-photo";
 
 export class DuplicateItemNameError extends Error {
   constructor() {
@@ -20,14 +21,18 @@ export function prepareItemName(input: string) {
   };
 }
 
-export async function createItem(name: string, actorId: string) {
+export async function createItem(name: string, actorId: string, details: { description?: string; photo?: Buffer } = {}) {
+  const input = createItemInputSchema.parse({ name, description: details.description });
   const preparedName = prepareItemName(name);
+  const photoKey = details.photo ? await storeItemPhoto(details.photo) : null;
 
   try {
     return await db.$transaction(async (tx) => {
       const item = await tx.item.create({
         data: {
           ...preparedName,
+          description: input.description || null,
+          photoKey,
           createdById: actorId,
           updatedById: actorId,
         },
@@ -35,6 +40,8 @@ export async function createItem(name: string, actorId: string) {
           id: true,
           name: true,
           isActive: true,
+          description: true,
+          photoKey: true,
           createdAt: true,
           updatedAt: true,
         },
@@ -49,6 +56,8 @@ export async function createItem(name: string, actorId: string) {
           newValues: {
             name: item.name,
             normalizedName: preparedName.normalizedName,
+            description: input.description || null,
+            photoKey,
           },
         },
       });
@@ -56,6 +65,7 @@ export async function createItem(name: string, actorId: string) {
       return item;
     });
   } catch (error) {
+    if (photoKey) await removeItemPhoto(photoKey).catch(() => { console.error("Catalogue photo cleanup failed."); });
     if (
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"

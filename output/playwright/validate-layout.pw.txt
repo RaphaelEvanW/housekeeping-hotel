@@ -1,0 +1,29 @@
+async page => {
+  const results = [];
+  const errors = [];
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  for (const route of ['dashboard', 'inventory']) {
+    await page.goto('http://localhost:3000/' + route);
+    await page.locator('main h1').waitFor();
+    await page.waitForLoadState('networkidle');
+    await page.evaluate(() => document.fonts.ready);
+    for (const width of [1280, 768, 390, 320]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.screenshot({ path: 'output/playwright/' + route + '-' + width + '.png', caret: 'initial' });
+      results.push(await page.evaluate(({ route, width }) => {
+        const main = document.querySelector('main');
+        const sidebar = document.querySelector('aside');
+        const h1 = document.querySelector('h1');
+        return {
+          route, width, overflow: document.documentElement.scrollWidth > innerWidth,
+          title: h1.textContent, font: getComputedStyle(h1).fontFamily,
+          main: Math.round(main.getBoundingClientRect().width),
+          sidebar: getComputedStyle(sidebar).display,
+          cards: document.querySelectorAll('[aria-label="Katalog jenis barang"] > li').length,
+          brokenImages: [...document.images].filter(i => !i.complete || !i.naturalWidth).length
+        };
+      }, { route, width }));
+    }
+  }
+  return { results, errors };
+}

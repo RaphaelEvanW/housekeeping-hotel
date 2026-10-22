@@ -12,6 +12,7 @@ export const addStockInputSchema = z
   .object({
     requestId: z.string().uuid(),
     itemId: z.string().uuid(),
+    initialLocationId: z.string().uuid().optional(),
     quantity: z.number().int().min(1).max(100),
     units: z.array(unitDetailsSchema).max(100).optional(),
   })

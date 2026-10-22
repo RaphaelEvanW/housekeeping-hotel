@@ -1,0 +1,24 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.getByRole('list',{name:'Katalog jenis barang'}).getByRole('button',{name:/Tambah stok/}).first().click();
+ const dialog=page.getByRole('dialog',{name:'Tambah stok',exact:true});await dialog.waitFor();
+ let release,started,count=0,payload;
+ const gate=new Promise(r=>release=r);const received=new Promise(r=>started=r);
+ await page.route('**/api/stock-batches',async route=>{count++;payload=route.request().postDataJSON();started();await gate;await route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({batch:{id:payload.requestId,itemId:payload.itemId,quantity:payload.quantity},replayed:false})});});
+ await dialog.getByRole('button',{name:'Simpan stok',exact:true}).click();await received;
+ assert(await dialog.getByRole('button',{name:'Batal',exact:true}).isDisabled(),'pending disables cancellation');
+ await page.keyboard.press('Escape');assert(await dialog.isVisible(),'pending blocks Escape');
+ await dialog.locator('form').evaluate(e=>e.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true})));
+ assert(count===1,'pending double-submit sends one batch');
+ release();await dialog.getByRole('status').filter({hasText:'unit berhasil ditambahkan'}).waitFor();
+ await dialog.getByRole('button',{name:'Selesai',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.unroute('**/api/stock-batches');
+ for(const [status,error] of [[400,'INVALID_INPUT'],[401,'UNAUTHORIZED'],[403,'FORBIDDEN'],[404,'ITEM_NOT_FOUND'],[409,'ITEM_INACTIVE'],[409,'STORAGE_UNAVAILABLE']]){
+  await page.route('**/api/stock-batches',route=>route.fulfill({status,contentType:'application/json',body:JSON.stringify({error})}));
+  await page.getByRole('list',{name:'Katalog jenis barang'}).getByRole('button',{name:/Tambah stok/}).first().click();
+  await dialog.getByRole('button',{name:'Simpan stok',exact:true}).click();
+  await dialog.getByRole('alert').filter({hasText:/./}).waitFor();
+  assert(!(await dialog.getByLabel('Jumlah unit',{exact:true}).isDisabled()),`${status}/${error} allows correction after definitive rejection`);
+  await dialog.getByRole('button',{name:'Batal',exact:true}).click();await dialog.waitFor({state:'hidden'});await page.unroute('**/api/stock-batches');
+ }
+ return checks;
+}

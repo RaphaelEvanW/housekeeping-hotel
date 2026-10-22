@@ -1,0 +1,30 @@
+async page => {
+ const results=[];
+ for (const width of [320,390,768,1280,1440]) {
+  await page.setViewportSize({width,height:960});
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  const overflow=await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth);
+  if(overflow)throw new Error(`Page overflow at ${width}`);
+  if(width===1280)await page.screenshot({path:'output/playwright/refinement-desktop.png',caret:'initial'});
+  await page.getByRole('link',{name:/Lihat unit/}).first().click();
+  const panel=page.getByRole('dialog',{name:/^Unit fisik/});
+  await panel.waitFor();
+  await panel.evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+  const geometry=await panel.evaluate(e=>({width:e.getBoundingClientRect().width,overflow:e.scrollWidth>e.clientWidth,modal:e.matches(':modal')}));
+  if(geometry.overflow)throw new Error(`Panel overflow at ${width}`);
+  if(width===1440||width===390)await page.screenshot({path:`output/playwright/refinement-panel-${width}.png`,caret:'initial'});
+  await panel.getByRole('button',{name:'Tutup daftar unit'}).click();
+  await panel.waitFor({state:'hidden'});
+  await page.waitForURL(u=>!u.searchParams.has('item'));
+  results.push({width,geometry});
+ }
+ await page.setViewportSize({width:390,height:844});
+ await page.getByRole('button',{name:'Buka sidebar'}).click();
+ const menu=page.getByRole('dialog',{name:'Mövenpick Hotel',exact:true});
+ await menu.evaluate(e=>Promise.all(e.getAnimations().map(a=>a.finished)));
+ await page.screenshot({path:'output/playwright/refinement-mobile-menu.png',caret:'initial'});
+ await page.keyboard.press('Escape');
+ await menu.waitFor({state:'hidden'});
+ return results;
+}

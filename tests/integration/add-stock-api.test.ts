@@ -12,6 +12,7 @@ import {
 import { POST } from "../../src/app/api/stock-batches/route";
 import { db } from "../../src/server/db";
 import { getActiveUser } from "../../src/server/get-active-user";
+import { getStockLocations } from "../../src/server/stock-locations";
 
 vi.mock("../../src/server/get-active-user", () => ({
   getActiveUser: vi.fn(),
@@ -27,6 +28,7 @@ let actor: ActiveUser;
 let userId: string | undefined;
 let itemId: string;
 let storageId: string;
+let extraLocationIds: string[] = [];
 
 function postStock(body: unknown) {
   return POST(
@@ -92,6 +94,7 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
+  extraLocationIds = [];
   vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
   vi.stubEnv("BETTER_AUTH_TRUSTED_ORIGINS", "http://localhost:3000");
   mockGetActiveUser.mockReset();
@@ -152,9 +155,54 @@ afterEach(async () => {
   ]);
 
   userId = undefined;
+  await db.location.deleteMany({ where: { id: { in: extraLocationIds } } });
 });
 
 afterAll(() => db.$disconnect());
+
+async function extraLocation(isActive = true) {
+  const location = await db.location.create({ data: { code: `STOCK-${randomUUID()}`, name: "Test selected storage", isActive } });
+  extraLocationIds.push(location.id);
+  return location;
+}
+
+it("stores one selected active location on every unit and audit, including safe replay after location deactivation", async () => {
+  const location = await extraLocation();
+  expect(await getStockLocations()).toContainEqual({ id: location.id, name: location.name });
+  const input = { ...stockInput(), initialLocationId: location.id };
+  expect((await postStock(input)).status).toBe(201);
+  const units = await db.itemUnit.findMany({ where: { stockBatchId: input.requestId } });
+  expect(units).toHaveLength(2);
+  expect(units.every(unit => unit.locationId === location.id && unit.custody === "HOUSEKEEPING")).toBe(true);
+  const audits = await db.auditEvent.findMany({ where: { actorId: actor.id, action: "STOCK_UNIT_CREATED" } });
+  expect(audits).toHaveLength(2);
+  for (const audit of audits) expect(audit.newValues).toMatchObject({ locationId: location.id });
+  await db.location.update({ where: { id: location.id }, data: { isActive: false } });
+  expect(await getStockLocations()).not.toContainEqual({ id: location.id, name: location.name });
+  const replay = await postStock(input);
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toMatchObject({ replayed: true });
+  await expectCounts(2, 1);
+});
+
+it.each(["missing", "inactive"])("rejects an unavailable selected location atomically: %s", async kind => {
+  const initialLocationId = kind === "missing" ? randomUUID() : (await extraLocation(false)).id;
+  const response = await postStock({ ...stockInput(), initialLocationId });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "LOCATION_UNAVAILABLE" });
+  await expectCounts(0, 0);
+});
+
+it("rejects malformed location IDs and conflicts when an existing batch ID changes location", async () => {
+  expect((await postStock({ ...stockInput(), initialLocationId: "invalid" })).status).toBe(400);
+  const one = await extraLocation();const two = await extraLocation();
+  const input = { ...stockInput(), initialLocationId: one.id };
+  expect((await postStock(input)).status).toBe(201);
+  const conflict = await postStock({ ...input, initialLocationId: two.id });
+  expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toMatchObject({ error: "REQUEST_CONFLICT" });
+  await expectCounts(2, 1);
+});
 
 it("rejects requests without an active account", async () => {
   mockGetActiveUser.mockResolvedValue(null);

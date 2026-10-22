@@ -3,12 +3,10 @@
 import { useState, type SubmitEvent } from "react";
 
 import { authClient } from "@/lib/auth-client";
-import styles from "./login.module.css";
 
 export function LoginForm() {
   const [isPending, setIsPending] = useState(false);
   const [message, setMessage] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
   async function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,10 +21,15 @@ export function LoginForm() {
     setMessage("");
 
     try {
-      const { error } = await authClient.signIn.email({ email, password });
+      const { error } = await authClient.signIn.email({
+        email,
+        password,
+      });
 
       if (error) {
-        setMessage("Login gagal. Periksa email dan kata sandi, lalu coba lagi.");
+        setMessage(
+          "Login gagal. Periksa email dan kata sandi, lalu coba lagi.",
+        );
         return;
       }
 
@@ -39,63 +42,73 @@ export function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className={styles.form} aria-busy={isPending} aria-describedby={message ? "login-message" : undefined}>
-      <div className={styles.field}>
-        <label htmlFor="email" className={styles.label}>
+    <form
+      onSubmit={handleSubmit}
+      aria-busy={isPending}
+      aria-describedby={message ? "login-message" : undefined}
+      className="grid gap-5"
+    >
+      <div>
+        <label
+          htmlFor="email"
+          className="mb-2 block text-sm font-medium text-white"
+        >
           Email
         </label>
-        <div className={styles.inputShell}>
-        <svg className={styles.fieldIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="m3 6 9 7 9-7" /></svg>
+
         <input
           id="email"
           name="email"
           type="email"
           autoComplete="username"
-          placeholder="nama@hotel.com"
           autoCapitalize="none"
           spellCheck={false}
+          placeholder="nama@hotel.com"
           required
-          className={styles.input}
+          disabled={isPending}
+          className="min-h-12 w-full min-w-0 rounded-md border border-white/20 bg-ws-sidebar/95 px-3 py-3 text-base text-white backdrop-blur-sm supports-[backdrop-filter:blur(1px)]:bg-ws-sidebar/25 placeholder:text-ws-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-accent disabled:cursor-wait"
         />
-        </div>
       </div>
 
-      <div className={styles.field}>
-        <label htmlFor="password" className={styles.label}>
+      <div>
+        <label
+          htmlFor="password"
+          className="mb-2 block text-sm font-medium text-white"
+        >
           Kata sandi
         </label>
-        <div className={styles.inputShell}>
-        <svg className={styles.fieldIcon} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3m-4 4v3" /></svg>
-        <input
-          id="password"
-          name="password"
-          type={showPassword ? "text" : "password"}
-          autoComplete="current-password"
-          placeholder="Masukkan kata sandi"
-          required
-          className={styles.input}
-        />
-        <button
-            type="button"
-            onClick={() => setShowPassword((previous) => !previous)}
-            aria-controls="password"
-            aria-label={showPassword ? "Sembunyikan kata sandi" : "Tampilkan kata sandi"}
-            className={styles.visibility}
-            >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" /><circle cx="12" cy="12" r="3" />{showPassword ? <path d="m3 3 18 18" /> : null}</svg>
-        </button>
+
+        <div className="relative">
+          <input
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder="Masukkan kata sandi"
+            required
+            disabled={isPending}
+            className="min-h-12 w-full min-w-0 rounded-md border border-white/20 bg-ws-sidebar/95 px-3 py-3 text-base text-white backdrop-blur-sm supports-[backdrop-filter:blur(1px)]:bg-ws-sidebar/25 placeholder:text-ws-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-accent disabled:cursor-wait"
+          />
+
         </div>
       </div>
 
-      {message ? <p id="login-message" role="alert" className={styles.message}>{message}</p> : null}
+      {message ? (
+        <p
+          id="login-message"
+          role="alert"
+          className="rounded-md border border-hk-danger bg-ws-sidebar/95 px-3 py-3 text-sm leading-6 text-hk-danger"
+        >
+          {message}
+        </p>
+      ) : null}
 
       <button
         type="submit"
         disabled={isPending}
-        className={styles.submit}
+        className="min-h-12 w-full rounded-md bg-ws-primary px-4 py-3 text-sm font-medium text-white transition-colors duration-150 hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-accent disabled:cursor-wait disabled:bg-white/10 disabled:text-ws-muted motion-reduce:transition-none"
       >
-        {isPending ? "Sedang masuk…" : "Masuk"}
-        {!isPending ? <svg className={styles.arrow} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" aria-hidden="true"><path d="M3 12h17m-7-7 7 7-7 7" /></svg> : null}
+        {isPending ? "Mencoba Masuk" : "Masuk"}
       </button>
     </form>
   );

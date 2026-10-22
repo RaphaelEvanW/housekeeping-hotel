@@ -9,6 +9,7 @@ type AddStockErrorCode =
   | "REQUEST_CONFLICT"
   | "ITEM_NOT_FOUND"
   | "ITEM_INACTIVE"
+  | "LOCATION_UNAVAILABLE"
   | "STORAGE_UNAVAILABLE";
 
 export class AddStockError extends Error {
@@ -70,6 +71,7 @@ export async function addStock(rawInput: unknown, actorId: string) {
         itemId: input.itemId,
         quantity: input.quantity,
         units,
+        ...(input.initialLocationId ? { initialLocationId: input.initialLocationId } : {}),
       }),
     )
     .digest("hex");
@@ -117,7 +119,12 @@ export async function addStock(rawInput: unknown, actorId: string) {
         );
       }
 
-      const [storage] = await tx.$queryRaw<
+      const [storage] = input.initialLocationId ? await tx.$queryRaw<{ id: string; isActive: boolean }[]>`
+        SELECT "id", "isActive"
+        FROM "location"
+        WHERE "id" = ${input.initialLocationId}
+        FOR SHARE
+      ` : await tx.$queryRaw<
         { id: string; isActive: boolean }[]
       >`
         SELECT "id", "isActive"
@@ -128,8 +135,8 @@ export async function addStock(rawInput: unknown, actorId: string) {
 
       if (!storage?.isActive) {
         throw new AddStockError(
-          "STORAGE_UNAVAILABLE",
-          "Lokasi penyimpanan utama belum tersedia atau nonaktif.",
+          input.initialLocationId ? "LOCATION_UNAVAILABLE" : "STORAGE_UNAVAILABLE",
+          input.initialLocationId ? "Lokasi awal yang dipilih tidak tersedia atau nonaktif." : "Lokasi penyimpanan utama belum tersedia atau nonaktif.",
         );
       }
 

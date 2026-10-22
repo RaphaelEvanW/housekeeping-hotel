@@ -1,0 +1,52 @@
+async page => {
+  const results=[];
+  const errors=[];
+  page.on('console',m=>{if(m.type()==='error')errors.push(m.text().slice(0,220));});
+  const assert=(value,label)=>{if(!value)throw new Error(label);results.push({check:label,pass:true});};
+  await page.goto('http://localhost:3000/inventory');
+  await page.waitForLoadState('networkidle');
+  await page.setViewportSize({width:1440,height:900});
+  await page.getByRole('button',{name:'Ciutkan sidebar',exact:true}).click();
+  assert(await page.getByRole('complementary',{name:'Sidebar desktop'}).evaluate(e=>Math.round(e.getBoundingClientRect().width))===72,'desktop sidebar collapses to 72px');
+  assert(await page.getByRole('link',{name:'Inventaris & Aset',exact:true}).isVisible(),'icon-only navigation retains accessible name');
+  await page.screenshot({path:'output/playwright/sidebar-collapsed.png',caret:'initial'});
+  await page.getByRole('button',{name:'Perluas sidebar',exact:true}).click();
+  assert(await page.getByRole('complementary',{name:'Sidebar desktop'}).evaluate(e=>Math.round(e.getBoundingClientRect().width))===288,'desktop sidebar expands to 288px');
+  for (const width of [1440,1280,768,390,320]) {
+    await page.setViewportSize({width,height:900});
+    await page.goto('http://localhost:3000/inventory');
+    await page.waitForLoadState('networkidle');
+    const card=page.getByRole('list',{name:'Katalog jenis barang'}).locator('li').first();
+    const metrics=await card.evaluate(e=>({height:e.getBoundingClientRect().height,photo:e.firstElementChild.getBoundingClientRect().height}));
+    assert(metrics.photo/metrics.height>=.25&&metrics.photo/metrics.height<=.30,'photo fallback is 25-30% at '+width);
+    await card.getByRole('link',{name:/Lihat unit/}).click();
+    const drawer=page.getByRole('dialog',{name:/^Unit /});
+    await drawer.waitFor();
+    await page.waitForLoadState('networkidle');
+    const layout=await drawer.evaluate(e=>({modal:e.matches(':modal'),width:e.getBoundingClientRect().width,top:e.getBoundingClientRect().top,overflow:document.documentElement.scrollWidth>innerWidth,headingHeight:e.querySelector('#units-heading').getBoundingClientRect().height}));
+    assert(!layout.overflow,'long selected name does not overflow at '+width);
+    assert(layout.modal===(width<1440),'responsive panel modality at '+width);
+    assert(layout.top<70,'unit panel appears in viewport at '+width);
+    if(width===1440||width===390)await page.screenshot({path:'output/playwright/unit-drawer-'+width+'.png',caret:'initial'});
+    await page.keyboard.press('Escape');
+    await page.waitForURL(url=>!url.searchParams.has('item'));
+    await drawer.waitFor({state:'hidden'});
+    assert(await page.evaluate(()=>document.body.style.overflow!=='hidden'),'closing drawer restores page scroll at '+width);
+  }
+  await page.setViewportSize({width:390,height:900});
+  await page.getByRole('button',{name:'Buka sidebar',exact:true}).click();
+  const menu=page.getByRole('dialog',{name:'Mövenpick Hotel',exact:true});
+  await menu.waitFor();
+  assert(await menu.evaluate(e=>e.matches(':modal')),'mobile sidebar is modal');
+  await page.screenshot({path:'output/playwright/sidebar-mobile.png',caret:'initial'});
+  await menu.getByRole('link',{name:'Dashboard Operasional',exact:true}).click();
+  await page.waitForURL('**/dashboard');
+  await menu.waitFor({state:'hidden'});
+  assert(await page.getByRole('heading',{level:1}).isVisible(),'mobile navigation closes sidebar after routing');
+  await page.getByRole('button',{name:'Buka sidebar',exact:true}).click();
+  await menu.waitFor();
+  await page.keyboard.press('Escape');
+  await menu.waitFor({state:'hidden'});
+  assert(await page.getByRole('button',{name:'Buka sidebar',exact:true}).evaluate(e=>e===document.activeElement),'Escape restores menu button focus');
+  return {results,errors};
+}

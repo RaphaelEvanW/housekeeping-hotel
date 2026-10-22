@@ -1,0 +1,86 @@
+async page => {
+ const checks=[];
+ const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1440,height:960});
+ await page.goto('http://localhost:3000/inventory');
+ await page.waitForLoadState('networkidle');
+ const trigger=page.getByRole('button',{name:'Tambah jenis barang',exact:true});
+ const dialog=page.getByRole('dialog',{name:'Tambah jenis barang',exact:true});
+ const input=page.getByLabel('Nama jenis barang',{exact:true});
+ const save=page.getByRole('button',{name:'Simpan jenis barang',exact:true});
+ const margin=await page.locator('main').evaluate(e=>getComputedStyle(e).marginRight);
+ await trigger.click();
+ assert(await input.evaluate(e=>e===document.activeElement),'name input receives focus');
+ assert(await input.getAttribute('maxlength')==='100','name length limited to API contract');
+ assert(await page.locator('main').evaluate(e=>getComputedStyle(e).marginRight)===margin,'create modal does not reserve unit-panel space');
+ await input.fill('   ');
+ await save.click();
+ await page.getByRole('alert').filter({hasText:'Nama jenis barang wajib diisi.'}).waitFor();
+ await page.keyboard.press('Escape');
+ await dialog.waitFor({state:'hidden'});
+ assert(await trigger.evaluate(e=>e===document.activeElement),'cancel restores trigger focus');
+ assert(await page.evaluate(()=>document.body.style.overflow!=='hidden'),'cancel restores scroll');
+
+ const live=await page.request.get('http://localhost:3000/api/items?pageSize=20');
+ const data=await live.json();
+ const existing=data.items?.find(i=>i.name.length<=100);
+ if(existing){
+  await trigger.click(); await input.fill(existing.name);
+  const response=page.waitForResponse(r=>r.url().endsWith('/api/items')&&r.request().method()==='POST');
+  await save.click();
+  assert((await response).status()===409,'real API rejects existing item name without new record');
+  await page.getByRole('alert').filter({hasText:'sudah ada'}).waitFor();
+  await dialog.getByRole('button',{name:'Batal',exact:true}).click();
+ }
+ const messages={400:'Periksa nama jenis barang',401:'Sesi Anda berakhir',403:'tidak memiliki izin',409:'sudah ada',500:'belum dapat dipastikan'};
+ for(const status of [400,401,403,409,500]){
+  await page.route('**/api/items',route=>route.fulfill({status,contentType:'application/json',body:'{}'}));
+  await trigger.click();await input.fill('Uji antarmuka — tidak disimpan');await save.click();
+  await page.getByRole('alert').filter({hasText:messages[status]}).waitFor();
+  assert(await input.inputValue()==='Uji antarmuka — tidak disimpan',`input retained after ${status}`);
+  assert((await dialog.getByRole('link',{name:'Ke halaman masuk'}).count())===(status===401?1:0),`login recovery only on 401 (${status})`);
+  await dialog.getByRole('button',{name:'Batal',exact:true}).click();
+  await page.unroute('**/api/items');
+ }
+ await page.route('**/api/items',route=>route.abort());
+ await trigger.click();await input.fill('Uji koneksi');await save.click();
+ await page.getByRole('alert').filter({hasText:'Koneksi terputus'}).waitFor();
+ checks.push('network uncertainty does not report success');
+ await dialog.getByRole('button',{name:'Batal',exact:true}).click();
+ await page.unroute('**/api/items');
+
+ let count=0, release, received;
+ const started=new Promise(resolve=>{received=resolve;});
+ const gate=new Promise(resolve=>{release=resolve;});
+ let payload;
+ await page.route('**/api/items',async route=>{
+  count++;payload=route.request().postDataJSON();received();await gate;
+  await route.fulfill({status:201,contentType:'application/json',body:'{}'});
+ });
+ await trigger.click();await input.fill('  Uji pending  ');await save.click();await started;
+ assert(await input.isDisabled(),'input disabled during save');
+ await page.keyboard.press('Escape');
+ assert(await dialog.isVisible(),'pending dialog cannot disappear with Escape');
+ await dialog.locator('form').evaluate(e=>{e.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+ assert(count===1,'double submit sends only one request');
+ assert(JSON.stringify(payload)===JSON.stringify({name:'Uji pending'}),'request sends only trimmed name, no actor or stock');
+ release();await dialog.waitFor({state:'hidden'});
+ await page.getByRole('status').filter({hasText:'Jenis barang berhasil ditambahkan'}).waitFor();
+ assert(await page.evaluate(()=>document.body.style.overflow!=='hidden'),'success restores scroll');
+ await page.waitForLoadState('networkidle');
+ await page.unroute('**/api/items');
+ checks.push('201 UI success uses mocked response only; no new database data');
+ for(const width of [320,390,768,1366]){
+  await page.setViewportSize({width,height:900});await trigger.click();
+  const size=await dialog.evaluate(e=>({width:e.getBoundingClientRect().width,overflow:e.scrollWidth>e.clientWidth,pageOverflow:document.documentElement.scrollWidth>innerWidth}));
+  assert(!size.overflow&&!size.pageOverflow&&size.width<=width,`modal and page fit ${width}px`);
+  if(width===390||width===1366)await page.screenshot({path:`output/playwright/create-item-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+ }
+ await page.setViewportSize({width:1440,height:960});
+ await page.getByRole('link',{name:/Detail barang/}).first().click();
+ const unit=page.getByRole('dialog',{name:/^Unit fisik/});await unit.waitFor();
+ assert(await page.locator('main').evaluate(e=>getComputedStyle(e).marginRight)==='440px','existing unit drawer still reserves desktop space');
+ await unit.getByRole('button',{name:'Tutup daftar unit'}).click();await unit.waitFor({state:'hidden'});
+ return{checks,liveDuplicate:!!existing};
+}
