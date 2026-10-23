@@ -10,13 +10,17 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 type WorkspaceLayoutProps = { children: ReactNode };
 
-export default async function WorkspaceLayout({ children }: WorkspaceLayoutProps) {
+export default async function WorkspaceLayout({
+  children,
+}: WorkspaceLayoutProps) {
   const user = await requireActiveUser();
   const navigationItems = getNavigationItems(user.roles);
 
   return (
     <div className={inter.variable}>
-      <WorkspaceShell userName={user.name} items={navigationItems}>{children}</WorkspaceShell>
+      <WorkspaceShell userName={user.name} items={navigationItems}>
+        {children}
+      </WorkspaceShell>
     </div>
   );
 }

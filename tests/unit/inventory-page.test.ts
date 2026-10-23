@@ -130,11 +130,13 @@ it("renders lifecycle, custody, physical condition, readiness and loss as separa
     }],
   });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
-  expect(html).toContain("Penguasaan: Tamu");
+  expect(html).not.toContain("Penguasaan: Tamu");
   expect(html).toContain("Kondisi: Baik");
   expect(html).toContain("Kesiapan: Tanpa penahanan");
-  expect(html).toContain("Siklus unit: Dipensiunkan");
+  expect(html).not.toContain("Siklus unit: Dipensiunkan");
   expect(html).toContain("Hilang");
+  expect(html).toContain('aria-label="Detail unit HK-000125"');
+  expect(html).toContain('aria-haspopup="dialog"');
   expect(html).not.toContain(">Siap dipinjam<");
 });
 
@@ -146,7 +148,7 @@ it("renders actual catalog photo/description and stock controls for an active it
   expect(html).toContain(`src="/api/items/${itemId}/photo"`);
   expect(html).not.toContain("/_next/image");
   expect(html).toContain("Pengering &lt;kamar&gt;");
-  expect(html.match(/aria-label="Tambah stok Hair dryer"/gu)).toHaveLength(3);
+  expect(html.match(/aria-label="Tambah unit Hair dryer"/gu)).toHaveLength(3);
 });
 
 it("does not offer Add Stock for an inactive item", async () => {
@@ -154,7 +156,7 @@ it("does not offer Add Stock for an inactive item", async () => {
   mockList.mockResolvedValueOnce({ items: [{ ...item, createdAt: new Date(), updatedAt: new Date() }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNextPage: false } });
   mockUnits.mockResolvedValueOnce({ item, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
-  expect(html).not.toContain('aria-label="Tambah stok Setrika"');
+  expect(html).not.toContain('aria-label="Tambah unit Setrika"');
 });
 
 it.each(["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const)("offers audited rename only to an allowed role, including inactive items: %s", async role => {
@@ -169,13 +171,14 @@ it("keeps the empty unit table below the registered count and labelled stock act
   mockUnits.mockResolvedValueOnce({ item: { id: itemId, name, isActive: true, description: null, photoUrl: null }, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
   const panel = html.slice(html.indexOf('id="inventory-unit-panel"'));
-  expect(panel.indexOf("Unit fisik terdaftar")).toBeLessThan(panel.indexOf('aria-label="Tambah stok'));
-  expect(panel.indexOf('aria-label="Tambah stok')).toBeLessThan(panel.indexOf("<table"));
-  expect(panel.indexOf('aria-label="Tambah stok')).toBeLessThan(panel.indexOf('aria-label="Edit jenis barang"'));
+  expect(panel.indexOf("Unit fisik terdaftar")).toBeLessThan(panel.indexOf('aria-label="Tambah unit'));
+  expect(panel.indexOf('aria-label="Tambah unit')).toBeLessThan(panel.indexOf("<table"));
+  expect(panel.indexOf('aria-label="Tambah unit')).toBeLessThan(panel.indexOf('aria-label="Edit jenis barang"'));
   expect(panel.indexOf('aria-label="Edit jenis barang"')).toBeLessThan(panel.indexOf("<table"));
-  expect(panel).toContain('colSpan="2"');
+  expect(panel).toContain('colSpan="3"');
   expect(panel).toContain("Belum ada unit fisik untuk jenis barang ini.");
-  expect(panel).toContain("Selengkapnya");
+  expect(panel).toContain("Tampilkan nama lengkap barang");
+  expect(panel).not.toContain("Selengkapnya");
   expect(panel).not.toContain("Nama lengkap barang");
   expect(panel).not.toContain("Jumlah terdaftar bukan jumlah siap dipinjam");
   expect(panel).not.toContain("Setiap kode di daftar ini");

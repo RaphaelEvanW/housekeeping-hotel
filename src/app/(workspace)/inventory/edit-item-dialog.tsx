@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { createPortal } from "react-dom";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
+import { FieldError } from "@/components/field-error";
+import { useInventoryForm } from "@/lib/use-inventory-form";
 
 const actionClass =
   "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
@@ -15,6 +17,7 @@ export function EditItemDialog({
   item: { id: string; name: string; description: string | null };
 }) {
   const router = useRouter();
+  const validation = useInventoryForm();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const inFlight = useRef(false);
@@ -46,6 +49,7 @@ export function EditItemDialog({
   }, [open]);
 
   function begin() {
+    validation.reset();
     setError("");
     setInvalid(false);
     setExpired(false);
@@ -58,6 +62,7 @@ export function EditItemDialog({
     event.preventDefault();
 
     if (inFlight.current || unconfirmed || success) return;
+    if (!validation.validate(event.currentTarget)) return;
 
     const values = new FormData(event.currentTarget);
     const name = String(values.get("name") ?? "")
@@ -145,7 +150,7 @@ export function EditItemDialog({
         onClick={begin}
         aria-label="Edit jenis barang"
         aria-haspopup="dialog"
-        className="inline-flex min-h-11 min-w-0 items-center justify-center gap-2 rounded-md border border-ws-control bg-ws-surface px-3 text-sm leading-5 font-medium tracking-[0.01em] text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+        className="ws-button-secondary min-w-0"
       >
         <WorkspaceControlIcon name="pencil" />
         <span>Edit</span>
@@ -189,7 +194,7 @@ export function EditItemDialog({
                   </button>
                 </div>
               ) : (
-                <form onSubmit={submit} aria-busy={pending} className="mt-5">
+                <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="mt-5">
                   <label
                     htmlFor="edit-item-name"
                     className="block text-sm font-medium text-ws-strong"
@@ -204,10 +209,11 @@ export function EditItemDialog({
                     required
                     maxLength={100}
                     disabled={pending || unconfirmed}
-                    aria-invalid={invalid || undefined}
-                    aria-describedby={error ? "edit-item-error" : undefined}
+                    aria-invalid={invalid || Boolean(validation.errors["edit-item-name"]) || undefined}
+                    aria-describedby={validation.errors["edit-item-name"] ? "edit-item-name-error" : error ? "edit-item-error" : undefined}
                     className="mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-control bg-ws-inset px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60"
                   />
+                  <FieldError id="edit-item-name-error" message={validation.errors["edit-item-name"]} />
 
                   <label
                     htmlFor="edit-item-description"
@@ -224,9 +230,11 @@ export function EditItemDialog({
                     rows={3}
                     maxLength={2000}
                     disabled={pending || unconfirmed}
-                    aria-describedby={error ? "edit-item-error" : undefined}
+                    aria-invalid={Boolean(validation.errors["edit-item-description"])}
+                    aria-describedby={validation.errors["edit-item-description"] ? "edit-item-description-error" : error ? "edit-item-error" : undefined}
                     className="mt-2 w-full min-w-0 resize-none rounded-md border border-ws-control bg-ws-inset px-3 py-3 text-sm leading-6 text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60"
                   />
+                  <FieldError id="edit-item-description-error" message={validation.errors["edit-item-description"]} />
 
                   <p
                     id="edit-item-error"
@@ -252,7 +260,7 @@ export function EditItemDialog({
                       type="button"
                       disabled={pending}
                       onClick={() => setOpen(false)}
-                      className="min-h-11 rounded-md bg-ws-inset px-4 text-sm font-medium text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60"
+                      className="ws-button-secondary px-4 disabled:cursor-wait"
                     >
                       {unconfirmed ? "Tutup" : "Batal"}
                     </button>

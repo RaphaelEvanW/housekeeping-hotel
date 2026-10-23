@@ -4,11 +4,15 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
+import { FieldError } from "@/components/field-error";
+import { useInventoryForm } from "@/lib/use-inventory-form";
 
-const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
+const primaryClass =
+  "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
 
 export function CreateItemDialog() {
   const router = useRouter();
+  const validation = useInventoryForm();
   const dialog = useRef<HTMLDialogElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const previousOverflow = useRef("");
@@ -34,6 +38,7 @@ export function CreateItemDialog() {
   }, []);
 
   function open() {
+    validation.reset();
     if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
     previewUrl.current = "";
     setPreview("");
@@ -52,6 +57,7 @@ export function CreateItemDialog() {
   async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (submitting.current) return;
+    if (!validation.validate(event.currentTarget)) return;
     const form = new FormData(event.currentTarget);
     const name = String(form.get("name") ?? "").trim();
     setError("");
@@ -79,27 +85,43 @@ export function CreateItemDialog() {
       if (response.status !== 201) {
         setSessionExpired(response.status === 401);
         const failure: unknown = await response.json().catch(() => null);
-        const serverMessage = failure && typeof failure === "object" && "message" in failure && typeof failure.message === "string" ? failure.message : null;
-        setInvalidName(response.status === 409 || (response.status === 400 && serverMessage?.startsWith("Nama jenis barang") === true));
-        setError(response.status === 409
-          ? "Jenis barang dengan nama tersebut sudah ada. Gunakan jenis yang sudah terdaftar atau periksa kembali namanya."
-          : response.status === 400
-            ? (serverMessage ?? "Periksa nama, deskripsi, dan foto barang.")
-            : response.status === 401
-              ? "Sesi Anda berakhir. Masuk kembali untuk melanjutkan."
-              : response.status === 403
-                ? "Akun Anda tidak memiliki izin untuk menambah jenis barang."
-                : response.status === 413
-                  ? "Foto maksimal 2 MiB. Pilih file yang lebih kecil."
-                : "Penyimpanan belum dapat dipastikan. Periksa katalog sebelum mencoba kembali.");
+        const serverMessage =
+          failure &&
+          typeof failure === "object" &&
+          "message" in failure &&
+          typeof failure.message === "string"
+            ? failure.message
+            : null;
+        setInvalidName(
+          response.status === 409 ||
+            (response.status === 400 &&
+              serverMessage?.startsWith("Nama jenis barang") === true),
+        );
+        setError(
+          response.status === 409
+            ? "Jenis barang dengan nama tersebut sudah ada. Gunakan jenis yang sudah terdaftar atau periksa kembali namanya."
+            : response.status === 400
+              ? (serverMessage ?? "Periksa nama, deskripsi, dan foto barang.")
+              : response.status === 401
+                ? "Sesi Anda berakhir. Masuk kembali untuk melanjutkan."
+                : response.status === 403
+                  ? "Akun Anda tidak memiliki izin untuk menambah jenis barang."
+                  : response.status === 413
+                    ? "Foto maksimal 2 MiB. Pilih file yang lebih kecil."
+                    : "Penyimpanan belum dapat dipastikan. Periksa katalog sebelum mencoba kembali.",
+        );
         return;
       }
       setNotice("Jenis barang berhasil ditambahkan.");
       dialog.current?.close();
-      router.push(`/inventory?${new URLSearchParams({ q: name.replace(/\s+/gu, " ").toLowerCase(), page: "1" })}`);
+      router.push(
+        `/inventory?${new URLSearchParams({ q: name.replace(/\s+/gu, " ").toLowerCase(), page: "1" })}`,
+      );
       router.refresh();
     } catch {
-      setError("Koneksi terputus. Periksa katalog sebelum mencoba kembali karena penyimpanan mungkin sudah diproses.");
+      setError(
+        "Koneksi terputus. Periksa katalog sebelum mencoba kembali karena penyimpanan mungkin sudah diproses.",
+      );
     } finally {
       submitting.current = false;
       setPending(false);
@@ -108,34 +130,180 @@ export function CreateItemDialog() {
 
   return (
     <div className="w-full sm:w-auto">
-      <button type="button" onClick={open} aria-haspopup="dialog" className={`${primaryClass} w-full sm:w-auto`}>Tambah jenis barang</button>
-      <p role="status" className={notice ? "mt-3 max-w-md text-sm leading-5 text-ws-success" : "sr-only"}>{notice}</p>
-      <dialog ref={dialog} aria-labelledby="create-item-heading" aria-describedby="create-item-description" onKeyDown={event => { if (event.key === "Escape") event.stopPropagation(); }} onCancel={event => { if (submitting.current) event.preventDefault(); }} onClose={() => { document.body.style.overflow = previousOverflow.current; }} className="fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] max-w-lg overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-6 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-8">
-        <h2 id="create-item-heading" className="font-heading text-xl leading-7 font-semibold text-ws-strong">Tambah jenis barang</h2>
-        <p id="create-item-description" className="mt-2 text-sm leading-6">Daftarkan nama jenis barang terlebih dahulu. Langkah ini belum menambahkan stok atau unit fisik.</p>
-        <form onSubmit={submit} aria-busy={pending} className="mt-6">
+      <button
+        type="button"
+        onClick={open}
+        aria-haspopup="dialog"
+        className={`${primaryClass} w-full sm:w-auto`}
+      >
+        Tambah jenis barang
+      </button>
+      <p
+        role="status"
+        className={
+          notice ? "mt-3 max-w-md text-sm leading-5 text-ws-success" : "sr-only"
+        }
+      >
+        {notice}
+      </p>
+      <dialog
+        ref={dialog}
+        aria-labelledby="create-item-heading"
+        aria-describedby="create-item-description"
+        onKeyDown={(event) => {
+          if (event.key === "Escape") event.stopPropagation();
+        }}
+        onCancel={(event) => {
+          if (submitting.current) event.preventDefault();
+        }}
+        onClose={() => {
+          document.body.style.overflow = previousOverflow.current;
+        }}
+        className="fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] max-w-lg overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-6 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-8"
+      >
+        <h2
+          id="create-item-heading"
+          className="font-heading text-xl leading-7 font-semibold text-ws-strong"
+        >
+          Tambah jenis barang
+        </h2>
+        <p id="create-item-description" className="mt-2 text-sm leading-6">
+          Daftarkan nama jenis barang terlebih dahulu. Langkah ini belum
+          menambahkan stok atau unit fisik.
+        </p>
+        <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="mt-6">
           <p className="mb-4 text-xs">* Wajib diisi</p>
-          <label htmlFor="create-item-name" className="block text-sm font-medium text-ws-strong">Nama jenis barang <span aria-hidden="true">*</span></label>
-          <input ref={nameInput} id="create-item-name" name="name" type="text" required maxLength={100} disabled={pending} aria-invalid={invalidName || undefined} aria-describedby={error ? "create-item-help create-item-error" : "create-item-help"} className="mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-control bg-ws-inset px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait" />
-          <p id="create-item-help" className="mt-2 text-xs leading-5">Maksimal 100 karakter. Contoh: Hair dryer. Hindari membuat jenis yang sudah terdaftar.</p>
-          <label htmlFor="create-item-description-input" className="mt-5 block text-sm font-medium text-ws-strong">Deskripsi <span className="font-normal text-ws-text">(opsional)</span></label>
-          <textarea id="create-item-description-input" name="description" maxLength={2000} rows={3} disabled={pending} className="mt-2 w-full min-w-0 resize-none rounded-md border border-ws-control bg-ws-inset px-3 py-3 text-sm leading-5 text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary" />
-          <p className="mt-1 text-xs leading-5">Keterangan jenis barang, maksimal 2000 karakter.</p>
-          <label htmlFor="create-item-photo" className="mt-5 block text-sm font-medium text-ws-strong">Foto katalog <span className="font-normal text-ws-text">(opsional)</span></label>
-          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-ws-control p-2"><input id="create-item-photo" name="photo" type="file" accept="image/jpeg,image/png,image/webp" disabled={pending} aria-describedby="create-item-photo-help" onChange={event => {
-            if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
-            const file = event.currentTarget.files?.[0];
-            setPhotoName(file?.name ?? "");
-            previewUrl.current = file && ["image/jpeg", "image/png", "image/webp"].includes(file.type) && file.size <= 2 * 1024 * 1024 ? URL.createObjectURL(file) : "";
-            setPreview(previewUrl.current);
-          }} className="peer sr-only" /><label htmlFor="create-item-photo" className="inline-flex min-h-11 shrink-0 cursor-pointer items-center rounded bg-ws-inset px-3 text-sm font-medium text-ws-strong peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ws-primary peer-disabled:cursor-wait peer-disabled:opacity-60">Pilih foto</label><span className="min-w-0 break-all text-xs">{photoName || "Belum ada foto dipilih"}</span></div>
-          <p id="create-item-photo-help" className="mt-2 text-xs leading-5">JPEG, PNG, atau WebP statis. Maksimal 2 MiB; foto mewakili jenis barang.</p>
-          {preview ? <Image src={preview} alt="Pratinjau foto katalog" width={160} height={120} unoptimized className="mt-3 h-28 w-full rounded-md bg-ws-inset object-contain" /> : null}
-          <p id="create-item-error" role="alert" className={error ? "mt-4 text-sm leading-6 text-ws-danger" : "sr-only"}>{error}</p>
-          {sessionExpired ? <Link href="/login" className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-ws-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">Ke halaman masuk</Link> : null}
+          <label
+            htmlFor="create-item-name"
+            className="block text-sm font-medium text-ws-strong"
+          >
+            Nama jenis barang <span aria-hidden="true">*</span>
+          </label>
+          <input
+            ref={nameInput}
+            id="create-item-name"
+            name="name"
+            type="text"
+            required
+            maxLength={100}
+            disabled={pending}
+            aria-invalid={invalidName || Boolean(validation.errors["create-item-name"]) || undefined}
+            aria-describedby={
+              `create-item-help${error ? " create-item-error" : ""}${validation.errors["create-item-name"] ? " create-item-name-error" : ""}`
+            }
+            className="mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-control bg-ws-inset px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait"
+          />
+          <FieldError id="create-item-name-error" message={validation.errors["create-item-name"]} />
+          <p id="create-item-help" className="mt-2 text-xs leading-5">
+            Maksimal 100 karakter. Contoh: Hair dryer. Hindari membuat jenis
+            yang sudah terdaftar.
+          </p>
+          <label
+            htmlFor="create-item-description-input"
+            className="mt-5 block text-sm font-medium text-ws-strong"
+          >
+            Deskripsi{" "}
+            <span className="font-normal text-ws-text">(opsional)</span>
+          </label>
+          <textarea
+            id="create-item-description-input"
+            name="description"
+            maxLength={2000}
+            aria-invalid={Boolean(validation.errors["create-item-description-input"])}
+            aria-describedby={validation.errors["create-item-description-input"] ? "create-item-description-error" : undefined}
+            rows={3}
+            disabled={pending}
+            className="mt-2 w-full min-w-0 resize-none rounded-md border border-ws-control bg-ws-inset px-3 py-3 text-sm leading-5 text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+          />
+          <FieldError id="create-item-description-error" message={validation.errors["create-item-description-input"]} />
+          <p className="mt-1 text-xs leading-5">
+            Keterangan jenis barang, maksimal 2000 karakter.
+          </p>
+          <label
+            htmlFor="create-item-photo"
+            className="mt-5 block text-sm font-medium text-ws-strong"
+          >
+            Foto katalog{" "}
+            <span className="font-normal text-ws-text">(opsional)</span>
+          </label>
+          <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-ws-control p-2">
+            <input
+              id="create-item-photo"
+              name="photo"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              disabled={pending}
+              aria-describedby="create-item-photo-help"
+              onChange={(event) => {
+                if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
+                const file = event.currentTarget.files?.[0];
+                setPhotoName(file?.name ?? "");
+                previewUrl.current =
+                  file &&
+                  ["image/jpeg", "image/png", "image/webp"].includes(
+                    file.type,
+                  ) &&
+                  file.size <= 2 * 1024 * 1024
+                    ? URL.createObjectURL(file)
+                    : "";
+                setPreview(previewUrl.current);
+              }}
+              className="peer sr-only"
+            />
+            <label
+              htmlFor="create-item-photo"
+              aria-disabled={pending}
+              className="ws-button-secondary shrink-0 cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ws-primary peer-disabled:cursor-wait"
+            >
+              Pilih foto
+            </label>
+            <span className="min-w-0 break-all text-xs">
+              {photoName || "Belum ada foto dipilih"}
+            </span>
+          </div>
+          <p id="create-item-photo-help" className="mt-2 text-xs leading-5">
+            JPEG, PNG, atau WebP statis. Maksimal 2 MiB; foto mewakili jenis
+            barang.
+          </p>
+          {preview ? (
+            <Image
+              src={preview}
+              alt="Pratinjau foto katalog"
+              width={160}
+              height={120}
+              unoptimized
+              className="mt-3 h-28 w-full rounded-md bg-ws-inset object-contain"
+            />
+          ) : null}
+          <p
+            id="create-item-error"
+            role="alert"
+            className={
+              error ? "mt-4 text-sm leading-6 text-ws-danger" : "sr-only"
+            }
+          >
+            {error}
+          </p>
+          {sessionExpired ? (
+            <Link
+              href="/login"
+              className="mt-2 inline-flex min-h-11 items-center text-sm font-medium text-ws-primary underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+            >
+              Ke halaman masuk
+            </Link>
+          ) : null}
           <div className="mt-6 flex flex-wrap justify-end gap-3">
-            <button type="button" disabled={pending} onClick={() => dialog.current?.close()} className="inline-flex min-h-11 items-center justify-center rounded-md bg-ws-inset px-4 text-sm font-medium text-ws-strong hover:bg-ws-divider focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60">Batal</button>
-            <button type="submit" disabled={pending} className={primaryClass}>{pending ? "Menyimpan…" : "Simpan jenis barang"}</button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => dialog.current?.close()}
+              className="ws-button-secondary px-4 disabled:cursor-wait"
+            >
+              Batal
+            </button>
+            <button type="submit" disabled={pending} className={primaryClass}>
+              {pending ? "Menyimpan…" : "Simpan jenis barang"}
+            </button>
           </div>
         </form>
       </dialog>

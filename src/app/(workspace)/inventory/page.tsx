@@ -17,6 +17,8 @@ import { CreateItemDialog } from "./create-item-dialog";
 import { AddStockButton, StockRegistrationProvider } from "./add-stock-dialog";
 import { getStockLocations } from "@/server/stock-locations";
 import { EditItemDialog } from "./edit-item-dialog";
+import { ItemNameDisclosure } from "@/components/item-name-disclosure";
+import { UnitDetailsDialog } from "./unit-details-dialog";
 
 export const metadata: Metadata = { title: "Inventaris | Housekeeping" };
 
@@ -54,7 +56,7 @@ const custodyLabels = {
 } as const;
 
 const buttonClass =
-  "inline-flex min-h-11 items-center justify-center rounded bg-ws-inset px-3 text-xs font-semibold text-ws-strong transition-colors hover:bg-ws-sidebar hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:hover:bg-ws-inset disabled:hover:text-ws-strong motion-reduce:transition-none";
+  "ws-button-secondary";
 
 const dateFormat = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
@@ -411,24 +413,7 @@ export default async function InventoryPage({
         {selectedId ? (
           <InventoryDrawer key={selectedId} closeHref={href({})}>
             <div className="min-w-0 max-w-full">
-              <h2
-                id="units-heading"
-                title={selected?.item.name}
-                className="line-clamp-3 font-heading text-lg font-semibold tracking-normal text-ws-strong [overflow-wrap:anywhere]"
-              >
-                {selected ? selected.item.name : "Barang tidak ditemukan"}
-              </h2>
-              {selected && selected.item.name.length > 100 ? (
-                <details className="group mt-2 text-xs">
-                  <summary className="flex min-h-11 items-center justify-end py-3 font-medium text-ws-primary focus-visible:outline-2 focus-visible:outline-ws-primary">
-                    <span className="group-open:hidden">Selengkapnya</span>
-                    <span className="hidden group-open:inline">Ringkas</span>
-                  </summary>
-                  <p className="pb-3 [overflow-wrap:anywhere]">
-                    {selected.item.name}
-                  </p>
-                </details>
-              ) : null}
+              <ItemNameDisclosure id="units-heading" name={selected ? selected.item.name : "Barang tidak ditemukan"} />
               {selected?.item.photoUrl ? (
                 <Image
                   src={selected.item.photoUrl}
@@ -492,6 +477,7 @@ export default async function InventoryPage({
                   </caption>
                   <thead className="border-b border-ws-divider text-ws-text">
                     <tr>
+                      <th scope="col" className="w-8 py-3 pr-2 font-medium">No.</th>
                       <th scope="col" className="w-[44%] py-3 pr-3 font-medium">
                         Unit fisik
                       </th>
@@ -503,35 +489,45 @@ export default async function InventoryPage({
                   <tbody className="divide-y divide-ws-divider">
                     {selected.units.length === 0 ? (
                       <tr>
-                        <td colSpan={2} className="py-6 text-sm">
+                        <td colSpan={3} className="py-6 text-sm">
                           {after
                             ? "Tidak ada unit setelah halaman ini."
                             : "Belum ada unit fisik untuk jenis barang ini."}
                         </td>
                       </tr>
                     ) : null}
-                    {selected.units.map((unit) => (
+                    {selected.units.map((unit, index) => (
                       <tr
                         key={unit.id}
                         className="align-top [overflow-wrap:anywhere]"
                       >
-                        <th scope="row" className="py-4 pr-3 font-normal">
-                          <p className="font-semibold text-ws-strong tabular-nums">
-                            {unit.unitCode}
-                          </p>
-                          <p className="mt-1 break-words text-xs">
-                            Nomor seri: {unit.serialNumber || "—"}
-                          </p>
-                          {unit.notes ? (
-                            <p className="mt-1 whitespace-pre-wrap break-words text-xs">
-                              Deskripsi: {unit.notes}
-                            </p>
-                          ) : null}
-                          <p className="mt-1 text-xs">
-                            Penguasaan: {custodyLabels[unit.custody]}
-                          </p>
+                        <td className="py-3 pr-2 text-ws-text tabular-nums">{index + 1}</td>
+                        <th scope="row" className="py-2 pr-3 font-normal">
+                          <UnitDetailsDialog
+                            itemName={selected.item.name}
+                            canEdit={hasPermission(user.roles, "inventory:unit:update")}
+                            unit={{
+                              id: unit.id,
+                              itemId: selected.item.id,
+                              unitCode: unit.unitCode,
+                              name: null,
+                              serialNumber: unit.serialNumber,
+                              notes: unit.notes,
+                              createdAt: unit.createdAt.toISOString(),
+                              updatedAt: unit.updatedAt.toISOString(),
+                              facts: [
+                                { label: "Kondisi unit", value: conditionLabels[unit.condition] },
+                                { label: "Kesiapan", value: readinessLabels[unit.readiness] },
+                                { label: "Penguasaan", value: custodyLabels[unit.custody] },
+                                { label: "Lokasi", value: unit.location?.name ?? "Belum dicatat" },
+                                { label: "Siklus unit", value: unit.lifecycle === "ACTIVE" ? "Aktif" : "Dipensiunkan" },
+                                { label: "Status kehilangan", value: unit.lossState === "NONE" ? "Tidak ada laporan" : unit.lossState === "LOST" ? "Hilang" : "Belum ditemukan" },
+                              ],
+                            }}
+                          />
+                          <p className="break-words text-xs text-ws-text">{unit.serialNumber ? unit.unitCode : "Tanpa nomor seri"}</p>
                         </th>
-                        <td className="py-4">
+                        <td className="py-3">
                           <p className="font-medium text-ws-strong">
                             Kondisi: {conditionLabels[unit.condition]}
                           </p>
@@ -549,12 +545,6 @@ export default async function InventoryPage({
                           ) : null}
                           <p className="mt-1 break-words">
                             Lokasi: {unit.location?.name ?? "Belum dicatat"}
-                          </p>
-                          <p className="mt-1 text-xs">
-                            Siklus unit:{" "}
-                            {unit.lifecycle === "ACTIVE"
-                              ? "Aktif"
-                              : "Dipensiunkan"}
                           </p>
                         </td>
                       </tr>

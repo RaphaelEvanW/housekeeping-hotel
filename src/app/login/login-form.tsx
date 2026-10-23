@@ -89,7 +89,6 @@ export function LoginForm() {
             disabled={isPending}
             className="min-h-12 w-full min-w-0 rounded-md border border-white/20 bg-ws-sidebar/95 px-3 py-3 text-base text-white backdrop-blur-sm supports-[backdrop-filter:blur(1px)]:bg-ws-sidebar/25 placeholder:text-ws-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-accent disabled:cursor-wait"
           />
-
         </div>
       </div>
 

@@ -25,7 +25,7 @@ export function InventoryView({
             type="button"
             aria-pressed={view === value}
             onClick={() => setView(value)}
-            className={`min-h-11 rounded px-3 text-xs font-semibold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary ${view === value ? "bg-ws-sidebar text-white" : "bg-white text-ws-strong hover:bg-ws-inset"}`}
+            className="ws-button-secondary"
           >
             {value === "cards" ? "Kartu" : "Tabel"}
           </button>
