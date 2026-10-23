@@ -1,6 +1,6 @@
 # Backend Edit Jenis Barang: nama dan deskripsi
 
-Panduan untuk diterapkan owner. Kode backend di bawah belum dipasang atau diuji. FE sudah mengirim `{ name, description }`; endpoint saat ini masih menolak description. Jangan menganggap penyimpanan deskripsi sudah bekerja sebelum seluruh langkah selesai.
+Status23Oktober2026: perubahan backend sudah diterapkan agent atas permintaan owner dan diverifikasi lint/typecheck, full21files/376tests serta9browser checks memakai API asli (no-op). Dokumen ini menjadi referensi perubahan; tidak perlu diterapkan ulang. Pengujian perubahan/penghapusan/audit/rollback memakai database test terpisah. FE sekarang dapat mengirim `{ name, description }` ke endpoint yang sudah mendukungnya.
 
 Tidak perlu migration: Item.description sudah ada. Foto, status, unit fisik dan permission tidak diubah. Name-only callers tetap valid; deskripsi yang tidak dikirim dipertahankan, string kosong menghapusnya menjadi null.
 

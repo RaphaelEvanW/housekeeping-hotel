@@ -1,0 +1,27 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ await page.setViewportSize({width:1280,height:600});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ if(page.url().includes('/login'))throw new Error('Owner login required');
+ assert(await page.getByRole('complementary',{name:'Sidebar desktop'}).evaluate(e=>getComputedStyle(e).backgroundColor)==='rgb(19, 27, 46)','served sidebar navy restored after dev-server restart');
+ const data=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();const item=data.items.find(i=>i.isActive&&i.name.length<=100);if(!item)throw new Error('Existing active item required');
+ const detail=await (await page.request.get(`http://localhost:3000/api/items/${item.id}/units`)).json();
+ await page.goto(`http://localhost:3000/inventory?${new URLSearchParams({q:item.name.toLowerCase(),page:'1',item:item.id})}`);await page.waitForLoadState('networkidle');
+ const panel=page.locator('#inventory-unit-panel');const edit=panel.getByRole('button',{name:'Edit jenis barang',exact:true});const add=panel.getByRole('button',{name:/Tambah stok/});
+ assert(await add.evaluate(e=>getComputedStyle(e).backgroundColor)==='rgb(144, 77, 0)','served amber primary restored');
+ await edit.click();const dialog=page.getByRole('dialog',{name:'Edit',exact:true});await dialog.waitFor();
+ assert(await dialog.getByLabel(/Nama jenis barang/).inputValue()===item.name,'real current item name prefilled');
+ assert(await dialog.getByLabel(/Deskripsi/).inputValue()===(detail.item.description??''),'real current item description prefilled');
+ const responsePromise=page.waitForResponse(r=>r.url().endsWith(`/api/items/${item.id}`)&&r.request().method()==='PATCH');
+ await dialog.getByRole('button',{name:'Simpan',exact:true}).click();const response=await responsePromise;const result=await response.json();
+ assert(response.status()===200,'real unmocked PATCH accepts FE name and description');
+ assert(result.item.name===item.name&&result.item.description===detail.item.description,'real response confirms both unchanged fields');
+ await dialog.getByRole('status').filter({hasText:'Jenis barang berhasil diperbarui.'}).waitFor();
+ assert(result.item.updatedAt===item.updatedAt,'unchanged save keeps item timestamp, no dev metadata mutation');
+ await dialog.getByRole('button',{name:'Selesai'}).click();await dialog.waitFor({state:'hidden'});
+ assert(await panel.evaluate(e=>e.open),'real save preserves selected item panel');
+ await page.reload();await page.waitForLoadState('networkidle');await edit.click();await dialog.waitFor();
+ assert(await dialog.getByLabel(/Deskripsi/).inputValue()===(detail.item.description??''),'reload reads actual stored description');
+ await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+ await page.screenshot({path:'output/playwright/edit-item-backend-connected.png',caret:'initial'});
+ return {checks,request:'Real API no-op; no mock or changed dev fields. Changed/cleared/rollback persistence covered in isolated integration database.'};
+}

@@ -5,7 +5,7 @@ import { updateItemInputSchema } from "@/server/item-input";
 import {
   DuplicateItemNameError,
   ItemNotFoundError,
-  updateItemName,
+  updateItem,
 } from "@/server/items";
 import {
   PayloadTooLargeError,
@@ -78,7 +78,7 @@ export async function PATCH(
     return Response.json(
       {
         error: "INVALID_INPUT",
-        message: "Data perubahan nama jenis barang tidak valid.",
+        message: "Data perubahan jenis barang tidak valid.",
       },
       {
         status: 400,
@@ -88,9 +88,9 @@ export async function PATCH(
   }
 
   try {
-    const item = await updateItemName(
+    const item = await updateItem(
       parsedId.data,
-      parsed.data.name,
+      parsed.data,
       authorization.user.id,
     );
 

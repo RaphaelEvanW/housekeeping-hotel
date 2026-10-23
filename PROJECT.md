@@ -79,6 +79,7 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 - Master Item creation/renaming **does not create stock or trigger physical inspection**.
 - Owner-confirmed 22 October 2026: the item-type form includes name, optional catalog photo, and description. Existing/name-only clients and records remain valid; description may be blank. Catalog photos represent the type, not per-unit inspection or borrowing/return evidence. Categories remain out of scope.
 - Owner selected persistent local disk outside public/ for catalog photos. Storage/access/limits and deployment backup requirements are documented in docs/ITEM-CATALOG-STORAGE.md. This is not a PMS or external storage integration.
+- Owner-confirmed 23 October 2026: editing an existing item type includes its name and optional catalog description, under the existing item-update permission. Empty description clears it. Type editing and physical-unit serial/notes corrections remain separate actions; catalog photo editing is not included in this change.
 - Record `CreatedBy`, `CreatedAt`, `UpdatedBy`, `UpdatedAt`; track old/new values for edits. Creation and name corrections have no approval queue.
 
 ### 5.1.1 Master Item deactivation (owner-confirmed 21 October 2026)

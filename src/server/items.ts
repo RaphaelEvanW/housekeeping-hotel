@@ -1,7 +1,11 @@
 import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
-import { createItemInputSchema, itemNameSchema } from "@/server/item-input";
+import {
+  createItemInputSchema,
+  itemNameSchema,
+  updateItemInputSchema,
+} from "@/server/item-input";
 import { db } from "@/server/db";
 import { removeItemPhoto, storeItemPhoto } from "@/server/item-photo";
 
@@ -84,12 +88,13 @@ export class ItemNotFoundError extends Error {
   }
 }
 
-export async function updateItemName(
+export async function updateItem(
   itemId: string,
-  name: string,
+  rawInput: unknown,
   actorId: string,
 ) {
-  const preparedName = prepareItemName(name);
+  const input = updateItemInputSchema.parse(rawInput);
+  const preparedName = prepareItemName(input.name);
 
   try {
     return await db.$transaction(async (tx) => {
@@ -110,19 +115,28 @@ export async function updateItemName(
           id: true,
           name: true,
           normalizedName: true,
+          description: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
         },
       });
 
+      const description =
+        input.description === undefined
+          ? before.description
+          : input.description || null;
+      const descriptionChanged = description !== before.description;
+
       if (
         before.name === preparedName.name &&
-        before.normalizedName === preparedName.normalizedName
+        before.normalizedName === preparedName.normalizedName &&
+        !descriptionChanged
       ) {
         return {
           id: before.id,
           name: before.name,
+          description: before.description,
           isActive: before.isActive,
           createdAt: before.createdAt,
           updatedAt: before.updatedAt,
@@ -133,11 +147,13 @@ export async function updateItemName(
         where: { id: itemId },
         data: {
           ...preparedName,
+          description,
           updatedById: actorId,
         },
         select: {
           id: true,
           name: true,
+          description: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -153,10 +169,14 @@ export async function updateItemName(
           oldValues: {
             name: before.name,
             normalizedName: before.normalizedName,
+            ...(descriptionChanged
+              ? { description: before.description }
+              : {}),
           },
           newValues: {
             name: item.name,
             normalizedName: preparedName.normalizedName,
+            ...(descriptionChanged ? { description } : {}),
           },
         },
       });

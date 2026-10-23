@@ -585,6 +585,9 @@ it.each([
   { name: "A".repeat(101) },
   { name: "Changed", isActive: false },
   { name: "Changed", updatedById: "forged-actor" },
+  { name: "Changed", description: 123 },
+  { name: "Changed", description: null },
+  { name: "Changed", description: "A".repeat(2001) },
 ])("rejects invalid update input: %j", async (body) => {
   const item = await createEditableItem();
 
@@ -607,6 +610,93 @@ it("rejects an invalid item ID", async () => {
   expect(
     (await patchItem("invalid", { name: "Hair Dryer" })).status,
   ).toBe(400);
+});
+
+it("updates, preserves and clears item description without unnecessary audits", async () => {
+  const item = await createEditableItem();
+  const photoKey = randomUUID();
+  await db.item.update({ where: { id: item.id }, data: { photoKey } });
+  const name = `Catalog ${randomUUID()}`;
+
+  const updated = await patchItem(item.id, {
+    name,
+    description: "  Peralatan kamar tamu.  ",
+  });
+  expect(updated.status).toBe(200);
+  await expect(updated.json()).resolves.toMatchObject({
+    item: { id: item.id, name, description: "Peralatan kamar tamu." },
+  });
+
+  const beforeNoop = await db.item.findUniqueOrThrow({ where: { id: item.id } });
+  expect((await patchItem(item.id, { name })).status).toBe(200);
+  expect((await patchItem(item.id, { name, description: " Peralatan kamar tamu. " })).status).toBe(200);
+  const afterNoop = await db.item.findUniqueOrThrow({ where: { id: item.id } });
+  expect(afterNoop.description).toBe("Peralatan kamar tamu.");
+  expect(afterNoop.updatedAt).toEqual(beforeNoop.updatedAt);
+  expect(afterNoop.photoKey).toBe(photoKey);
+  expect(afterNoop.isActive).toBe(item.isActive);
+  expect(afterNoop.createdById).toBe(item.createdById);
+
+  const cleared = await patchItem(item.id, { name, description: "   " });
+  expect(cleared.status).toBe(200);
+  await expect(cleared.json()).resolves.toMatchObject({ item: { description: null } });
+  const stored = await db.item.findUniqueOrThrow({ where: { id: item.id } });
+  expect(stored.description).toBeNull();
+  expect(stored.photoKey).toBe(photoKey);
+
+  const events = await db.auditEvent.findMany({ where: { entityId: item.id } });
+  expect(events).toHaveLength(2);
+  expect(events).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      oldValues: { name: item.name, normalizedName: item.normalizedName, description: null },
+      newValues: { name, normalizedName: name.toLowerCase(), description: "Peralatan kamar tamu." },
+    }),
+    expect.objectContaining({
+      oldValues: { name, normalizedName: name.toLowerCase(), description: "Peralatan kamar tamu." },
+      newValues: { name, normalizedName: name.toLowerCase(), description: null },
+    }),
+  ]));
+});
+
+it("rolls back description when the replacement name already exists", async () => {
+  const first = await createEditableItem();
+  const second = await createEditableItem();
+  const before = await db.item.update({
+    where: { id: second.id }, data: { description: "Deskripsi sebelumnya." },
+  });
+  expect((await patchItem(second.id, {
+    name: first.name,
+    description: "Tidak boleh tersimpan.",
+  })).status).toBe(409);
+  const stored = await db.item.findUniqueOrThrow({ where: { id: second.id } });
+  expect(stored.name).toBe(second.name);
+  expect(stored.description).toBe(before.description);
+  expect(stored.updatedAt).toEqual(before.updatedAt);
+  expect(await db.auditEvent.count({ where: { entityId: second.id } })).toBe(0);
+});
+
+it("keeps a complete description audit chain during concurrent edits", async () => {
+  const item = await createEditableItem();
+  const descriptions = ["Deskripsi pertama.", "Deskripsi kedua."];
+  const responses = await Promise.all(descriptions.map(description =>
+    patchItem(item.id, { name: item.name, description }),
+  ));
+  expect(responses.map(response => response.status)).toEqual([200, 200]);
+  const stored = await db.item.findUniqueOrThrow({ where: { id: item.id } });
+  expect(descriptions).toContain(stored.description);
+  const intermediate = descriptions.find(description => description !== stored.description);
+  const events = await db.auditEvent.findMany({ where: { entityId: item.id } });
+  expect(events).toHaveLength(2);
+  expect(events).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      oldValues: expect.objectContaining({ description: null }),
+      newValues: expect.objectContaining({ description: intermediate }),
+    }),
+    expect.objectContaining({
+      oldValues: expect.objectContaining({ description: intermediate }),
+      newValues: expect.objectContaining({ description: stored.description }),
+    }),
+  ]));
 });
 
 it("returns 404 when the item does not exist", async () => {
