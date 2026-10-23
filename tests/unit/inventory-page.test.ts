@@ -157,6 +157,13 @@ it("does not offer Add Stock for an inactive item", async () => {
   expect(html).not.toContain('aria-label="Tambah stok Setrika"');
 });
 
+it.each(["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const)("offers audited rename only to an allowed role, including inactive items: %s", async role => {
+  mockUser.mockResolvedValueOnce({ id: "actor", name: "Operator", isActive: true, roles: [role] });
+  const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
+  expect(html.includes('aria-label="Edit jenis barang"')).toBe(role !== "MANAGEMENT");
+  expect(html).not.toContain('id="edit-item-name"');
+});
+
 it("keeps the empty unit table below the registered count and labelled stock action", async () => {
   const name = "Barang panjang ".repeat(12);
   mockUnits.mockResolvedValueOnce({ item: { id: itemId, name, isActive: true, description: null, photoUrl: null }, totalRegistered: 0, units: [], nextCursor: null });
@@ -164,6 +171,8 @@ it("keeps the empty unit table below the registered count and labelled stock act
   const panel = html.slice(html.indexOf('id="inventory-unit-panel"'));
   expect(panel.indexOf("Unit fisik terdaftar")).toBeLessThan(panel.indexOf('aria-label="Tambah stok'));
   expect(panel.indexOf('aria-label="Tambah stok')).toBeLessThan(panel.indexOf("<table"));
+  expect(panel.indexOf('aria-label="Tambah stok')).toBeLessThan(panel.indexOf('aria-label="Edit jenis barang"'));
+  expect(panel.indexOf('aria-label="Edit jenis barang"')).toBeLessThan(panel.indexOf("<table"));
   expect(panel).toContain('colSpan="2"');
   expect(panel).toContain("Belum ada unit fisik untuk jenis barang ini.");
   expect(panel).toContain("Selengkapnya");

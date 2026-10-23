@@ -1,0 +1,9 @@
+async page => {
+ const cdp=await page.context().newCDPSession(page);
+ const bounds=await cdp.send('Browser.getWindowForTarget');
+ await cdp.send('Browser.setWindowBounds',{windowId:bounds.windowId,bounds:{windowState:'normal',width:1366,height:728}});
+ await cdp.send('Emulation.clearDeviceMetricsOverride');
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ const layout=await cdp.send('Page.getLayoutMetrics');await cdp.detach();
+ return {bounds,layout,metrics:await page.evaluate(()=>({innerWidth,innerHeight,outerWidth,outerHeight,dpr:devicePixelRatio}))};
+}

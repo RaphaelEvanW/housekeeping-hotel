@@ -1,0 +1,19 @@
+- main [ref=e2]:
+  - generic [ref=e4]:
+    - region [ref=e5]:
+      - heading "Peminjaman barang lebih tertata." [level=1] [ref=e6]
+      - paragraph [ref=e7]: Catat peminjaman, pengembalian, dan ketersediaan barang operasional hotel.
+    - region [ref=e8]:
+      - generic [ref=e9]:
+        - heading "Housekeeping" [level=2] [ref=e10]
+        - paragraph [ref=e11]: Masuk dengan akun staf Anda.
+      - generic [ref=e12]:
+        - generic [ref=e13]:
+          - generic [ref=e14]: Email
+          - textbox "Email" [ref=e15]:
+            - /placeholder: nama@hotel.com
+        - generic [ref=e16]:
+          - generic [ref=e17]: Kata sandi
+          - textbox "Kata sandi" [ref=e19]:
+            - /placeholder: Masukkan kata sandi
+        - button "Masuk" [ref=e20] [cursor=pointer]

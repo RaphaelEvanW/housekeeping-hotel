@@ -1,0 +1,43 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ const start=await page.context().newCDPSession(page);const zoom=(await start.send('Page.getLayoutMetrics')).cssVisualViewport.zoom;await start.detach();
+ await page.setViewportSize({width:Math.round(1366*zoom),height:Math.round(900*zoom)});
+ await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ if(page.url().includes('/login'))throw new Error('Owner login needed');
+ const data=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();
+ const item=data.items.find(i=>i.name.length<=100);if(!item)throw new Error('Existing item required');
+ const details=await (await page.request.get(`http://localhost:3000/api/items/${item.id}/units`)).json();
+ await page.goto(`http://localhost:3000/inventory?${new URLSearchParams({item:item.id,page:'1'})}`);await page.waitForLoadState('networkidle');
+ const panel=page.locator('#inventory-unit-panel');const button=panel.getByRole('button',{name:'Edit jenis barang',exact:true});
+ const dialog=page.getByRole('dialog',{name:'Edit',exact:true});
+ const name=dialog.getByLabel('Nama jenis barang',{exact:false}),description=dialog.getByLabel(/Deskripsi/);
+ let calls=0,payload,mode='ok';
+ await page.route(`**/api/items/${item.id}`,async route=>{if(route.request().method()!=='PATCH')return route.continue();calls++;payload=route.request().postDataJSON();await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({item:{id:item.id,name:payload.name,description:mode==='mismatch'?'Wrong description':payload.description||null}})});});
+ await button.click();await dialog.waitFor();
+ assert(await name.inputValue()===item.name,'prefills the selected item name');
+ assert(await description.inputValue()===(details.item.description??''),'passes and prefills actual catalog description');
+ assert(await description.getAttribute('maxLength')==='2000','description has2000 character limit');
+ assert(await description.evaluate(e=>getComputedStyle(e).resize)==='none','description resize handle remains hidden');
+ await description.evaluate(e=>{e.value='x'.repeat(2001);e.form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}));});
+ await dialog.getByRole('alert').filter({hasText:'Deskripsi maksimal2000 karakter.'.replace('maksimal2000','maksimal 2000')}).waitFor();
+ assert(calls===0,'oversized description rejected before a request and without temporal-dead-zone error');
+ await description.fill('  Deskripsi katalog baru  ');await name.fill('  Nama   katalog  ');
+ await dialog.getByRole('button',{name:'Simpan',exact:true}).click();await dialog.getByRole('status').filter({hasText:'Jenis barang berhasil diperbarui.'}).waitFor();
+ assert(JSON.stringify(payload)===JSON.stringify({name:'Nama katalog',description:'Deskripsi katalog baru'}),'submits normalized name and trimmed description');
+ await dialog.getByRole('button',{name:'Selesai'}).click();await dialog.waitFor({state:'hidden'});
+ await button.click();await description.fill('  ');await dialog.getByRole('button',{name:'Simpan',exact:true}).click();await dialog.getByRole('status').waitFor();
+ assert(payload.description==='','blank description sent explicitly and null response accepted');
+ await dialog.getByRole('button',{name:'Selesai'}).click();await dialog.waitFor({state:'hidden'});
+ mode='mismatch';await button.click();await description.fill('Deskripsi yang diminta');await dialog.getByRole('button',{name:'Simpan',exact:true}).click();await dialog.getByRole('alert').filter({hasText:'belum dapat dipastikan'}).waitFor();
+ assert(await description.isDisabled(),'mismatched description response triggers locked recovery');
+ await dialog.getByRole('button',{name:'Muat ulang data'}).click();await dialog.waitFor({state:'hidden'});
+ for(const width of [320,390,1366]){
+  await page.setViewportSize({width:Math.round(width*zoom),height:Math.round(900*zoom)});await button.click();await dialog.waitFor();
+  assert(!(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth)),`edit form fits actual CSS${width}px`);
+  if(width!==320)await page.screenshot({path:`output/playwright/edit-item-description-${width}.png`,caret:'initial'});
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+  assert(await panel.evaluate(e=>e.open),`Escape keeps parent panel open at${width}px`);
+ }
+ await page.unroute(`**/api/items/${item.id}`);await page.setViewportSize({width:1280,height:600});
+ return {checks,devMutations:0,backendPersistence:'Not verified: proposed description response intercepted only for UI testing'};
+}

@@ -1,0 +1,4 @@
+async page => {
+ await page.setViewportSize({width:1280,height:600});await page.waitForLoadState('networkidle');
+ return await page.evaluate(()=>({renderedPixels:{width:Math.round(innerWidth*devicePixelRatio),height:Math.round(innerHeight*devicePixelRatio)},outerWidth,outerHeight,zoomDpr:devicePixelRatio}));
+}

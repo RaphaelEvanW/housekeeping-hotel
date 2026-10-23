@@ -1,0 +1,31 @@
+async page => {
+ const checks=[];const assert=(v,m)=>{if(!v)throw new Error(m);checks.push(m);};
+ const current=new URL(page.url());
+ if(!current.searchParams.has('item'))throw new Error('Selected inventory item required');
+ const panel=page.locator('#inventory-unit-panel');
+ const calibration=await page.context().newCDPSession(page);
+ const zoom=(await calibration.send('Page.getLayoutMetrics')).cssVisualViewport.zoom;
+ await calibration.detach();
+ for(const width of [320,390,1366,1440]){
+  await page.setViewportSize({width:Math.round(width*zoom),height:Math.round(900*zoom)});await page.waitForLoadState('networkidle');
+  assert(Math.abs(await page.evaluate(()=>innerWidth)-width)<=1,`actual CSS viewport is ${width}px`);
+  const edit=panel.getByRole('button',{name:'Ubah nama',exact:true});
+  const add=panel.getByRole('button',{name:/Tambah stok/});
+  await edit.waitFor();
+  const boxes=await Promise.all([add.boundingBox(),edit.boundingBox()]);
+  assert(Math.abs(boxes[0].y-boxes[1].y)<2&&boxes[1].x>=boxes[0].x+boxes[0].width,`stock and rename are adjacent at ${width}px`);
+  assert(await edit.locator('svg[aria-hidden="true"]').count()===1,`rename has accessible decorative pencil at ${width}px`);
+  assert(!(await panel.evaluate(e=>e.scrollWidth>e.clientWidth)),`panel fits ${width}px`);
+  await edit.click();const dialog=page.getByRole('dialog',{name:'Ubah nama barang',exact:true});await dialog.waitFor();
+  await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+  assert(await panel.evaluate(e=>e.open),`rename Escape preserves parent at ${width}px`);
+  if(width===390||width===1366)await page.screenshot({path:`output/playwright/rename-action-row-${width}.png`,caret:'initial'});
+ }
+ const cdp=await page.context().newCDPSession(page);
+ const window=await cdp.send('Browser.getWindowForTarget');
+ await cdp.send('Browser.setWindowBounds',{windowId:window.windowId,bounds:{windowState:'maximized'}});
+ await cdp.send('Emulation.setDeviceMetricsOverride',{width:0,height:0,deviceScaleFactor:0,mobile:false});
+ await page.waitForLoadState('networkidle');
+ return{checks,metrics:await page.evaluate(()=>({innerWidth,innerHeight,outerWidth,outerHeight,dpr:devicePixelRatio})),productionWrites:0};
+}
+

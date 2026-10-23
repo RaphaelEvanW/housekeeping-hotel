@@ -1,0 +1,68 @@
+async page => {
+ const checks=[];const assert=(condition,message)=>{if(!condition)throw new Error(message);checks.push(message);};
+ await page.setViewportSize({width:1366,height:960});await page.goto('http://localhost:3000/inventory');await page.waitForLoadState('networkidle');
+ if(page.url().includes('/login'))throw new Error('Owner login required');
+ const result=await (await page.request.get('http://localhost:3000/api/items?pageSize=50')).json();
+ const item=result.items.find(i=>i.name.length<=100);if(!item)throw new Error('An existing item is required');
+ const params=new URLSearchParams({q:item.name.toLowerCase(),page:'1',item:item.id});
+ await page.goto(`http://localhost:3000/inventory?${params}`);await page.waitForLoadState('networkidle');
+ const panel=page.locator('#inventory-unit-panel');await panel.waitFor();
+ const button=panel.getByRole('button',{name:'Ubah nama',exact:true});
+ const dialog=page.getByRole('dialog',{name:'Ubah nama barang',exact:true});
+ const input=page.getByLabel('Nama jenis barang',{exact:false}).last();
+ const save=dialog.getByRole('button',{name:'Simpan nama',exact:true});
+ let mode=409,calls=0,payload,release;
+ await page.route(`**/api/items/${item.id}`,async route=>{
+  if(route.request().method()!=='PATCH')return route.continue();
+  calls++;payload=route.request().postDataJSON();
+  if(mode==='abort')return route.abort();
+  if(mode==='pending')await new Promise(resolve=>{release=resolve;});
+  if(mode==='malformed')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({item:{id:'wrong-id',name:payload.name}})});
+  const status=mode==='pending'?200:mode;
+  return route.fulfill({status,contentType:'application/json',body:JSON.stringify(status===200?{item:{id:item.id,name:payload.name}}:{error:'TEST_REJECTION'})});
+ });
+ await button.click();await dialog.waitFor();
+ assert(await input.inputValue()===item.name,'rename starts with the selected item name');
+ assert(await input.getAttribute('maxLength')==='100'&&await input.getAttribute('required')!==null,'name uses existing required and100 character limits');
+ assert(await input.evaluate(e=>document.activeElement===e&&e.selectionStart===0&&e.selectionEnd===e.value.length),'name receives focus and is selected for replacement');
+ await input.fill('');await save.click();assert(calls===0,'empty name cannot call the API');
+ await input.fill('   ');await save.click();await dialog.getByRole('alert').filter({hasText:'wajib diisi'}).waitFor();assert(calls===0,'whitespace name is rejected before sending');
+ for(const status of [400,401,403,404,409]){
+  mode=status;await input.fill('Nama pengujian');await save.click();
+  await dialog.getByRole('alert').filter({hasText:status===409?'sudah digunakan':status===401?'Sesi Anda':status===403?'izin':status===404?'tidak ditemukan':'Periksa nama'}).waitFor();
+  assert(await input.inputValue()==='Nama pengujian',`${status} preserves the entered name`);
+  if(status===409)assert(await input.getAttribute('aria-invalid')==='true','duplicate name is linked to invalid input');
+  if(status===401)assert(await dialog.getByRole('link',{name:'Ke halaman masuk'}).getAttribute('href')==='/login','expired session offers login without bypass');
+ }
+ const selectedUrl=page.url();await page.keyboard.press('Escape');await dialog.waitFor({state:'hidden'});
+ assert(await panel.evaluate(e=>e.open)&&page.url()===selectedUrl,'Escape closes rename only and preserves selected item/search');
+ assert(await button.evaluate(e=>document.activeElement===e),'closing restores trigger focus');
+ for(const failure of [500,'abort','malformed']){
+  mode=failure;await button.click();await input.fill('Nama belum terkonfirmasi');await save.click();
+  await dialog.getByRole('alert').filter({hasText:'belum dapat dipastikan'}).waitFor();
+  assert(await input.isDisabled(),`${failure} blocks edits until data is checked`);
+  assert(await dialog.getByRole('button',{name:'Muat ulang data'}).isVisible(),`${failure} offers reload instead of a blind retry`);
+  await dialog.getByRole('button',{name:'Muat ulang data'}).click();await dialog.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
+  assert(await panel.evaluate(e=>e.open)&&page.url()===selectedUrl,`${failure} reload retains panel/query`);
+ }
+ mode='pending';const before=calls;await button.click();await input.fill('  Nama   baru  ');await save.click();
+ await dialog.locator('form[aria-busy="true"]').waitFor();
+ assert(await input.isDisabled()&&await dialog.getByRole('button',{name:'Batal',exact:true}).isDisabled(),'pending disables edits and cancel');
+ await dialog.locator('form').evaluate(form=>{form.requestSubmit();form.requestSubmit();});
+ await page.keyboard.press('Escape');assert(await dialog.isVisible()&&await panel.evaluate(e=>e.open),'pending Escape cannot close rename or its parent');
+ assert(calls===before+1,'pending guard prevents repeated submissions');
+ release();await dialog.getByRole('status').filter({hasText:'Nama barang berhasil diperbarui.'}).waitFor();
+ assert(JSON.stringify(payload)===JSON.stringify({name:'Nama baru'}),'PATCH sends only normalized name without unit or catalog fields');
+ await dialog.getByRole('button',{name:'Selesai'}).click();await dialog.waitFor({state:'hidden'});await page.waitForLoadState('networkidle');
+ assert(await panel.evaluate(e=>e.open)&&page.url()===selectedUrl,'confirmed success preserves selected panel and query');
+ for(const width of [320,390,768,1440]){
+  await page.setViewportSize({width,height:960});await button.click();await dialog.waitFor();await input.fill('Nama jenis barang yang diperbarui');
+  assert(!(await dialog.evaluate(e=>e.scrollWidth>e.clientWidth)),`rename modal fits ${width}px`);
+  assert(await dialog.evaluate(e=>e.getBoundingClientRect().left>=0&&e.getBoundingClientRect().right<=innerWidth),`rename modal stays inside ${width}px viewport`);
+  if(width===390||width===1440)await page.screenshot({path:`output/playwright/rename-item-${width}.png`,caret:'initial'});
+  await dialog.getByRole('button',{name:'Batal',exact:true}).click();await dialog.waitFor({state:'hidden'});
+  assert(await panel.evaluate(e=>e.open),`cancel preserves parent at ${width}px`);
+ }
+ await page.unroute(`**/api/items/${item.id}`);
+ return {checks,productionWrites:0,patchCalls:calls};
+}

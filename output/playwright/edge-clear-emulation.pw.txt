@@ -1,0 +1,6 @@
+async page => {
+ const cdp=await page.context().newCDPSession(page);
+ await cdp.send('Emulation.setDeviceMetricsOverride',{width:0,height:0,deviceScaleFactor:0,mobile:false});
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+ return {metrics:await page.evaluate(()=>({innerWidth,innerHeight,outerWidth,outerHeight,dpr:devicePixelRatio})),layout:await cdp.send('Page.getLayoutMetrics')};
+}

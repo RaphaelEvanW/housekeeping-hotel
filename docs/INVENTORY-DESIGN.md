@@ -1,12 +1,16 @@
 # Inventory workspace direction
 
-## Kondisi aktif — 22 Oktober 2026
+## Kondisi aktif — 23 Oktober 2026
 
 Panduan implementasi aktif ada di [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md), terutama bagian 3–8. Semua bagian setelah pemisah di bawah adalah proposal historis; jangan memakai warna, ukuran, CTA atau status implementasinya untuk development berikutnya.
 
 Workspace kini mengikuti Figma light/navy/amber dengan Inter. Katalog memakai kartu 264px, gap 16px dan grid terpusat yang menambah kolom saat sidebar diciutkan. Foto placeholder 144px; nama lane 40px, 15/20px 500, pendek rata tengah vertikal. Tombol Detail barang membuka panel unit kanan dari data existing. Search, tabel, pagination, unit cursor, permissions dan logout dipertahankan.
 
-Sidebar desktop 288/72px; mobile modal dari kiri. Glass hanya untuk kotak operasional, menu aktif dan akun. Panel unit 440px nonmodal mulai 1440px, modal di bawah itu dan full width di bawah 640px. Slide masuk 420ms/keluar 280ms, indikator menu 380ms, dengan reduced-motion. Foto nyata dan UI mutasi selain create jenis belum dibuat. Bukti terbaru di DEVLOG; teks proposal lama bukan bukti verifikasi.
+Sidebar desktop 288/72px; mobile modal dari kiri. Glass hanya untuk kotak operasional, menu aktif dan akun. Panel unit 440px nonmodal mulai 1440px, modal di bawah itu dan full width di bawah 640px. Slide masuk 420ms/keluar 280ms, indikator menu 380ms, dengan reduced-motion. Foto katalog nyata, create jenis, Add Stock dan Ubah nama sudah tersedia; mutasi unit/deactivation frontend masih terpisah. Bukti terbaru di DEVLOG; teks proposal lama bukan bukti verifikasi.
+
+Button Ubah nama dengan ikon pensil Phosphor berada di kanan Tambah stok, satu baris setelah count unit; secondary putih/border dengan target44px. Ubah nama di panel detail tersedia bagi Staff/Supervisor, termasuk jenis nonaktif. Native modal maksimum448px memakai name-only PATCH existing, error duplikat/session, pending guard dan unknown-result reload. Portal serta isolasi click/Escape/cancel menjaga panel tetap terbuka. Search/pagination dan data unit/foto/deskripsi tidak diganti. Browser40assertions,93unit tests dan51API tests passed pada23Oktober; screenshot390/1440 ditinjau.
+
+Update Edit23Oktober: owner memakai edit-item-dialog.tsx / EditItemDialog, label Edit dengan pensil dan form nama+deskripsi katalog opsional. Agent memperbaiki urutan deklarasi/validasi dan prop deskripsi;93unit tests dan14browser checks passed. Backend masih strict name-only; simpan deskripsi belum bekerja nyata. Owner menerapkan BE lewat output/backend-edit-item-guide.md. Hasil browser memakai intercept test, bukan bukti persistence.
 
 Update create/stock: Tambah jenis barang tersedia bagi Staff/Supervisor lewat native modal putih maksimum512px: nama wajib, deskripsi opsional maksimum2000, foto katalog opsional maksimum2MiB dengan preview dan penyimpanan lokal privat. Setelah201, pesan hanya Jenis barang berhasil ditambahkan.; pencarian berpindah ke nama baru/page1 supaya kartunya terlihat. Management tetap baca saja. Jenis baru tidak membuat unit.
 
