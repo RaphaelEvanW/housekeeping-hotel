@@ -1,0 +1,581 @@
+- generic [ref=e1]:
+  - paragraph [ref=e2]: Isolated UI fixture â€” no live data
+  - main [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e7]:
+        - paragraph [ref=e8]: Divisi Housekeeping
+        - heading "Katalog & Ketersediaan Aset" [level=1] [ref=e9]
+        - paragraph [ref=e10]: List barang dibawah merupakan list barang yang tersedia, 1 jenis barang dapat memiliki banyak unit.
+      - generic [ref=e11]:
+        - link "Pengajuan penonaktifan" [ref=e12] [cursor=pointer]:
+          - /url: /inventory/deactivation-requests
+        - generic [ref=e13]:
+          - button "Tambah jenis barang" [ref=e14] [cursor=pointer]
+          - status [ref=e15]
+    - region [ref=e16]:
+      - generic [ref=e17]:
+        - generic [ref=e18]:
+          - heading "Jenis barang" [level=2] [ref=e19]
+          - paragraph [ref=e20]: 1 hasil
+        - generic [ref=e21]:
+          - generic [ref=e22]: Cari nama barang
+          - textbox "Cari nama barang" [ref=e23]
+          - button "Cari" [ref=e24] [cursor=pointer]
+      - generic [ref=e25]:
+        - group "Tampilan inventaris" [ref=e26]:
+          - button "Kartu" [pressed] [ref=e27] [cursor=pointer]
+          - button "Tabel" [ref=e28] [cursor=pointer]
+        - list "Katalog jenis barang" [ref=e30]:
+          - listitem [ref=e31]:
+            - generic [ref=e32]:
+              - generic [ref=e33]: Foto belum tersedia
+              - generic [ref=e34]: Aktif
+            - generic [ref=e35]:
+              - heading "Hair dryer" [level=3] [ref=e37]
+              - generic [ref=e39]:
+                - term [ref=e40]: Diperbarui
+                - definition [ref=e41]: 23 Okt 2026
+              - generic [ref=e42]:
+                - link "Detail barang Hair dryer" [ref=e43] [cursor=pointer]:
+                  - /url: /inventory?page=1&item=1c884ffe-af17-42fc-8547-bebfbc6cfba0
+                  - generic [ref=e44]: Detail barang
+                - button "Tambah unit Hair dryer" [ref=e45] [cursor=pointer]
+      - navigation "Halaman jenis barang" [ref=e48]:
+        - paragraph [ref=e49]: Menampilkan 1–1 dari 1 jenis barang
+        - generic [ref=e50]:
+          - button "Sebelumnya" [disabled] [ref=e51]
+          - generic [ref=e52]: "1"
+          - button "Berikutnya" [disabled] [ref=e53]
+    - dialog [ref=e54]:
+      - generic [ref=e55]:
+        - paragraph [ref=e56]: Jenis barang terpilih
+        - button "Tutup daftar unit" [active] [ref=e57] [cursor=pointer]
+      - generic [ref=e60]:
+        - generic [ref=e61]:
+          - generic [ref=e62]:
+            - heading "Hair dryer" [level=2] [ref=e64]
+            - button "Edit jenis barang" [ref=e66] [cursor=pointer]:
+              - generic [ref=e69]: Edit
+          - paragraph [ref=e70]: Peralatan kamar tamu.
+          - generic [ref=e71]:
+            - generic [ref=e72]:
+              - paragraph [ref=e73]: Unit fisik terdaftar
+              - paragraph [ref=e74]: "70"
+            - button "Tambah unit Hair dryer" [ref=e76] [cursor=pointer]:
+              - generic [ref=e79]: Tambah unit
+        - generic [ref=e80]:
+          - region "Daftar unit fisik" [ref=e81]:
+            - table [ref=e82]:
+              - caption [ref=e83]: Unit fisik barang terpilih
+              - rowgroup [ref=e84]:
+                - row [ref=e85]:
+                  - columnheader "No." [ref=e86]
+                  - columnheader "Unit fisik" [ref=e87]
+                  - columnheader "Detail & status" [ref=e88]
+              - rowgroup [ref=e89]:
+                - row [ref=e90]:
+                  - cell "1" [ref=e91]
+                  - rowheader [ref=e92]:
+                    - button "Detail unit Doraemon-EP1 (HK-000001)" [ref=e93] [cursor=pointer]:
+                      - generic [ref=e94]: Doraemon-EP1
+                      - generic [ref=e95]: HK-000001
+                  - cell [ref=e96]:
+                    - paragraph [ref=e97]: "Kondisi: Baik"
+                    - paragraph [ref=e98]: "Kesiapan: Siap"
+                    - paragraph [ref=e99]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e100]:
+                  - cell "2" [ref=e101]
+                  - rowheader [ref=e102]:
+                    - button "Detail unit SERIAL-2 (HK-000002)" [ref=e103] [cursor=pointer]:
+                      - generic [ref=e104]: SERIAL-2
+                      - generic [ref=e105]: HK-000002
+                  - cell [ref=e106]:
+                    - paragraph [ref=e107]: "Kondisi: Baik"
+                    - paragraph [ref=e108]: "Kesiapan: Siap"
+                    - paragraph [ref=e109]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e110]:
+                  - cell "3" [ref=e111]
+                  - rowheader [ref=e112]:
+                    - button "Detail unit SERIAL-3 (HK-000003)" [ref=e113] [cursor=pointer]:
+                      - generic [ref=e114]: SERIAL-3
+                      - generic [ref=e115]: HK-000003
+                  - cell [ref=e116]:
+                    - paragraph [ref=e117]: "Kondisi: Baik"
+                    - paragraph [ref=e118]: "Kesiapan: Siap"
+                    - paragraph [ref=e119]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e120]:
+                  - cell "4" [ref=e121]
+                  - rowheader [ref=e122]:
+                    - button "Detail unit SERIAL-4 (HK-000004)" [ref=e123] [cursor=pointer]:
+                      - generic [ref=e124]: SERIAL-4
+                      - generic [ref=e125]: HK-000004
+                  - cell [ref=e126]:
+                    - paragraph [ref=e127]: "Kondisi: Baik"
+                    - paragraph [ref=e128]: "Kesiapan: Siap"
+                    - paragraph [ref=e129]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e130]:
+                  - cell "5" [ref=e131]
+                  - rowheader [ref=e132]:
+                    - button "Detail unit SERIAL-5 (HK-000005)" [ref=e133] [cursor=pointer]:
+                      - generic [ref=e134]: SERIAL-5
+                      - generic [ref=e135]: HK-000005
+                  - cell [ref=e136]:
+                    - paragraph [ref=e137]: "Kondisi: Baik"
+                    - paragraph [ref=e138]: "Kesiapan: Siap"
+                    - paragraph [ref=e139]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e140]:
+                  - cell "6" [ref=e141]
+                  - rowheader [ref=e142]:
+                    - button "Detail unit SERIAL-6 (HK-000006)" [ref=e143] [cursor=pointer]:
+                      - generic [ref=e144]: SERIAL-6
+                      - generic [ref=e145]: HK-000006
+                  - cell [ref=e146]:
+                    - paragraph [ref=e147]: "Kondisi: Baik"
+                    - paragraph [ref=e148]: "Kesiapan: Siap"
+                    - paragraph [ref=e149]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e150]:
+                  - cell "7" [ref=e151]
+                  - rowheader [ref=e152]:
+                    - button "Detail unit SERIAL-7 (HK-000007)" [ref=e153] [cursor=pointer]:
+                      - generic [ref=e154]: SERIAL-7
+                      - generic [ref=e155]: HK-000007
+                  - cell [ref=e156]:
+                    - paragraph [ref=e157]: "Kondisi: Baik"
+                    - paragraph [ref=e158]: "Kesiapan: Siap"
+                    - paragraph [ref=e159]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e160]:
+                  - cell "8" [ref=e161]
+                  - rowheader [ref=e162]:
+                    - button "Detail unit SERIAL-8 (HK-000008)" [ref=e163] [cursor=pointer]:
+                      - generic [ref=e164]: SERIAL-8
+                      - generic [ref=e165]: HK-000008
+                  - cell [ref=e166]:
+                    - paragraph [ref=e167]: "Kondisi: Baik"
+                    - paragraph [ref=e168]: "Kesiapan: Siap"
+                    - paragraph [ref=e169]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e170]:
+                  - cell "9" [ref=e171]
+                  - rowheader [ref=e172]:
+                    - button "Detail unit SERIAL-9 (HK-000009)" [ref=e173] [cursor=pointer]:
+                      - generic [ref=e174]: SERIAL-9
+                      - generic [ref=e175]: HK-000009
+                  - cell [ref=e176]:
+                    - paragraph [ref=e177]: "Kondisi: Baik"
+                    - paragraph [ref=e178]: "Kesiapan: Siap"
+                    - paragraph [ref=e179]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e180]:
+                  - cell "10" [ref=e181]
+                  - rowheader [ref=e182]:
+                    - button "Detail unit SERIAL-10 (HK-000010)" [ref=e183] [cursor=pointer]:
+                      - generic [ref=e184]: SERIAL-10
+                      - generic [ref=e185]: HK-000010
+                  - cell [ref=e186]:
+                    - paragraph [ref=e187]: "Kondisi: Baik"
+                    - paragraph [ref=e188]: "Kesiapan: Siap"
+                    - paragraph [ref=e189]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e190]:
+                  - cell "11" [ref=e191]
+                  - rowheader [ref=e192]:
+                    - button "Detail unit SERIAL-11 (HK-000011)" [ref=e193] [cursor=pointer]:
+                      - generic [ref=e194]: SERIAL-11
+                      - generic [ref=e195]: HK-000011
+                  - cell [ref=e196]:
+                    - paragraph [ref=e197]: "Kondisi: Baik"
+                    - paragraph [ref=e198]: "Kesiapan: Siap"
+                    - paragraph [ref=e199]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e200]:
+                  - cell "12" [ref=e201]
+                  - rowheader [ref=e202]:
+                    - button "Detail unit SERIAL-12 (HK-000012)" [ref=e203] [cursor=pointer]:
+                      - generic [ref=e204]: SERIAL-12
+                      - generic [ref=e205]: HK-000012
+                  - cell [ref=e206]:
+                    - paragraph [ref=e207]: "Kondisi: Baik"
+                    - paragraph [ref=e208]: "Kesiapan: Siap"
+                    - paragraph [ref=e209]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e210]:
+                  - cell "13" [ref=e211]
+                  - rowheader [ref=e212]:
+                    - button "Detail unit SERIAL-13 (HK-000013)" [ref=e213] [cursor=pointer]:
+                      - generic [ref=e214]: SERIAL-13
+                      - generic [ref=e215]: HK-000013
+                  - cell [ref=e216]:
+                    - paragraph [ref=e217]: "Kondisi: Baik"
+                    - paragraph [ref=e218]: "Kesiapan: Siap"
+                    - paragraph [ref=e219]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e220]:
+                  - cell "14" [ref=e221]
+                  - rowheader [ref=e222]:
+                    - button "Detail unit SERIAL-14 (HK-000014)" [ref=e223] [cursor=pointer]:
+                      - generic [ref=e224]: SERIAL-14
+                      - generic [ref=e225]: HK-000014
+                  - cell [ref=e226]:
+                    - paragraph [ref=e227]: "Kondisi: Baik"
+                    - paragraph [ref=e228]: "Kesiapan: Siap"
+                    - paragraph [ref=e229]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e230]:
+                  - cell "15" [ref=e231]
+                  - rowheader [ref=e232]:
+                    - button "Detail unit SERIAL-15 (HK-000015)" [ref=e233] [cursor=pointer]:
+                      - generic [ref=e234]: SERIAL-15
+                      - generic [ref=e235]: HK-000015
+                  - cell [ref=e236]:
+                    - paragraph [ref=e237]: "Kondisi: Baik"
+                    - paragraph [ref=e238]: "Kesiapan: Siap"
+                    - paragraph [ref=e239]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e240]:
+                  - cell "16" [ref=e241]
+                  - rowheader [ref=e242]:
+                    - button "Detail unit SERIAL-16 (HK-000016)" [ref=e243] [cursor=pointer]:
+                      - generic [ref=e244]: SERIAL-16
+                      - generic [ref=e245]: HK-000016
+                  - cell [ref=e246]:
+                    - paragraph [ref=e247]: "Kondisi: Baik"
+                    - paragraph [ref=e248]: "Kesiapan: Siap"
+                    - paragraph [ref=e249]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e250]:
+                  - cell "17" [ref=e251]
+                  - rowheader [ref=e252]:
+                    - button "Detail unit SERIAL-17 (HK-000017)" [ref=e253] [cursor=pointer]:
+                      - generic [ref=e254]: SERIAL-17
+                      - generic [ref=e255]: HK-000017
+                  - cell [ref=e256]:
+                    - paragraph [ref=e257]: "Kondisi: Baik"
+                    - paragraph [ref=e258]: "Kesiapan: Siap"
+                    - paragraph [ref=e259]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e260]:
+                  - cell "18" [ref=e261]
+                  - rowheader [ref=e262]:
+                    - button "Detail unit SERIAL-18 (HK-000018)" [ref=e263] [cursor=pointer]:
+                      - generic [ref=e264]: SERIAL-18
+                      - generic [ref=e265]: HK-000018
+                  - cell [ref=e266]:
+                    - paragraph [ref=e267]: "Kondisi: Baik"
+                    - paragraph [ref=e268]: "Kesiapan: Siap"
+                    - paragraph [ref=e269]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e270]:
+                  - cell "19" [ref=e271]
+                  - rowheader [ref=e272]:
+                    - button "Detail unit SERIAL-19 (HK-000019)" [ref=e273] [cursor=pointer]:
+                      - generic [ref=e274]: SERIAL-19
+                      - generic [ref=e275]: HK-000019
+                  - cell [ref=e276]:
+                    - paragraph [ref=e277]: "Kondisi: Baik"
+                    - paragraph [ref=e278]: "Kesiapan: Siap"
+                    - paragraph [ref=e279]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e280]:
+                  - cell "20" [ref=e281]
+                  - rowheader [ref=e282]:
+                    - button "Detail unit SERIAL-20 (HK-000020)" [ref=e283] [cursor=pointer]:
+                      - generic [ref=e284]: SERIAL-20
+                      - generic [ref=e285]: HK-000020
+                  - cell [ref=e286]:
+                    - paragraph [ref=e287]: "Kondisi: Baik"
+                    - paragraph [ref=e288]: "Kesiapan: Siap"
+                    - paragraph [ref=e289]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e290]:
+                  - cell "21" [ref=e291]
+                  - rowheader [ref=e292]:
+                    - button "Detail unit SERIAL-21 (HK-000021)" [ref=e293] [cursor=pointer]:
+                      - generic [ref=e294]: SERIAL-21
+                      - generic [ref=e295]: HK-000021
+                  - cell [ref=e296]:
+                    - paragraph [ref=e297]: "Kondisi: Baik"
+                    - paragraph [ref=e298]: "Kesiapan: Siap"
+                    - paragraph [ref=e299]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e300]:
+                  - cell "22" [ref=e301]
+                  - rowheader [ref=e302]:
+                    - button "Detail unit SERIAL-22 (HK-000022)" [ref=e303] [cursor=pointer]:
+                      - generic [ref=e304]: SERIAL-22
+                      - generic [ref=e305]: HK-000022
+                  - cell [ref=e306]:
+                    - paragraph [ref=e307]: "Kondisi: Baik"
+                    - paragraph [ref=e308]: "Kesiapan: Siap"
+                    - paragraph [ref=e309]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e310]:
+                  - cell "23" [ref=e311]
+                  - rowheader [ref=e312]:
+                    - button "Detail unit SERIAL-23 (HK-000023)" [ref=e313] [cursor=pointer]:
+                      - generic [ref=e314]: SERIAL-23
+                      - generic [ref=e315]: HK-000023
+                  - cell [ref=e316]:
+                    - paragraph [ref=e317]: "Kondisi: Baik"
+                    - paragraph [ref=e318]: "Kesiapan: Siap"
+                    - paragraph [ref=e319]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e320]:
+                  - cell "24" [ref=e321]
+                  - rowheader [ref=e322]:
+                    - button "Detail unit SERIAL-24 (HK-000024)" [ref=e323] [cursor=pointer]:
+                      - generic [ref=e324]: SERIAL-24
+                      - generic [ref=e325]: HK-000024
+                  - cell [ref=e326]:
+                    - paragraph [ref=e327]: "Kondisi: Baik"
+                    - paragraph [ref=e328]: "Kesiapan: Siap"
+                    - paragraph [ref=e329]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e330]:
+                  - cell "25" [ref=e331]
+                  - rowheader [ref=e332]:
+                    - button "Detail unit SERIAL-25 (HK-000025)" [ref=e333] [cursor=pointer]:
+                      - generic [ref=e334]: SERIAL-25
+                      - generic [ref=e335]: HK-000025
+                  - cell [ref=e336]:
+                    - paragraph [ref=e337]: "Kondisi: Baik"
+                    - paragraph [ref=e338]: "Kesiapan: Siap"
+                    - paragraph [ref=e339]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e340]:
+                  - cell "26" [ref=e341]
+                  - rowheader [ref=e342]:
+                    - button "Detail unit SERIAL-26 (HK-000026)" [ref=e343] [cursor=pointer]:
+                      - generic [ref=e344]: SERIAL-26
+                      - generic [ref=e345]: HK-000026
+                  - cell [ref=e346]:
+                    - paragraph [ref=e347]: "Kondisi: Baik"
+                    - paragraph [ref=e348]: "Kesiapan: Siap"
+                    - paragraph [ref=e349]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e350]:
+                  - cell "27" [ref=e351]
+                  - rowheader [ref=e352]:
+                    - button "Detail unit SERIAL-27 (HK-000027)" [ref=e353] [cursor=pointer]:
+                      - generic [ref=e354]: SERIAL-27
+                      - generic [ref=e355]: HK-000027
+                  - cell [ref=e356]:
+                    - paragraph [ref=e357]: "Kondisi: Baik"
+                    - paragraph [ref=e358]: "Kesiapan: Siap"
+                    - paragraph [ref=e359]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e360]:
+                  - cell "28" [ref=e361]
+                  - rowheader [ref=e362]:
+                    - button "Detail unit SERIAL-28 (HK-000028)" [ref=e363] [cursor=pointer]:
+                      - generic [ref=e364]: SERIAL-28
+                      - generic [ref=e365]: HK-000028
+                  - cell [ref=e366]:
+                    - paragraph [ref=e367]: "Kondisi: Baik"
+                    - paragraph [ref=e368]: "Kesiapan: Siap"
+                    - paragraph [ref=e369]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e370]:
+                  - cell "29" [ref=e371]
+                  - rowheader [ref=e372]:
+                    - button "Detail unit SERIAL-29 (HK-000029)" [ref=e373] [cursor=pointer]:
+                      - generic [ref=e374]: SERIAL-29
+                      - generic [ref=e375]: HK-000029
+                  - cell [ref=e376]:
+                    - paragraph [ref=e377]: "Kondisi: Baik"
+                    - paragraph [ref=e378]: "Kesiapan: Siap"
+                    - paragraph [ref=e379]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e380]:
+                  - cell "30" [ref=e381]
+                  - rowheader [ref=e382]:
+                    - button "Detail unit SERIAL-30 (HK-000030)" [ref=e383] [cursor=pointer]:
+                      - generic [ref=e384]: SERIAL-30
+                      - generic [ref=e385]: HK-000030
+                  - cell [ref=e386]:
+                    - paragraph [ref=e387]: "Kondisi: Baik"
+                    - paragraph [ref=e388]: "Kesiapan: Siap"
+                    - paragraph [ref=e389]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e390]:
+                  - cell "31" [ref=e391]
+                  - rowheader [ref=e392]:
+                    - button "Detail unit SERIAL-31 (HK-000031)" [ref=e393] [cursor=pointer]:
+                      - generic [ref=e394]: SERIAL-31
+                      - generic [ref=e395]: HK-000031
+                  - cell [ref=e396]:
+                    - paragraph [ref=e397]: "Kondisi: Baik"
+                    - paragraph [ref=e398]: "Kesiapan: Siap"
+                    - paragraph [ref=e399]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e400]:
+                  - cell "32" [ref=e401]
+                  - rowheader [ref=e402]:
+                    - button "Detail unit SERIAL-32 (HK-000032)" [ref=e403] [cursor=pointer]:
+                      - generic [ref=e404]: SERIAL-32
+                      - generic [ref=e405]: HK-000032
+                  - cell [ref=e406]:
+                    - paragraph [ref=e407]: "Kondisi: Baik"
+                    - paragraph [ref=e408]: "Kesiapan: Siap"
+                    - paragraph [ref=e409]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e410]:
+                  - cell "33" [ref=e411]
+                  - rowheader [ref=e412]:
+                    - button "Detail unit SERIAL-33 (HK-000033)" [ref=e413] [cursor=pointer]:
+                      - generic [ref=e414]: SERIAL-33
+                      - generic [ref=e415]: HK-000033
+                  - cell [ref=e416]:
+                    - paragraph [ref=e417]: "Kondisi: Baik"
+                    - paragraph [ref=e418]: "Kesiapan: Siap"
+                    - paragraph [ref=e419]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e420]:
+                  - cell "34" [ref=e421]
+                  - rowheader [ref=e422]:
+                    - button "Detail unit SERIAL-34 (HK-000034)" [ref=e423] [cursor=pointer]:
+                      - generic [ref=e424]: SERIAL-34
+                      - generic [ref=e425]: HK-000034
+                  - cell [ref=e426]:
+                    - paragraph [ref=e427]: "Kondisi: Baik"
+                    - paragraph [ref=e428]: "Kesiapan: Siap"
+                    - paragraph [ref=e429]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e430]:
+                  - cell "35" [ref=e431]
+                  - rowheader [ref=e432]:
+                    - button "Detail unit SERIAL-35 (HK-000035)" [ref=e433] [cursor=pointer]:
+                      - generic [ref=e434]: SERIAL-35
+                      - generic [ref=e435]: HK-000035
+                  - cell [ref=e436]:
+                    - paragraph [ref=e437]: "Kondisi: Baik"
+                    - paragraph [ref=e438]: "Kesiapan: Siap"
+                    - paragraph [ref=e439]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e440]:
+                  - cell "36" [ref=e441]
+                  - rowheader [ref=e442]:
+                    - button "Detail unit SERIAL-36 (HK-000036)" [ref=e443] [cursor=pointer]:
+                      - generic [ref=e444]: SERIAL-36
+                      - generic [ref=e445]: HK-000036
+                  - cell [ref=e446]:
+                    - paragraph [ref=e447]: "Kondisi: Baik"
+                    - paragraph [ref=e448]: "Kesiapan: Siap"
+                    - paragraph [ref=e449]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e450]:
+                  - cell "37" [ref=e451]
+                  - rowheader [ref=e452]:
+                    - button "Detail unit SERIAL-37 (HK-000037)" [ref=e453] [cursor=pointer]:
+                      - generic [ref=e454]: SERIAL-37
+                      - generic [ref=e455]: HK-000037
+                  - cell [ref=e456]:
+                    - paragraph [ref=e457]: "Kondisi: Baik"
+                    - paragraph [ref=e458]: "Kesiapan: Siap"
+                    - paragraph [ref=e459]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e460]:
+                  - cell "38" [ref=e461]
+                  - rowheader [ref=e462]:
+                    - button "Detail unit SERIAL-38 (HK-000038)" [ref=e463] [cursor=pointer]:
+                      - generic [ref=e464]: SERIAL-38
+                      - generic [ref=e465]: HK-000038
+                  - cell [ref=e466]:
+                    - paragraph [ref=e467]: "Kondisi: Baik"
+                    - paragraph [ref=e468]: "Kesiapan: Siap"
+                    - paragraph [ref=e469]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e470]:
+                  - cell "39" [ref=e471]
+                  - rowheader [ref=e472]:
+                    - button "Detail unit SERIAL-39 (HK-000039)" [ref=e473] [cursor=pointer]:
+                      - generic [ref=e474]: SERIAL-39
+                      - generic [ref=e475]: HK-000039
+                  - cell [ref=e476]:
+                    - paragraph [ref=e477]: "Kondisi: Baik"
+                    - paragraph [ref=e478]: "Kesiapan: Siap"
+                    - paragraph [ref=e479]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e480]:
+                  - cell "40" [ref=e481]
+                  - rowheader [ref=e482]:
+                    - button "Detail unit SERIAL-40 (HK-000040)" [ref=e483] [cursor=pointer]:
+                      - generic [ref=e484]: SERIAL-40
+                      - generic [ref=e485]: HK-000040
+                  - cell [ref=e486]:
+                    - paragraph [ref=e487]: "Kondisi: Baik"
+                    - paragraph [ref=e488]: "Kesiapan: Siap"
+                    - paragraph [ref=e489]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e490]:
+                  - cell "41" [ref=e491]
+                  - rowheader [ref=e492]:
+                    - button "Detail unit SERIAL-41 (HK-000041)" [ref=e493] [cursor=pointer]:
+                      - generic [ref=e494]: SERIAL-41
+                      - generic [ref=e495]: HK-000041
+                  - cell [ref=e496]:
+                    - paragraph [ref=e497]: "Kondisi: Baik"
+                    - paragraph [ref=e498]: "Kesiapan: Siap"
+                    - paragraph [ref=e499]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e500]:
+                  - cell "42" [ref=e501]
+                  - rowheader [ref=e502]:
+                    - button "Detail unit SERIAL-42 (HK-000042)" [ref=e503] [cursor=pointer]:
+                      - generic [ref=e504]: SERIAL-42
+                      - generic [ref=e505]: HK-000042
+                  - cell [ref=e506]:
+                    - paragraph [ref=e507]: "Kondisi: Baik"
+                    - paragraph [ref=e508]: "Kesiapan: Siap"
+                    - paragraph [ref=e509]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e510]:
+                  - cell "43" [ref=e511]
+                  - rowheader [ref=e512]:
+                    - button "Detail unit SERIAL-43 (HK-000043)" [ref=e513] [cursor=pointer]:
+                      - generic [ref=e514]: SERIAL-43
+                      - generic [ref=e515]: HK-000043
+                  - cell [ref=e516]:
+                    - paragraph [ref=e517]: "Kondisi: Baik"
+                    - paragraph [ref=e518]: "Kesiapan: Siap"
+                    - paragraph [ref=e519]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e520]:
+                  - cell "44" [ref=e521]
+                  - rowheader [ref=e522]:
+                    - button "Detail unit SERIAL-44 (HK-000044)" [ref=e523] [cursor=pointer]:
+                      - generic [ref=e524]: SERIAL-44
+                      - generic [ref=e525]: HK-000044
+                  - cell [ref=e526]:
+                    - paragraph [ref=e527]: "Kondisi: Baik"
+                    - paragraph [ref=e528]: "Kesiapan: Siap"
+                    - paragraph [ref=e529]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e530]:
+                  - cell "45" [ref=e531]
+                  - rowheader [ref=e532]:
+                    - button "Detail unit SERIAL-45 (HK-000045)" [ref=e533] [cursor=pointer]:
+                      - generic [ref=e534]: SERIAL-45
+                      - generic [ref=e535]: HK-000045
+                  - cell [ref=e536]:
+                    - paragraph [ref=e537]: "Kondisi: Baik"
+                    - paragraph [ref=e538]: "Kesiapan: Siap"
+                    - paragraph [ref=e539]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e540]:
+                  - cell "46" [ref=e541]
+                  - rowheader [ref=e542]:
+                    - button "Detail unit SERIAL-46 (HK-000046)" [ref=e543] [cursor=pointer]:
+                      - generic [ref=e544]: SERIAL-46
+                      - generic [ref=e545]: HK-000046
+                  - cell [ref=e546]:
+                    - paragraph [ref=e547]: "Kondisi: Baik"
+                    - paragraph [ref=e548]: "Kesiapan: Siap"
+                    - paragraph [ref=e549]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e550]:
+                  - cell "47" [ref=e551]
+                  - rowheader [ref=e552]:
+                    - button "Detail unit SERIAL-47 (HK-000047)" [ref=e553] [cursor=pointer]:
+                      - generic [ref=e554]: SERIAL-47
+                      - generic [ref=e555]: HK-000047
+                  - cell [ref=e556]:
+                    - paragraph [ref=e557]: "Kondisi: Baik"
+                    - paragraph [ref=e558]: "Kesiapan: Siap"
+                    - paragraph [ref=e559]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e560]:
+                  - cell "48" [ref=e561]
+                  - rowheader [ref=e562]:
+                    - button "Detail unit SERIAL-48 (HK-000048)" [ref=e563] [cursor=pointer]:
+                      - generic [ref=e564]: SERIAL-48
+                      - generic [ref=e565]: HK-000048
+                  - cell [ref=e566]:
+                    - paragraph [ref=e567]: "Kondisi: Baik"
+                    - paragraph [ref=e568]: "Kesiapan: Siap"
+                    - paragraph [ref=e569]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e570]:
+                  - cell "49" [ref=e571]
+                  - rowheader [ref=e572]:
+                    - button "Detail unit SERIAL-49 (HK-000049)" [ref=e573] [cursor=pointer]:
+                      - generic [ref=e574]: SERIAL-49
+                      - generic [ref=e575]: HK-000049
+                  - cell [ref=e576]:
+                    - paragraph [ref=e577]: "Kondisi: Baik"
+                    - paragraph [ref=e578]: "Kesiapan: Siap"
+                    - paragraph [ref=e579]: "Lokasi: Gudang Housekeeping"
+                - row [ref=e580]:
+                  - cell "50" [ref=e581]
+                  - rowheader [ref=e582]:
+                    - button "Detail unit SERIAL-50 (HK-000050)" [ref=e583] [cursor=pointer]:
+                      - generic [ref=e584]: SERIAL-50
+                      - generic [ref=e585]: HK-000050
+                  - cell [ref=e586]:
+                    - paragraph [ref=e587]: "Kondisi: Baik"
+                    - paragraph [ref=e588]: "Kesiapan: Siap"
+                    - paragraph [ref=e589]: "Lokasi: Gudang Housekeeping"
+          - link "Unit berikutnya" [ref=e591] [cursor=pointer]:
+            - /url: /inventory?page=1&item=1c884ffe-af17-42fc-8547-bebfbc6cfba0&after=50
+      - region "Pengelolaan jenis barang" [ref=e593]:
+        - link "Riwayat pengajuan" [ref=e594] [cursor=pointer]:
+          - /url: /inventory/deactivation-requests?itemId=1c884ffe-af17-42fc-8547-bebfbc6cfba0&status=ALL
+        - button "Ajukan penonaktifan" [ref=e599] [cursor=pointer]

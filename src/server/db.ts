@@ -1,6 +1,6 @@
 import "server-only";
 
-import { PrismaPg } from "@prisma/adapter-pg";
+import { SerializedPrismaPg } from "./serialized-prisma-pg";
 import { PrismaClient } from "../generated/prisma/client";
 import { readDatabaseEnv } from "./env";
 
@@ -10,7 +10,7 @@ const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 export const db =
   globalForPrisma.prisma ??
   new PrismaClient({
-    adapter: new PrismaPg({
+    adapter: new SerializedPrismaPg({
       connectionString: databaseUrl,
       max: 5,
       connectionTimeoutMillis: 5000,

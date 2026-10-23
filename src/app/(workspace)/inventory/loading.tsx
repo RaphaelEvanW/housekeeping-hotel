@@ -1,3 +1,5 @@
+import { WorkspacePageHeading } from "@/components/workspace-page-heading";
+
 export default function InventoryLoading() {
   return (
     <div
@@ -5,7 +7,9 @@ export default function InventoryLoading() {
       aria-label="Memuat inventaris"
       className="space-y-6 p-4 md:p-6 lg:p-8"
     >
-      <div aria-hidden="true" className="h-9 w-40 rounded-md bg-ws-inset" />
+      <WorkspacePageHeading>
+        <h1 className="text-2xl font-semibold text-ws-strong">Inventaris</h1>
+      </WorkspacePageHeading>
       <div aria-hidden="true" className="h-20 rounded-lg bg-ws-surface" />
       <div
         aria-hidden="true"

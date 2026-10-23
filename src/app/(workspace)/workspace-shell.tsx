@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { LogoutButton } from "@/components/logout-button";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
+import { WorkspaceBreadcrumbs } from "@/components/workspace-breadcrumbs";
 import type { getNavigationItems } from "@/lib/navigation";
 import { slidePanel } from "@/lib/panel-motion";
 
@@ -77,7 +78,7 @@ export function WorkspaceShell({ userName, items, children }: {
           <div className="flex min-h-10 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <button type="button" aria-label="Buka sidebar" aria-haspopup="dialog" aria-controls="mobile-navigation" onClick={openMobileMenu} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary lg:hidden"><WorkspaceControlIcon name="menu" /></button>
-              <p className="min-w-0 font-heading text-sm font-semibold text-ws-strong sm:text-base">Mövenpick Hotel <span className="hidden font-normal sm:inline">/ Portal Aset</span></p>
+              <WorkspaceBreadcrumbs />
             </div>
             <p className="hidden max-w-52 truncate text-xs sm:block">{userName}</p>
           </div>

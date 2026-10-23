@@ -9,9 +9,11 @@ import { slidePanel } from "@/lib/panel-motion";
 export function InventoryDrawer({
   closeHref,
   children,
+  footer,
 }: {
   closeHref: string;
   children: ReactNode;
+  footer?: ReactNode;
 }) {
   const router = useRouter();
   const panel = useRef<HTMLDialogElement>(null);
@@ -99,9 +101,9 @@ export function InventoryDrawer({
           dismiss();
         }
       }}
-      className="fixed inset-y-0 right-0 left-auto z-40 m-0 h-svh max-h-none w-full max-w-none overflow-y-auto overscroll-contain border-0 border-l border-ws-divider bg-white p-4 font-workspace text-ws-text shadow-xl outline-none backdrop:bg-black/35 backdrop:transition-opacity backdrop:duration-[280ms] data-[closing=true]:backdrop:opacity-0 sm:w-[440px] sm:p-6 min-[1440px]:top-16 min-[1440px]:h-[calc(100svh-64px)] min-[1440px]:shadow-none motion-reduce:backdrop:transition-none"
+      className="fixed inset-y-0 right-0 left-auto z-40 m-0 h-svh max-h-none w-full max-w-none overflow-hidden overscroll-contain border-0 border-l border-ws-divider bg-white p-0 font-workspace text-ws-text shadow-xl outline-none backdrop:bg-black/35 backdrop:transition-opacity backdrop:duration-[280ms] data-[closing=true]:backdrop:opacity-0 open:flex open:flex-col sm:w-[440px] min-[1440px]:top-16 min-[1440px]:h-[calc(100svh-64px)] min-[1440px]:shadow-none motion-reduce:backdrop:transition-none"
     >
-      <div className="mb-4 flex items-center justify-between gap-3 border-b border-ws-divider pb-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ws-divider px-4 py-3 sm:px-6">
         <p className="text-xs font-medium text-ws-text">
           Jenis barang terpilih
         </p>
@@ -114,7 +116,10 @@ export function InventoryDrawer({
           <WorkspaceControlIcon name="close" />
         </button>
       </div>
-      {children}
+      <div data-drawer-body className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
+        {children}
+      </div>
+      {footer ? <div data-drawer-footer className="shrink-0 border-t border-ws-divider bg-white px-4 pt-3 pb-4 sm:px-6 sm:pb-6">{footer}</div> : null}
     </dialog>
   );
 }

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { unitDisplayName } from "@/lib/unit-display-name";
 import { useInventoryForm } from "@/lib/use-inventory-form";
+import { UnitHistory } from "./unit-history";
 
 type UnitDetails = {
   id: string;
@@ -19,17 +20,34 @@ type UnitDetails = {
   facts: { label: string; value: string }[];
 };
 
-const inputClass = "mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-sidebar/25 bg-ws-surface px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60";
-const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
-const dateFormat = new Intl.DateTimeFormat("id-ID", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Jakarta" });
+const inputClass =
+  "mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-sidebar/25 bg-ws-surface px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60";
+const primaryClass =
+  "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
+const dateFormat = new Intl.DateTimeFormat("id-ID", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Jakarta",
+});
 
-export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetails; itemName: string; canEdit: boolean }) {
+export function UnitDetailsDialog({
+  unit,
+  itemName,
+  canEdit,
+}: {
+  unit: UnitDetails;
+  itemName: string;
+  canEdit: boolean;
+}) {
   const router = useRouter();
   const validation = useInventoryForm();
   const dialog = useRef<HTMLDialogElement>(null);
   const serialInput = useRef<HTMLInputElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
-  const [attempted, setAttempted] = useState<{ serialNumber: string | null; notes: string | null } | null>(null);
+  const [attempted, setAttempted] = useState<{
+    serialNumber: string | null;
+    notes: string | null;
+  } | null>(null);
   const inFlight = useRef(false);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -46,13 +64,17 @@ export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetai
     if (!open) return;
     const element = dialog.current!;
     const overflow = document.body.style.overflow;
-    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousFocus =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
     element.showModal();
     document.body.style.overflow = "hidden";
     return () => {
       element.close();
       document.body.style.overflow = overflow;
-      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+      if (previousFocus?.isConnected)
+        previousFocus.focus({ preventScroll: true });
     };
   }, [open]);
 
@@ -67,7 +89,11 @@ export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetai
       setOpen(true);
       return;
     }
-    setCurrent(previous => Date.parse(unit.updatedAt) >= Date.parse(previous.updatedAt) ? unit : previous);
+    setCurrent((previous) =>
+      Date.parse(unit.updatedAt) >= Date.parse(previous.updatedAt)
+        ? unit
+        : previous,
+    );
     validation.reset();
     setEditing(false);
     setError("");
@@ -104,11 +130,33 @@ export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetai
       });
       const body: unknown = await response.json().catch(() => null);
       if (response.status === 200) {
-        if (!body || typeof body !== "object" || !("unit" in body) || !body.unit || typeof body.unit !== "object") throw new Error("Unconfirmed unit update");
+        if (
+          !body ||
+          typeof body !== "object" ||
+          !("unit" in body) ||
+          !body.unit ||
+          typeof body.unit !== "object"
+        )
+          throw new Error("Unconfirmed unit update");
         const saved = body.unit;
-        if (!("id" in saved) || saved.id !== unit.id || !("itemId" in saved) || saved.itemId !== unit.itemId || !("unitCode" in saved) || saved.unitCode !== unit.unitCode || !("serialNumber" in saved) || saved.serialNumber !== payload.serialNumber || !("notes" in saved) || saved.notes !== payload.notes || !("updatedAt" in saved) || typeof saved.updatedAt !== "string" || !Number.isFinite(Date.parse(saved.updatedAt))) throw new Error("Unconfirmed unit update");
+        if (
+          !("id" in saved) ||
+          saved.id !== unit.id ||
+          !("itemId" in saved) ||
+          saved.itemId !== unit.itemId ||
+          !("unitCode" in saved) ||
+          saved.unitCode !== unit.unitCode ||
+          !("serialNumber" in saved) ||
+          saved.serialNumber !== payload.serialNumber ||
+          !("notes" in saved) ||
+          saved.notes !== payload.notes ||
+          !("updatedAt" in saved) ||
+          typeof saved.updatedAt !== "string" ||
+          !Number.isFinite(Date.parse(saved.updatedAt))
+        )
+          throw new Error("Unconfirmed unit update");
         const updatedAt = saved.updatedAt;
-        setCurrent(previous => ({ ...previous, ...payload, updatedAt }));
+        setCurrent((previous) => ({ ...previous, ...payload, updatedAt }));
         setAttempted(null);
         setEditing(false);
         setSuccess(true);
@@ -116,11 +164,21 @@ export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetai
       } else if ([400, 401, 403, 404, 413, 415].includes(response.status)) {
         setAttempted(null);
         setExpired(response.status === 401);
-        setError(response.status === 401 ? "Sesi Anda berakhir. Masuk kembali untuk melanjutkan." : response.status === 403 ? "Anda tidak memiliki izin mengubah unit." : response.status === 404 ? "Unit tidak ditemukan. Muat ulang daftar barang." : "Periksa nomor seri dan deskripsi sebelum menyimpan kembali.");
+        setError(
+          response.status === 401
+            ? "Sesi Anda berakhir. Masuk kembali untuk melanjutkan."
+            : response.status === 403
+              ? "Anda tidak memiliki izin mengubah unit."
+              : response.status === 404
+                ? "Unit tidak ditemukan. Muat ulang daftar barang."
+                : "Periksa nomor seri dan deskripsi sebelum menyimpan kembali.",
+        );
       } else throw new Error("Unconfirmed unit update");
     } catch {
       setUnconfirmed(true);
-      setError("Hasil perubahan belum dapat dipastikan. Muat ulang data sebelum mengubah unit lagi.");
+      setError(
+        "Hasil perubahan belum dapat dipastikan. Muat ulang data sebelum mengubah unit lagi.",
+      );
     } finally {
       inFlight.current = false;
       setPending(false);
@@ -129,48 +187,273 @@ export function UnitDetailsDialog({ unit, itemName, canEdit }: { unit: UnitDetai
 
   return (
     <>
-      <button type="button" aria-label={displayName === unit.unitCode ? `Detail unit ${unit.unitCode}` : `Detail unit ${displayName} (${unit.unitCode})`} aria-haspopup="dialog" onClick={begin} className="inline-flex min-h-11 max-w-full items-center rounded text-left text-sm font-medium text-ws-strong underline-offset-4 hover:text-ws-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">
-        <span className="line-clamp-2 [overflow-wrap:anywhere]">{displayName}</span>
+      <button
+        type="button"
+        aria-label={
+          displayName === unit.unitCode
+            ? `Detail unit ${unit.unitCode}`
+            : `Detail unit ${displayName} (${unit.unitCode})`
+        }
+        aria-haspopup="dialog"
+        onClick={begin}
+        className="inline-flex min-h-11 max-w-full flex-col items-start justify-start gap-1 rounded text-left text-sm leading-5 font-medium text-ws-strong underline-offset-4 hover:text-ws-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+      >
+        <span className="line-clamp-2 [overflow-wrap:anywhere]">
+          {displayName}
+        </span>
+        <span className="text-xs leading-5 font-normal text-ws-text">{unit.serialNumber ? unit.unitCode : "Tanpa nomor seri"}</span>
       </button>
-      {open ? createPortal(
-        <dialog ref={dialog} aria-labelledby={headingId} onClick={event => event.stopPropagation()} onKeyDown={event => { if (event.key === "Escape") event.stopPropagation(); }} onCancel={event => { event.stopPropagation(); if (inFlight.current) event.preventDefault(); else setOpen(false); }} className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-xl overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-5 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-6">
-          <div className="mb-4 flex items-center justify-between gap-3 border-b border-ws-divider pb-3">
-            <p className="text-xs font-medium">{editing ? "Edit unit" : "Detail unit"}</p>
-            <button type="button" aria-label="Tutup detail unit" disabled={pending} onClick={() => setOpen(false)} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60"><WorkspaceControlIcon name="close" /></button>
-          </div>
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <h2 id={headingId} className="font-heading text-lg leading-7 font-semibold text-ws-strong [overflow-wrap:anywhere]">{unitDisplayName(current)}</h2>
-              <p title={itemName} className="mt-1 line-clamp-2 text-sm leading-6 [overflow-wrap:anywhere]">{itemName}</p>
-            </div>
-            {canEdit && !editing ? <button ref={editButton} type="button" className="ws-button-secondary" aria-label={`Edit unit ${unit.unitCode}`} onClick={() => { setSuccess(false); setError(""); setEditing(true); }}><WorkspaceControlIcon name="pencil" />Edit</button> : null}
-          </div>
-          <p role="status" className={success ? "mt-4 text-sm text-ws-success" : "sr-only"}>{success ? "Unit berhasil diperbarui." : ""}</p>
-          {editing ? (
-            <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="mt-5">
-              <fieldset disabled={pending || unconfirmed} className="min-w-0 space-y-4 border-0 p-0">
-                <div><label htmlFor={`${headingId}-name`} className="block text-sm font-medium text-ws-strong">Nama unit <span className="font-normal text-ws-text">(opsional)</span></label><input id={`${headingId}-name`} disabled value="" readOnly className={inputClass} aria-describedby={`${headingId}-name-help`} /><p id={`${headingId}-name-help`} className="mt-2 text-xs leading-5">Belum tersedia. Penyimpanan nama unit menunggu pengembangan backend.</p></div>
-                <div><label htmlFor={`${headingId}-serial`} className="block text-sm font-medium text-ws-strong">Nomor seri <span className="font-normal text-ws-text">(opsional)</span></label><input ref={serialInput} id={`${headingId}-serial`} name="serialNumber" defaultValue={(unconfirmed ? attempted?.serialNumber : current.serialNumber) ?? ""} className={inputClass} /></div>
-                <div><label htmlFor={`${headingId}-notes`} className="block text-sm font-medium text-ws-strong">Deskripsi <span className="font-normal text-ws-text">(opsional)</span></label><textarea id={`${headingId}-notes`} name="notes" defaultValue={(unconfirmed ? attempted?.notes : current.notes) ?? ""} rows={4} className={`${inputClass} resize-none py-3`} /></div>
-              </fieldset>
-              <p role="alert" className={error ? "mt-4 text-sm leading-6 text-ws-danger" : "sr-only"}>{error}</p>
-              {expired ? <a href="/login" className="mt-2 inline-flex min-h-11 items-center text-sm text-ws-primary underline">Ke halaman masuk</a> : null}
-              <div className="mt-6 flex flex-wrap justify-end gap-3">
-                <button type="button" disabled={pending} className="ws-button-secondary" onClick={() => { if (unconfirmed) setOpen(false); else { setEditing(false); setError(""); } }}>{unconfirmed ? "Tutup" : "Batal"}</button>
-                {unconfirmed ? <button type="button" className={primaryClass} onClick={() => window.location.reload()}>Muat ulang data</button> : <button type="submit" disabled={pending} className={primaryClass}>{pending ? "Menyimpan…" : "Simpan"}</button>}
+      {open
+        ? createPortal(
+            <dialog
+              ref={dialog}
+              aria-labelledby={headingId}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") event.stopPropagation();
+              }}
+              onCancel={(event) => {
+                event.stopPropagation();
+                if (inFlight.current) event.preventDefault();
+                else setOpen(false);
+              }}
+              className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-xl overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-5 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-6"
+            >
+              <div className="mb-4 flex items-center justify-between gap-3 border-b border-ws-divider pb-3">
+                <p className="text-xs font-medium">
+                  {editing ? "Edit unit" : "Detail unit"}
+                </p>
+                <button
+                  type="button"
+                  aria-label="Tutup detail unit"
+                  disabled={pending}
+                  onClick={() => setOpen(false)}
+                  className="inline-flex size-11 shrink-0 items-center justify-center rounded text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60"
+                >
+                  <WorkspaceControlIcon name="close" />
+                </button>
               </div>
-            </form>
-          ) : (
-            <>
-              <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-y border-ws-divider py-5 text-sm sm:gap-x-6">
-                {[{ label: "Kode aset", value: unit.unitCode }, { label: "Nomor seri", value: current.serialNumber || "—" }, ...unit.facts, { label: "Ditambahkan", value: dateFormat.format(new Date(unit.createdAt)) }, { label: "Diperbarui", value: dateFormat.format(new Date(current.updatedAt)) }].map(fact => <div key={fact.label} className="min-w-0"><dt className="text-xs text-ws-text">{fact.label}</dt><dd className="mt-1 leading-6 text-ws-strong [overflow-wrap:anywhere]">{fact.value}</dd></div>)}
-              </dl>
-              <section className="mt-5"><h3 className="text-sm font-medium text-ws-strong">Deskripsi</h3><p className="mt-2 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere]">{current.notes || "Belum ada deskripsi."}</p></section>
-              <p className="mt-5 text-xs leading-5">Foto awal unit belum tersedia.</p>
-            </>
-          )}
-        </dialog>, document.body,
-      ) : null}
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h2
+                    id={headingId}
+                    className="font-heading text-lg leading-7 font-semibold text-ws-strong [overflow-wrap:anywhere]"
+                  >
+                    {unitDisplayName(current)}
+                  </h2>
+                  <p
+                    title={itemName}
+                    className="mt-1 line-clamp-2 text-sm leading-6 [overflow-wrap:anywhere]"
+                  >
+                    {itemName}
+                  </p>
+                </div>
+                {canEdit && !editing ? (
+                  <button
+                    ref={editButton}
+                    type="button"
+                    className="ws-button-secondary"
+                    aria-label={`Edit unit ${unit.unitCode}`}
+                    onClick={() => {
+                      setSuccess(false);
+                      setError("");
+                      setEditing(true);
+                    }}
+                  >
+                    <WorkspaceControlIcon name="pencil" />
+                    Edit
+                  </button>
+                ) : null}
+              </div>
+              <p
+                role="status"
+                className={success ? "mt-4 text-sm text-ws-success" : "sr-only"}
+              >
+                {success ? "Unit berhasil diperbarui." : ""}
+              </p>
+              {editing ? (
+                <form
+                  onSubmit={submit}
+                  noValidate
+                  onInput={validation.onInput}
+                  aria-busy={pending}
+                  className="mt-5"
+                >
+                  <fieldset
+                    disabled={pending || unconfirmed}
+                    className="min-w-0 space-y-4 border-0 p-0"
+                  >
+                    <div>
+                      <label
+                        htmlFor={`${headingId}-name`}
+                        className="block text-sm font-medium text-ws-strong"
+                      >
+                        Nama unit{" "}
+                        <span className="font-normal text-ws-text">
+                          (opsional)
+                        </span>
+                      </label>
+                      <input
+                        id={`${headingId}-name`}
+                        disabled
+                        value=""
+                        readOnly
+                        className={inputClass}
+                        aria-describedby={`${headingId}-name-help`}
+                      />
+                      <p
+                        id={`${headingId}-name-help`}
+                        className="mt-2 text-xs leading-5"
+                      >
+                        belom bisa nih, sabar ye, perlu jadiin backendnya dlu,
+                        makasih.
+                      </p>
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`${headingId}-serial`}
+                        className="block text-sm font-medium text-ws-strong"
+                      >
+                        Nomor seri{" "}
+                        <span className="font-normal text-ws-text">
+                          (opsional)
+                        </span>
+                      </label>
+                      <input
+                        ref={serialInput}
+                        id={`${headingId}-serial`}
+                        name="serialNumber"
+                        defaultValue={
+                          (unconfirmed
+                            ? attempted?.serialNumber
+                            : current.serialNumber) ?? ""
+                        }
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label
+                        htmlFor={`${headingId}-notes`}
+                        className="block text-sm font-medium text-ws-strong"
+                      >
+                        Deskripsi{" "}
+                        <span className="font-normal text-ws-text">
+                          (opsional)
+                        </span>
+                      </label>
+                      <textarea
+                        id={`${headingId}-notes`}
+                        name="notes"
+                        defaultValue={
+                          (unconfirmed ? attempted?.notes : current.notes) ?? ""
+                        }
+                        rows={4}
+                        className={`${inputClass} resize-none py-3`}
+                      />
+                    </div>
+                  </fieldset>
+                  <p
+                    role="alert"
+                    className={
+                      error
+                        ? "mt-4 text-sm leading-6 text-ws-danger"
+                        : "sr-only"
+                    }
+                  >
+                    {error}
+                  </p>
+                  {expired ? (
+                    <a
+                      href="/login"
+                      className="mt-2 inline-flex min-h-11 items-center text-sm text-ws-primary underline"
+                    >
+                      Ke halaman masuk
+                    </a>
+                  ) : null}
+                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                    <button
+                      type="button"
+                      disabled={pending}
+                      className="ws-button-secondary"
+                      onClick={() => {
+                        if (unconfirmed) setOpen(false);
+                        else {
+                          setEditing(false);
+                          setError("");
+                        }
+                      }}
+                    >
+                      {unconfirmed ? "Tutup" : "Batal"}
+                    </button>
+                    {unconfirmed ? (
+                      <button
+                        type="button"
+                        className={primaryClass}
+                        onClick={() => window.location.reload()}
+                      >
+                        Muat ulang data
+                      </button>
+                    ) : (
+                      <button
+                        type="submit"
+                        disabled={pending}
+                        className={primaryClass}
+                      >
+                        {pending ? "Menyimpan…" : "Simpan"}
+                      </button>
+                    )}
+                  </div>
+                </form>
+              ) : (
+                <>
+                  <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-y border-ws-divider py-5 text-sm sm:gap-x-6">
+                    {[
+                      { label: "Kode aset", value: unit.unitCode },
+                      {
+                        label: "Nomor seri",
+                        value: current.serialNumber || "—",
+                      },
+                      ...unit.facts,
+                      {
+                        label: "Ditambahkan",
+                        value: dateFormat.format(new Date(unit.createdAt)),
+                      },
+                      {
+                        label: "Diperbarui",
+                        value: dateFormat.format(new Date(current.updatedAt)),
+                      },
+                    ].map((fact) => (
+                      <div key={fact.label} className="min-w-0">
+                        <dt className="text-xs text-ws-text">{fact.label}</dt>
+                        <dd className="mt-1 leading-6 text-ws-strong [overflow-wrap:anywhere]">
+                          {fact.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                  <section className="mt-5">
+                    <h3 className="text-sm font-medium text-ws-strong">
+                      Deskripsi
+                    </h3>
+                    <p className="mt-2 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere]">
+                      {current.notes || "Belum ada deskripsi."}
+                    </p>
+                  </section>
+                  <p className="mt-5 text-xs leading-5">
+                    Foto awal unit belum tersedia.
+                  </p>
+
+                  <UnitHistory
+                    key={`${unit.id}-${current.updatedAt}`}
+                    unitId={unit.id}
+                    unitCode={unit.unitCode}
+                  />
+                </>
+              )}
+            </dialog>,
+            document.body,
+          )
+        : null}
     </>
   );
 }

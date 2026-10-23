@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { hasPermission } from "@/lib/permissions";
 import { requireActiveUser } from "@/server/require-active-user";
+import { WorkspacePageHeading } from "@/components/workspace-page-heading";
 
 export default async function DashboardPage() {
   const user = await requireActiveUser();
@@ -14,7 +15,7 @@ export default async function DashboardPage() {
   return (
     <main className="mx-auto max-w-[1440px] space-y-6 p-4 md:p-6 lg:p-8">
       <header className="flex flex-wrap items-center justify-between gap-5 rounded-lg bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.05)] sm:p-6">
-        <div className="max-w-xl">
+        <WorkspacePageHeading className="max-w-xl">
           <p className="mb-2 text-[11px] font-semibold tracking-wide text-ws-primary uppercase">
             Housekeeping · Operasional
           </p>
@@ -22,7 +23,7 @@ export default async function DashboardPage() {
             Pusat Kendali Inventaris & Peminjaman Tamu
           </h1>
           <p className="mt-2 text-xs">Selamat datang, {user.name}</p>
-        </div>
+        </WorkspacePageHeading>
         {hasPermission(user.roles, "inventory:view") ? (
           <Link
             href="/inventory"

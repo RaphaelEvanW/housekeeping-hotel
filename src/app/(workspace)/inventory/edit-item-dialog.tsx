@@ -20,6 +20,7 @@ export function EditItemDialog({
   const validation = useInventoryForm();
   const dialog = useRef<HTMLDialogElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const successClose = useRef<HTMLButtonElement>(null);
   const inFlight = useRef(false);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState(false);
@@ -28,6 +29,10 @@ export function EditItemDialog({
   const [expired, setExpired] = useState(false);
   const [unconfirmed, setUnconfirmed] = useState(false);
   const [success, setSuccess] = useState(false);
+
+  useEffect(() => {
+    if (success) successClose.current?.focus({ preventScroll: true });
+  }, [success]);
 
   useEffect(() => {
     if (!open) return;
@@ -169,28 +174,31 @@ export function EditItemDialog({
                 if (inFlight.current) event.preventDefault();
                 else setOpen(false);
               }}
-              className="fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] max-w-md overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-6 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-8"
+              className={`fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] ${success ? "max-w-sm p-4" : "max-w-md p-6 sm:p-8"}`}
             >
               <h2
                 id="edit-item-heading"
-                className="font-heading text-xl leading-7 font-semibold text-ws-strong"
+                className={success ? "sr-only" : "font-heading text-xl leading-7 font-semibold text-ws-strong"}
               >
                 Edit
               </h2>
               {success ? (
-                <div className="mt-5">
+                <div className="flex items-center justify-between gap-3">
                   <p
                     role="status"
-                    className="text-sm leading-6 text-ws-success"
+                    className="text-sm leading-5 text-ws-success"
                   >
                     Jenis barang berhasil diperbarui.
                   </p>
                   <button
+                    ref={successClose}
                     type="button"
                     onClick={() => setOpen(false)}
-                    className={`${actionClass} mt-6`}
+                    aria-label="Tutup konfirmasi"
+                    title="Tutup"
+                    className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
                   >
-                    Selesai
+                    <WorkspaceControlIcon name="close" />
                   </button>
                 </div>
               ) : (

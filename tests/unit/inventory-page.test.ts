@@ -132,7 +132,7 @@ it("renders lifecycle, custody, physical condition, readiness and loss as separa
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
   expect(html).not.toContain("Penguasaan: Tamu");
   expect(html).toContain("Kondisi: Baik");
-  expect(html).toContain("Kesiapan: Tanpa penahanan");
+  expect(html).toContain("Kesiapan: Siap");
   expect(html).not.toContain("Siklus unit: Dipensiunkan");
   expect(html).toContain("Hilang");
   expect(html).toContain('aria-label="Detail unit HK-000125"');
@@ -166,15 +166,29 @@ it.each(["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const)("offers audited re
   expect(html).not.toContain('id="edit-item-name"');
 });
 
+it("links inventory readers to all requests and selected-item history", async () => {
+  mockUser.mockResolvedValueOnce({ id: "manager", name: "Management", isActive: true, roles: ["MANAGEMENT"] });
+  const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
+  expect(html).toContain('href="/inventory/deactivation-requests"');
+  expect(html).toContain(`itemId=${itemId}&amp;status=ALL`);
+  expect(html).toContain("Riwayat pengajuan");
+  expect(html).not.toContain('aria-label="Kembali ke halaman sebelumnya"');
+  expect(html).not.toContain("Ajukan penonaktifan");
+});
+
 it("keeps the empty unit table below the registered count and labelled stock action", async () => {
   const name = "Barang panjang ".repeat(12);
   mockUnits.mockResolvedValueOnce({ item: { id: itemId, name, isActive: true, description: null, photoUrl: null }, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
   const panel = html.slice(html.indexOf('id="inventory-unit-panel"'));
+  expect(panel).toContain('aria-label="Edit jenis barang"');
+  expect(panel).toContain("Ajukan penonaktifan");
   expect(panel.indexOf("Unit fisik terdaftar")).toBeLessThan(panel.indexOf('aria-label="Tambah unit'));
   expect(panel.indexOf('aria-label="Tambah unit')).toBeLessThan(panel.indexOf("<table"));
-  expect(panel.indexOf('aria-label="Tambah unit')).toBeLessThan(panel.indexOf('aria-label="Edit jenis barang"'));
+  expect(panel.indexOf('aria-label="Edit jenis barang"')).toBeLessThan(panel.indexOf("Unit fisik terdaftar"));
   expect(panel.indexOf('aria-label="Edit jenis barang"')).toBeLessThan(panel.indexOf("<table"));
+  expect(panel.indexOf("</table>")).toBeLessThan(panel.indexOf("Riwayat pengajuan"));
+  expect(panel.indexOf("Riwayat pengajuan")).toBeLessThan(panel.indexOf("Ajukan penonaktifan"));
   expect(panel).toContain('colSpan="3"');
   expect(panel).toContain("Belum ada unit fisik untuk jenis barang ini.");
   expect(panel).toContain("Tampilkan nama lengkap barang");

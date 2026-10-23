@@ -44,9 +44,11 @@ const actionClass =
 export function AddStockButton({
   item,
   labelled = false,
+  compact = false,
 }: {
   item: Item;
   labelled?: boolean;
+  compact?: boolean;
 }) {
   const open = useContext(StockContext);
   if (!open)
@@ -58,7 +60,7 @@ export function AddStockButton({
       aria-label={`Tambah unit ${item.name}`}
       title="Tambah unit"
       aria-haspopup="dialog"
-      className={`${actionClass} shrink-0 ${labelled ? "w-full gap-2" : "w-11 px-0"}`}
+      className={`${actionClass} shrink-0 ${labelled ? "w-full gap-2" : "w-11 px-0"} ${compact ? "size-9! min-h-9! p-0! [&>svg]:size-4!" : ""}`}
     >
       <WorkspaceControlIcon name="plus" />
       {labelled ? <span>Tambah unit</span> : null}
@@ -94,7 +96,9 @@ export function StockRegistrationProvider({
   const [expired, setExpired] = useState(false);
   const [success, setSuccess] = useState(0);
   const [successUnits, setSuccessUnits] = useState<Unit[]>([]);
-  const [unitTitles, setUnitTitles] = useState<Record<number, { serial?: string }>>({});
+  const [unitTitles, setUnitTitles] = useState<
+    Record<number, { serial?: string }>
+  >({});
   useEffect(() => {
     if (!uncertain) return;
     const warnBeforeReload = (event: BeforeUnloadEvent) => {
@@ -269,7 +273,12 @@ export function StockRegistrationProvider({
       >
         <header className="shrink-0 border-b border-ws-divider px-5 py-5 sm:px-7">
           <div className="flex items-center justify-between gap-3">
-            <div className="min-w-0 flex-1"><ItemNameDisclosure id="add-stock-heading" name={`Tambah unit — ${item?.name ?? ""}`} /></div>
+            <div className="min-w-0 flex-1">
+              <ItemNameDisclosure
+                id="add-stock-heading"
+                name={`Tambah unit — ${item?.name ?? ""}`}
+              />
+            </div>
             <button
               type="button"
               aria-label="Tutup tambah unit"
@@ -280,30 +289,60 @@ export function StockRegistrationProvider({
               <WorkspaceControlIcon name="close" />
             </button>
           </div>
-          <p id="add-stock-item" className="sr-only">Jenis barang: {item?.name}</p>
+          <p id="add-stock-item" className="sr-only">
+            Jenis barang: {item?.name}
+          </p>
         </header>
         {success ? (
           <>
-          <div className="overflow-y-auto overscroll-contain p-5 sm:p-7">
-            <h3 className="text-lg font-semibold text-ws-strong">Penambahan unit berhasil</h3>
-            <p role="status" className="mt-2 text-sm text-ws-success">
-              {success} unit berhasil ditambahkan.
-            </p>
-            <table className="mt-5 w-full table-fixed text-left text-sm">
-              <caption className="sr-only">Unit dalam penambahan yang berhasil dikonfirmasi</caption>
-              <thead className="border-b border-ws-divider text-xs text-ws-text"><tr><th className="w-10 pb-3 font-medium" scope="col">No.</th><th className="pb-3 pr-3 font-medium" scope="col">Nama unit</th><th className="w-[38%] pb-3 font-medium" scope="col">Nomor seri</th></tr></thead>
-              <tbody className="divide-y divide-ws-divider">{successUnits.map((unit, index) => <tr key={index} className="align-top"><td className="py-3 tabular-nums">{index + 1}</td><td className="py-3 pr-3 text-ws-strong [overflow-wrap:anywhere]">{item?.name}</td><td className="py-3 [overflow-wrap:anywhere]">{unit.serialNumber || "Tanpa nomor seri"}</td></tr>)}</tbody>
-            </table>
-          </div>
-          <footer className="flex shrink-0 justify-end border-t border-ws-divider px-5 py-4 sm:px-7">
-            <button
-              type="button"
-              onClick={() => dialog.current?.close()}
-              className={actionClass}
-            >
-              Selesai
-            </button>
-          </footer>
+            <div className="overflow-y-auto overscroll-contain p-5 sm:p-7">
+              <h3 className="text-lg font-semibold text-ws-strong">
+                Penambahan unit berhasil
+              </h3>
+              <p role="status" className="mt-2 text-sm text-ws-success">
+                {success} unit berhasil ditambahkan.
+              </p>
+              <table className="mt-5 w-full table-fixed text-left text-sm">
+                <caption className="sr-only">
+                  Unit dalam penambahan yang berhasil dikonfirmasi
+                </caption>
+                <thead className="border-b border-ws-divider text-xs text-ws-text">
+                  <tr>
+                    <th className="w-10 pb-3 font-medium" scope="col">
+                      No.
+                    </th>
+                    <th className="pb-3 pr-3 font-medium" scope="col">
+                      Nama unit
+                    </th>
+                    <th className="w-[38%] pb-3 font-medium" scope="col">
+                      Nomor seri
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-ws-divider">
+                  {successUnits.map((unit, index) => (
+                    <tr key={index} className="align-top">
+                      <td className="py-3 tabular-nums">{index + 1}</td>
+                      <td className="py-3 pr-3 text-ws-strong [overflow-wrap:anywhere]">
+                        {item?.name}
+                      </td>
+                      <td className="py-3 [overflow-wrap:anywhere]">
+                        {unit.serialNumber || "Tanpa nomor seri"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <footer className="flex shrink-0 justify-end border-t border-ws-divider px-5 py-4 sm:px-7">
+              <button
+                type="button"
+                onClick={() => dialog.current?.close()}
+                className={actionClass}
+              >
+                Selesai
+              </button>
+            </footer>
           </>
         ) : (
           <form
@@ -342,8 +381,19 @@ export function StockRegistrationProvider({
                     onChange={(event) => {
                       setQuantity(event.target.value);
                       setOpenUnit(null);
-                      const nextCount = Math.floor(Math.max(0, Math.min(100, Number(event.target.value) || 0)));
-                      setUnitTitles(previous => Object.fromEntries(Object.entries(previous).filter(([index]) => Number(index) < nextCount)));
+                      const nextCount = Math.floor(
+                        Math.max(
+                          0,
+                          Math.min(100, Number(event.target.value) || 0),
+                        ),
+                      );
+                      setUnitTitles((previous) =>
+                        Object.fromEntries(
+                          Object.entries(previous).filter(
+                            ([index]) => Number(index) < nextCount,
+                          ),
+                        ),
+                      );
                     }}
                     disabled={locked}
                     aria-invalid={Boolean(validation.errors["stock-quantity"])}
@@ -351,10 +401,16 @@ export function StockRegistrationProvider({
                     data-invalid-message="Jumlah unit harus bilangan bulat 1–100."
                     className={`${inputClass} [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none`}
                   />
-                  <p id="stock-quantity-help" className="mt-2 text-xs leading-5">
+                  <p
+                    id="stock-quantity-help"
+                    className="mt-2 text-xs leading-5"
+                  >
                     1-100 unit per penambahan
                   </p>
-                  <FieldError id="stock-quantity-error" message={validation.errors["stock-quantity"]} />
+                  <FieldError
+                    id="stock-quantity-error"
+                    message={validation.errors["stock-quantity"]}
+                  />
                 </div>
                 <div>
                   <label
@@ -371,7 +427,11 @@ export function StockRegistrationProvider({
                     disabled={locked || locations.length === 0}
                     data-required-message="Pilih lokasi awal."
                     aria-invalid={Boolean(validation.errors["stock-location"])}
-                    aria-describedby={validation.errors["stock-location"] ? "stock-location-error" : undefined}
+                    aria-describedby={
+                      validation.errors["stock-location"]
+                        ? "stock-location-error"
+                        : undefined
+                    }
                     className={inputClass}
                   >
                     <option value="" disabled>
@@ -383,7 +443,10 @@ export function StockRegistrationProvider({
                       </option>
                     ))}
                   </select>
-                  <FieldError id="stock-location-error" message={validation.errors["stock-location"]} />
+                  <FieldError
+                    id="stock-location-error"
+                    message={validation.errors["stock-location"]}
+                  />
                   {locations.length === 0 ? (
                     <p
                       role="alert"
@@ -419,7 +482,14 @@ export function StockRegistrationProvider({
                       id={`stock-unit-heading-${index}`}
                       className="flex min-h-14 list-none items-center justify-between gap-3 bg-ws-background px-4 py-3 text-sm font-medium text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-ws-primary [&::-webkit-details-marker]:hidden"
                     >
-                      <span className="min-w-0 line-clamp-2 text-left [overflow-wrap:anywhere]"><span className="tabular-nums">{index + 1}</span> — {item?.name} — <span className="font-normal text-ws-text">{unitTitles[index]?.serial?.trim() || "Tanpa nomor seri"}</span></span>
+                      <span className="min-w-0 line-clamp-2 text-left [overflow-wrap:anywhere]">
+                        <span className="tabular-nums">{index + 1}</span> —{" "}
+                        {item?.name} —{" "}
+                        <span className="font-normal text-ws-text">
+                          {unitTitles[index]?.serial?.trim() ||
+                            "Tanpa nomor seri"}
+                        </span>
+                      </span>
                       <span className="text-xs text-ws-primary group-open:hidden">
                         Buka
                       </span>
@@ -433,9 +503,30 @@ export function StockRegistrationProvider({
                       className="grid min-w-0 grid-cols-1 gap-4 border-0 p-4 sm:grid-cols-2"
                     >
                       <div className="min-w-0 sm:col-span-2">
-                        <label htmlFor={`stock-unit-name-${index}`} className="block text-sm font-medium text-ws-strong">Nama unit <span className="font-normal text-ws-text">(opsional)</span></label>
-                        <input id={`stock-unit-name-${index}`} disabled value="" readOnly className={inputClass} aria-describedby={`stock-unit-name-help-${index}`} />
-                        <p id={`stock-unit-name-help-${index}`} className="mt-2 text-xs leading-5">Belum tersedia. Penyimpanan nama unit menunggu pengembangan backend.</p>
+                        <label
+                          htmlFor={`stock-unit-name-${index}`}
+                          className="block text-sm font-medium text-ws-strong"
+                        >
+                          Nama unit{" "}
+                          <span className="font-normal text-ws-text">
+                            (opsional)
+                          </span>
+                        </label>
+                        <input
+                          id={`stock-unit-name-${index}`}
+                          disabled
+                          value=""
+                          readOnly
+                          className={inputClass}
+                          aria-describedby={`stock-unit-name-help-${index}`}
+                        />
+                        <p
+                          id={`stock-unit-name-help-${index}`}
+                          className="mt-2 text-xs leading-5"
+                        >
+                          belom bisa nih, sabar ye, perlu jadiin backendnya dlu,
+                          makasih.
+                        </p>
                       </div>
                       <div className="min-w-0">
                         <label
@@ -449,8 +540,14 @@ export function StockRegistrationProvider({
                           name={`condition-${index}`}
                           defaultValue="GOOD"
                           required
-                          aria-invalid={Boolean(validation.errors[`stock-unit-condition-${index}`])}
-                          aria-describedby={validation.errors[`stock-unit-condition-${index}`] ? `stock-unit-condition-error-${index}` : undefined}
+                          aria-invalid={Boolean(
+                            validation.errors[`stock-unit-condition-${index}`],
+                          )}
+                          aria-describedby={
+                            validation.errors[`stock-unit-condition-${index}`]
+                              ? `stock-unit-condition-error-${index}`
+                              : undefined
+                          }
                           className={inputClass}
                         >
                           {Object.entries(conditions).map(([value, label]) => (
@@ -459,7 +556,12 @@ export function StockRegistrationProvider({
                             </option>
                           ))}
                         </select>
-                        <FieldError id={`stock-unit-condition-error-${index}`} message={validation.errors[`stock-unit-condition-${index}`]} />
+                        <FieldError
+                          id={`stock-unit-condition-error-${index}`}
+                          message={
+                            validation.errors[`stock-unit-condition-${index}`]
+                          }
+                        />
                       </div>
                       <div className="min-w-0">
                         <label
@@ -475,7 +577,15 @@ export function StockRegistrationProvider({
                           id={`stock-serial-${index}`}
                           name={`serial-${index}`}
                           className={inputClass}
-                          onChange={event => setUnitTitles(previous => ({ ...previous, [index]: { ...previous[index], serial: event.target.value } }))}
+                          onChange={(event) =>
+                            setUnitTitles((previous) => ({
+                              ...previous,
+                              [index]: {
+                                ...previous[index],
+                                serial: event.target.value,
+                              },
+                            }))
+                          }
                         />
                       </div>
                       <div className="min-w-0 sm:col-span-2">

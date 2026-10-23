@@ -19,6 +19,9 @@ import { getStockLocations } from "@/server/stock-locations";
 import { EditItemDialog } from "./edit-item-dialog";
 import { ItemNameDisclosure } from "@/components/item-name-disclosure";
 import { UnitDetailsDialog } from "./unit-details-dialog";
+import { RequestItemDeactivationDialog } from "./request-item-deactivation-dialog";
+import { WorkspacePageHeading } from "@/components/workspace-page-heading";
+import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 
 export const metadata: Metadata = { title: "Inventaris | Housekeeping" };
 
@@ -42,9 +45,9 @@ const conditionLabels = {
 } as const;
 
 const readinessLabels = {
-  CLEAR: "Tanpa penahanan",
-  ON_HOLD: "Ditahan",
-  PENDING_INSPECTION: "Menunggu inspeksi",
+  CLEAR: "Siap",
+  ON_HOLD: "Belum siap",
+  PENDING_INSPECTION: "Perlu pemeriksaan",
   PENDING_VERIFICATION: "Menunggu verifikasi",
 } as const;
 
@@ -55,8 +58,7 @@ const custodyLabels = {
   EXTERNAL_VENDOR: "Vendor eksternal",
 } as const;
 
-const buttonClass =
-  "ws-button-secondary";
+const buttonClass = "ws-button-secondary";
 
 const dateFormat = new Intl.DateTimeFormat("id-ID", {
   day: "numeric",
@@ -91,7 +93,9 @@ export default async function InventoryPage({
   ) {
     return (
       <main className="p-4 md:p-6">
-        <h1 className="text-2xl font-semibold text-ws-strong">Inventaris</h1>
+        <WorkspacePageHeading>
+          <h1 className="text-2xl font-semibold text-ws-strong">Inventaris</h1>
+        </WorkspacePageHeading>
         <p role="alert" className="mt-4 text-sm text-ws-danger">
           Parameter pencarian atau pilihan barang tidak valid.
         </p>
@@ -135,7 +139,7 @@ export default async function InventoryPage({
     >
       <main className="mx-auto max-w-[1440px] space-y-6 p-4 md:p-6 lg:p-8 min-[1440px]:has-[#inventory-unit-panel[open]]:mr-[440px]">
         <header className="flex flex-wrap items-start justify-between gap-5">
-          <div className="min-w-0 flex-1 basis-80">
+          <WorkspacePageHeading className="flex-1 basis-80">
             <p className="mb-2 text-[11px] font-semibold tracking-wide text-ws-primary uppercase">
               Divisi Housekeeping
             </p>
@@ -146,10 +150,15 @@ export default async function InventoryPage({
               List barang dibawah merupakan list barang yang tersedia, 1 jenis
               barang dapat memiliki banyak unit.
             </p>
+          </WorkspacePageHeading>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/inventory/deactivation-requests" className="inline-flex min-h-11 items-center justify-center rounded-md border border-ws-sidebar bg-ws-sidebar px-3 text-sm leading-5 font-medium tracking-[0.01em] text-white transition-colors duration-150 hover:bg-ws-sidebar/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary motion-reduce:transition-none">
+              Pengajuan penonaktifan
+            </Link>
+            {hasPermission(user.roles, "inventory:item:create") ? (
+              <CreateItemDialog />
+            ) : null}
           </div>
-          {hasPermission(user.roles, "inventory:item:create") ? (
-            <CreateItemDialog />
-          ) : null}
         </header>
 
         <section aria-labelledby="item-list-heading" className="@container">
@@ -300,7 +309,7 @@ export default async function InventoryPage({
                       </th>
                       <th
                         scope="col"
-                        className="w-44 px-4 py-3 text-right font-medium md:px-5"
+                        className="w-40 px-2 py-3 text-right font-medium sm:w-52 sm:px-4 md:px-5"
                       >
                         Aksi
                       </th>
@@ -314,7 +323,7 @@ export default async function InventoryPage({
                       >
                         <th
                           scope="row"
-                          className="px-4 py-4 font-medium text-ws-strong md:px-5"
+                          className="px-4 py-3 font-medium text-ws-strong md:px-5"
                         >
                           <span className="block break-words">{item.name}</span>
                           <span className="mt-1 block text-xs font-normal text-ws-text md:hidden">
@@ -324,7 +333,7 @@ export default async function InventoryPage({
                             Diperbarui {dateFormat.format(item.updatedAt)}
                           </span>
                         </th>
-                        <td className="hidden px-4 py-4 md:table-cell">
+                        <td className="hidden px-4 py-3 md:table-cell">
                           <span
                             className={`inline-flex items-center gap-2 ${item.isActive ? "text-ws-success" : "text-ws-text"}`}
                           >
@@ -335,11 +344,11 @@ export default async function InventoryPage({
                             {item.isActive ? "Aktif" : "Nonaktif"}
                           </span>
                         </td>
-                        <td className="hidden px-4 py-4 text-ws-text tabular-nums lg:table-cell">
+                        <td className="hidden px-4 py-3 text-ws-text tabular-nums lg:table-cell">
                           {dateFormat.format(item.updatedAt)}
                         </td>
-                        <td className="px-4 py-4 text-right md:px-5">
-                          <div className="flex flex-wrap justify-end gap-2">
+                        <td className="px-2 py-3 text-right sm:px-4 md:px-5">
+                          <div className="flex items-center justify-end gap-2">
                             <Link
                               href={href({ item: item.id })}
                               scroll={false}
@@ -347,7 +356,7 @@ export default async function InventoryPage({
                               aria-current={
                                 selectedId === item.id ? "true" : undefined
                               }
-                              className={`${buttonClass} whitespace-nowrap`}
+                              className={`${buttonClass} min-h-9! shrink-0 px-2.5! text-xs! whitespace-nowrap`}
                             >
                               <UnitLinkLabel />
                             </Link>
@@ -355,6 +364,7 @@ export default async function InventoryPage({
                             hasPermission(user.roles, "inventory:stock:add") ? (
                               <AddStockButton
                                 item={{ id: item.id, name: item.name }}
+                                compact
                               />
                             ) : null}
                           </div>
@@ -411,9 +421,39 @@ export default async function InventoryPage({
         </section>
 
         {selectedId ? (
-          <InventoryDrawer key={selectedId} closeHref={href({})}>
+          <InventoryDrawer key={selectedId} closeHref={href({})} footer={selected ? (
+            <section aria-label="Pengelolaan jenis barang">
+              <Link
+                href={`/inventory/deactivation-requests?${new URLSearchParams({ itemId: selected.item.id, status: "ALL" })}`}
+                className="flex min-h-11 items-center justify-between gap-3 rounded-md text-sm text-ws-strong hover:text-ws-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+              >
+                <span>Riwayat pengajuan</span>
+                <WorkspaceControlIcon name="caretRight" />
+              </Link>
+              {selected.item.isActive && hasPermission(user.roles, "inventory:item:deactivation:request") ? (
+                <div className="mt-3 flex justify-end">
+                  <RequestItemDeactivationDialog key={selected.item.id} item={{ id: selected.item.id, name: selected.item.name }} actorId={user.id} />
+                </div>
+              ) : null}
+            </section>
+          ) : null}>
             <div className="min-w-0 max-w-full">
-              <ItemNameDisclosure id="units-heading" name={selected ? selected.item.name : "Barang tidak ditemukan"} />
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <ItemNameDisclosure
+                    id="units-heading"
+                    name={selected ? selected.item.name : "Barang tidak ditemukan"}
+                  />
+                </div>
+                {selected && hasPermission(user.roles, "inventory:item:update") ? (
+                  <div className="shrink-0">
+                    <EditItemDialog
+                      key={selected.item.id}
+                      item={{ id: selected.item.id, name: selected.item.name, description: selected.item.description }}
+                    />
+                  </div>
+                ) : null}
+              </div>
               {selected?.item.photoUrl ? (
                 <Image
                   src={selected.item.photoUrl}
@@ -430,11 +470,16 @@ export default async function InventoryPage({
                 </p>
               ) : null}
               {selected ? (
-                <div className="mt-4 flex items-center justify-between gap-3 rounded bg-ws-inset px-3 py-2">
-                  <p className="text-xs">Unit fisik terdaftar</p>
-                  <p className="text-xl font-semibold text-ws-strong tabular-nums">
-                    {selected.totalRegistered}
-                  </p>
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-ws-divider pt-4">
+                  <div>
+                    <p className="text-xs">Unit fisik terdaftar</p>
+                    <p className="mt-1 text-2xl font-semibold leading-8 text-ws-strong tabular-nums">{selected.totalRegistered}</p>
+                  </div>
+                  {selected.item.isActive && hasPermission(user.roles, "inventory:stock:add") ? (
+                    <div className="w-40 max-w-full shrink-0">
+                      <AddStockButton labelled item={{ id: selected.item.id, name: selected.item.name }} />
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
               {!selected ? (
@@ -442,42 +487,19 @@ export default async function InventoryPage({
                   Pilihan barang ini sudah tidak tersedia.
                 </p>
               ) : null}
-              {selected &&
-              (hasPermission(user.roles, "inventory:item:update") ||
-                (selected.item.isActive &&
-                  hasPermission(user.roles, "inventory:stock:add"))) ? (
-                <div
-                  className={`mt-4 grid gap-2 ${selected.item.isActive && hasPermission(user.roles, "inventory:stock:add") && hasPermission(user.roles, "inventory:item:update") ? "grid-cols-[minmax(0,1fr)_auto]" : "grid-cols-1"}`}
-                >
-                  {selected.item.isActive &&
-                  hasPermission(user.roles, "inventory:stock:add") ? (
-                    <AddStockButton
-                      labelled
-                      item={{ id: selected.item.id, name: selected.item.name }}
-                    />
-                  ) : null}
-                  {hasPermission(user.roles, "inventory:item:update") ? (
-                    <EditItemDialog
-                      key={selected.item.id}
-                      item={{
-                        id: selected.item.id,
-                        name: selected.item.name,
-                        description: selected.item.description,
-                      }}
-                    />
-                  ) : null}
-                </div>
-              ) : null}
             </div>
             {selected ? (
               <div className="mt-5">
+                <div role="region" aria-label="Daftar unit fisik" tabIndex={0} className="max-h-[40svh] overflow-y-auto overscroll-contain rounded-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">
                 <table className="w-full table-fixed text-left text-xs">
                   <caption className="sr-only">
                     Unit fisik barang terpilih
                   </caption>
-                  <thead className="border-b border-ws-divider text-ws-text">
+                  <thead className="sticky top-0 z-10 border-b border-ws-divider bg-white text-ws-text">
                     <tr>
-                      <th scope="col" className="w-8 py-3 pr-2 font-medium">No.</th>
+                      <th scope="col" className="w-8 py-3 pr-2 font-medium">
+                        No.
+                      </th>
                       <th scope="col" className="w-[44%] py-3 pr-3 font-medium">
                         Unit fisik
                       </th>
@@ -501,11 +523,16 @@ export default async function InventoryPage({
                         key={unit.id}
                         className="align-top [overflow-wrap:anywhere]"
                       >
-                        <td className="py-3 pr-2 text-ws-text tabular-nums">{index + 1}</td>
-                        <th scope="row" className="py-2 pr-3 font-normal">
+                        <td className="py-3 pr-2 align-top leading-5 text-ws-text tabular-nums">
+                          {index + 1}
+                        </td>
+                        <th scope="row" className="py-3 pr-3 align-top leading-5 font-normal">
                           <UnitDetailsDialog
                             itemName={selected.item.name}
-                            canEdit={hasPermission(user.roles, "inventory:unit:update")}
+                            canEdit={hasPermission(
+                              user.roles,
+                              "inventory:unit:update",
+                            )}
                             unit={{
                               id: unit.id,
                               itemId: selected.item.id,
@@ -516,18 +543,43 @@ export default async function InventoryPage({
                               createdAt: unit.createdAt.toISOString(),
                               updatedAt: unit.updatedAt.toISOString(),
                               facts: [
-                                { label: "Kondisi unit", value: conditionLabels[unit.condition] },
-                                { label: "Kesiapan", value: readinessLabels[unit.readiness] },
-                                { label: "Penguasaan", value: custodyLabels[unit.custody] },
-                                { label: "Lokasi", value: unit.location?.name ?? "Belum dicatat" },
-                                { label: "Siklus unit", value: unit.lifecycle === "ACTIVE" ? "Aktif" : "Dipensiunkan" },
-                                { label: "Status kehilangan", value: unit.lossState === "NONE" ? "Tidak ada laporan" : unit.lossState === "LOST" ? "Hilang" : "Belum ditemukan" },
+                                {
+                                  label: "Kondisi unit",
+                                  value: conditionLabels[unit.condition],
+                                },
+                                {
+                                  label: "Kesiapan",
+                                  value: readinessLabels[unit.readiness],
+                                },
+                                {
+                                  label: "Penguasaan",
+                                  value: custodyLabels[unit.custody],
+                                },
+                                {
+                                  label: "Lokasi",
+                                  value: unit.location?.name ?? "Belum dicatat",
+                                },
+                                {
+                                  label: "Siklus unit",
+                                  value:
+                                    unit.lifecycle === "ACTIVE"
+                                      ? "Aktif"
+                                      : "Dipensiunkan",
+                                },
+                                {
+                                  label: "Status kehilangan",
+                                  value:
+                                    unit.lossState === "NONE"
+                                      ? "Tidak ada laporan"
+                                      : unit.lossState === "LOST"
+                                        ? "Hilang"
+                                        : "Belum ditemukan",
+                                },
                               ],
                             }}
                           />
-                          <p className="break-words text-xs text-ws-text">{unit.serialNumber ? unit.unitCode : "Tanpa nomor seri"}</p>
                         </th>
-                        <td className="py-3">
+                        <td className="py-3 align-top leading-5">
                           <p className="font-medium text-ws-strong">
                             Kondisi: {conditionLabels[unit.condition]}
                           </p>
@@ -551,6 +603,7 @@ export default async function InventoryPage({
                     ))}
                   </tbody>
                 </table>
+                </div>
                 <div className="mt-4 flex flex-wrap gap-2">
                   {after ? (
                     <Link
