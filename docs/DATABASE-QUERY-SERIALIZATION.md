@@ -20,6 +20,6 @@ Revisit this small compatibility adapter when upgrading Prisma/pg; remove it onl
 
 A fresh-process read-only repeat of the request-list and unit-history services completed with zero overlapping-query warnings after the change. The request list was empty in that probe; no fixture or development data was created. This does not verify every mutation, rollback or concurrency path.
 
-tests/unit/serialized-prisma-pg.test.ts covers single-transaction query ordering, original error propagation with a later rollback statement, and independent transactions remaining concurrent. Owner runs these checks and the full integration suite; agent did not run npm lint/typecheck/tests.
+tests/unit/serialized-prisma-pg.test.ts covers single-transaction query ordering, original error propagation with a later rollback statement, and independent transactions remaining concurrent. The agent subsequently ran typecheck and the unit suite on23October2026:18files/155tests passed, including these adapter unit tests. Full lint had0errors/1warning in a browser callback artifact. The transaction integration suite was not rerun for this adapter; unit and read-only probe results do not establish real rollback/concurrency coverage.
 
 Restart the development server after this change: db.ts preserves the Prisma client on globalThis, so hot reload can retain the previous adapter. Production starts with a fresh process as usual. No db:generate or migration is required.

@@ -35,20 +35,20 @@ The following are confirmed product requirements, not claims that all features a
 - Keep lifecycle, custody/location, physical condition, readiness/holds, and guest obligations separate. LOST/MISSING are not physical conditions. Server-side eligibility and concurrency checks govern borrowing.
 - Issue exact eligible units to a STAYING guest visit, with fresh mandatory photo evidence per unit. Each issue occasion has its own borrowing record.
 - Support partial and combined returns across borrowings for one visit. Default condition is GOOD; non-GOOD requires a photo and inspection. Save actual receiving location per line. Physical return closes only that unit's obligation, even if damaged.
-- Default new and approved replacement units to HK Main Storage in HOUSEKEEPING custody. Do not add an unnecessary location-selection step to those operations.
+- Add Stock selects one active initial location for the whole batch; new units remain in HOUSEKEEPING custody. Approved replacement units retain the confirmed HK Main Storage default. Existing legacy Add Stock requests may omit location and use their original storage fallback.
 - Staff may immediately report issues and correct routine clerical errors. Supervisor verification requires per-unit Result, Notes, and Photo. Recording completed repairs does not automatically make a unit ready.
 - Preserve the specified LOST settlement roles: Supervisor approves replacement/compensation; Supervisor proposes WRITE_OFF and Management approves. Replacement creates exactly one new unit only after receipt and approval. Settlement must not fabricate a return; later recovery is a separate event.
 - Coupled operations and batch saves are all-or-nothing. Reject double borrowing, duplicate returns, and duplicate settlement effects. Preserve audited history and finalized evidence, including after checkout or retirement.
 - Validate and authorize mutations on the server. Treat guest information and evidence photos as sensitive; do not expose private evidence URLs or invent production data.
-- No PMS, payment integration, multi-property, reporting modules, repair dispatch, or additional approval chains without explicit scope changes.
+- No PMS, payment integration, multi-property, repair dispatch, or additional approval chains without explicit scope changes. Report export is a future requested direction; no reporting implementation is implied.
 
-Existing implementation uses Next.js App Router, TypeScript, Tailwind CSS, Prisma/PostgreSQL, and Better Auth. Login has an accepted responsive presentation; dashboard currently provides a basic authenticated welcome and logout. Operational requirements above must not be presented as already shipped. Check source and `docs/DEVLOG.md` for current implementation evidence.
+Existing implementation uses Next.js App Router, TypeScript, Tailwind CSS, Prisma/PostgreSQL, and Better Auth. Login and the responsive workspace shell are implemented. Dashboard statistics are explicitly labelled Data demonstrasi. Inventory supports real catalog search/cards/table, create type with optional catalog photo/description, edit type name/description, Add Stock, physical-unit details/serial-description correction and audit history. Deactivation submission/list/filters, Supervisor decisions and requester cancellation have connected frontend controls. Unit name and initial-photo persistence remain pending backend work. Operational requirements above must not be presented as already shipped. Check source and `docs/DEVLOG.md` for current implementation evidence.
 
 Open technical/operational decisions include production hosting and photo storage configuration, limits, and retention. No product-specific accessibility standard or offline-use requirement has been confirmed.
 
 ## Brand Commitments
 
-The internal product is named Housekeeping and communicates in straightforward Indonesian. Preserve the accepted login identity during refinement; its assets and provenance are documented in `docs/LOGIN-DESIGN.md`. This does not establish a visual recipe for every future surface.
+The internal product is named Housekeeping and communicates in straightforward Indonesian. Mövenpick Hotel is the approved display name. Workspace uses the approved Figma light/navy/amber direction and Inter; owner revisions and responsive component rules live in docs/DESIGN_SYSTEM.md. Preserve the accepted photo/layout and navy-glass login during refinement; its assets and provenance are documented in `docs/LOGIN-DESIGN.md`. This does not establish a visual recipe for every future surface.
 
 ## Evidence on Hand
 
