@@ -15,6 +15,7 @@ export async function getItemUnitHistory(rawInput: unknown) {
         select: {
           id: true,
           unitNumber: true,
+          name: true,
           item: {
             select: {
               id: true,
@@ -64,6 +65,7 @@ export async function getItemUnitHistory(rawInput: unknown) {
       return {
         unit: {
           id: unit.id,
+          name: unit.name,
           unitCode: `HK-${String(unit.unitNumber).padStart(6, "0")}`,
           item: unit.item,
         },

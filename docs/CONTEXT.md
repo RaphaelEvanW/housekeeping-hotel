@@ -24,9 +24,9 @@ Snapshot: 23 Oktober 2026, HEAD a0eb555, branch feature/frontend. Working tree b
 
 - Items adalah jenis; ItemUnits adalah unit fisik. Total terdaftar dihitung dari records, bukan stok siap dipinjam. Search/pagination/selected item dan cursor50 unit tetap memakai layanan nyata.
 - Tambah jenis: nama wajib, deskripsi/foto katalog opsional. Sukses menutup form dan mencari nama baru di page1 agar hasil terlihat; tidak menambah unit otomatis. Edit jenis hanya nama/deskripsi; konfirmasi berhasil satu baris + X, tanpa auto-dismiss.
-- Tambah unit: jumlah1–100, satu lokasi awal aktif per batch, accordion per unit (maksimal satu terbuka; ubah jumlah menutup semua). Kondisi wajib/default Baik; serial/deskripsi opsional. Deskripsi dikirim sebagai notes. Nama unit disabled karena BE belum tersedia; tidak dikirim. Foto awal belum didukung alur simpan.
+- Tambah unit: jumlah1–100, satu lokasi awal aktif per batch, accordion per unit (maksimal satu terbuka; ubah jumlah menutup semua). Kondisi wajib/default Baik; serial/deskripsi opsional. Deskripsi dikirim sebagai notes. Nama unit FE masih disabled/tidak dikirim; BE sudah menerima name opsional sejak26Oktober. Foto awal belum didukung alur simpan.
 - Batch mempertahankan requestId/lokasi/payload saat hasil belum pasti; pending mengunci submit/close. Recovery page-local, bukan persisten lintas reload. Pemeriksaan lokasi, izin, replay/conflict tetap server-side.
-- Detail unit: identitas nama → seri → HK; saat ini name:null, jadi seri/HK dipakai. Edit hanya serialNumber/notes; keadaan hasil belum pasti perlu reload. UnitHistory membaca audit nyata10event/page; belum ada riwayat peminjaman/foto yang belum didukung backend.
+- Detail unit: identitas nama → seri → HK; FE saat ini masih memasok name:null sehingga seri/HK dipakai. BE edit menerima name/serialNumber/notes, tetapi FE baru mengirim serialNumber/notes; keadaan hasil belum pasti perlu reload. UnitHistory membaca audit nyata10event/page; belum ada riwayat peminjaman/foto yang belum didukung backend.
 - Penonaktifan: header katalog membuka daftar global; Riwayat pengajuan di drawer membuka daftar sama dengan itemId/status ALL. Ajukan penonaktifan merah hanya membuat request; Supervisor menyetujui/menolak terpisah, pengaju membatalkan pending miliknya. Management read-only untuk alur ini.
 - Daftar: default PENDING,10/page, filter jenis searchable/paginated dan status dengan WorkspaceFilterDropdown yang sama. Terapkan mengirim keduanya dan reset page; X setelah filter diterapkan menghapus query dan kembali default PENDING. Keputusan/batal memakai konfirmasi, pending guard dan lock hasil tidak pasti.
 
@@ -43,6 +43,8 @@ Snapshot: 23 Oktober 2026, HEAD a0eb555, branch feature/frontend. Working tree b
 
 ## Bukti terakhir dan batas
 
+- Agent26Oktober: db:generate/db:validate/typecheck dan targeted lint passed; unit18file/164test, focused integration3file/102test, full31file/458test passed. Migration20261026010000_item_unit_name applied to test/dev. Full lint result dicatat di DEVLOG. Tidak ada browser/build atau perubahan FE/foto; test actors/data hanya DB test.
+
 - Historis23Oktober: typecheck passed; unit18file/155test passed. Full lint exit0 dengan1warning pada output/verify-drawer-layout-browser.js (callback expression); targeted lint source yang disentuh lolos. Jangan menyebut seluruh tree bebas warning.
 - Browser fixture source aktual:52assertion drawer (320–1440px/50unit/nama panjang/kosong/Management),23assertion konfirmasi/reset, serta uji tabel1366/390/320px. Read services/router terisolasi; PATCH sukses diintersep; tidak membuktikan live login/persistence DB. Screenshot di output/. Penetapan akhir +36x36/ikon16 hanya targeted lint, belum screenshot ulang.
 - Adapter pg: probe read-only fresh-process list/history0warning; unit antrean termasuk dalam suite155. Integrasi transaksi/rollback/concurrency aktual belum diulang untuk adapter.
@@ -50,7 +52,7 @@ Snapshot: 23 Oktober 2026, HEAD a0eb555, branch feature/frontend. Working tree b
 
 ## Belum selesai dan batas langkah berikutnya
 
-- BE nama unit (schema/input/audit/read/PATCH/Add Stock) belum ada. Foto awal minimal1per unit dan evidence append-only disetujui sebagai kebutuhan; persistence/upload/private read/batch/history belum dibuat. Foto katalog bukan bukti unit. Jangan aktifkan form seolah data tersimpan.
-- Setelah BE diotorisasi dan kontraknya siap: sambungkan nama/foto unit ke FE dan validasi history nyata. Ini rekomendasi lanjutan, bukan izin BE otomatis.
+- BE nama unit selesai26Oktober: name nullable/max100/trim-collapse, omission preserve, blank/null clear, duplicate allowed, old HK/UUID unchanged. Kontrak/rollout: UNIT-NAMES.md. FE activation (form/payload/read/history labels) belum dikerjakan. Foto awal minimal1per unit dan evidence append-only disetujui sebagai kebutuhan; persistence/upload/private read/batch/history belum dibuat. Foto katalog bukan bukti unit. Jangan aktifkan form seolah data tersimpan.
+- Langkah berikutnya yang disarankan: sambungkan nama unit ke FE dengan kontrak siap; foto masih membutuhkan slice BE terpisah. Ini bukan izin implementasi otomatis.
 - GuestVisit baru schema/constraint; service/API/form termasuk nomor booking manual belum tersedia. Borrowing/partial-combined return/inspection-maintenance/lost-settlement/retirement-report belum selesai. Dashboard demonstrasi bukan metrik hotel live.
 - Independen dari PMS/AppSheet; tanpa barcode/kategori/pantry-distribution pada scope ini. Report export nanti. Jangan menambah workflow/permissions atau memakai data foto/tamu palsu untuk menutup fitur yang belum ada.

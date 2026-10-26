@@ -1,8 +1,10 @@
 import { z } from "zod";
 
 import { UnitCondition } from "@/generated/prisma/enums";
+import { unitNameSchema } from "@/server/item-unit-input";
 
 const unitDetailsSchema = z.object({
+  name: unitNameSchema,
   serialNumber: z.string().trim().optional(),
   notes: z.string().trim().optional(),
   condition: z.enum(UnitCondition).default("GOOD"),

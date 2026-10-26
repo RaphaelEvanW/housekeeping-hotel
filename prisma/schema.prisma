@@ -185,6 +185,7 @@ model ItemUnit {
   unitNumber   Int           @unique @default(autoincrement())
   itemId       String
   stockBatchId String?
+  name         String?
   serialNumber String?
   notes        String?
 

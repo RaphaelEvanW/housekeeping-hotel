@@ -1,6 +1,35 @@
 import { expect, it } from "vitest";
 
 import { updateItemUnitInputSchema } from "../../src/server/item-unit-input";
+import { addStockInputSchema } from "../../src/server/add-stock-input";
+
+it("accepts a name-only correction and normalizes whitespace", () => {
+  expect(updateItemUnitInputSchema.parse({ name: "  Hair   dryer  01 " })).toEqual({ name: "Hair dryer 01" });
+});
+
+it.each(["", "   ", null])("clears a name with %j", name => {
+  expect(updateItemUnitInputSchema.parse({ name })).toEqual({ name: null });
+});
+
+it.each([123, false, {}, "x".repeat(101)])("rejects an invalid name %j in both operations", name => {
+  expect(updateItemUnitInputSchema.safeParse({ name }).success).toBe(false);
+  expect(addStockInputSchema.safeParse({
+    requestId: "1c884ffe-af17-42fc-8547-bebfbc6cfba0",
+    itemId: "1c884ffe-af17-42fc-8547-bebfbc6cfba0", quantity: 1, units: [{ name }],
+  }).success).toBe(false);
+});
+
+it("accepts repeated optional names and preserves omitted names in batch input", () => {
+  const batch = addStockInputSchema.parse({
+    requestId: "1c884ffe-af17-42fc-8547-bebfbc6cfba0",
+    itemId: "1c884ffe-af17-42fc-8547-bebfbc6cfba0", quantity: 4,
+    units: [{ name: " Unit   A " }, { name: "Unit A" }, { name: null }, {}],
+  });
+  expect(batch.units).toEqual([
+    { name: "Unit A", condition: "GOOD" }, { name: "Unit A", condition: "GOOD" },
+    { name: null, condition: "GOOD" }, { condition: "GOOD" },
+  ]);
+});
 
 it("trims serial number and notes", () => {
   const result = updateItemUnitInputSchema.parse({

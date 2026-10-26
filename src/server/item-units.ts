@@ -31,6 +31,7 @@ export async function getItemUnits(itemId: string, after?: number) {
             select: {
               id: true,
               unitNumber: true,
+              name: true,
               serialNumber: true,
               notes: true,
               lifecycle: true,
@@ -112,6 +113,8 @@ export async function updateItemUnitDetails(
       where: { id: unitId },
     });
 
+    const name = input.name === undefined ? before.name : input.name;
+
     const serialNumber =
       input.serialNumber === undefined
         ? before.serialNumber
@@ -123,6 +126,7 @@ export async function updateItemUnitDetails(
         : input.notes;
 
     if (
+      name === before.name &&
       serialNumber === before.serialNumber &&
       notes === before.notes
     ) {
@@ -132,6 +136,7 @@ export async function updateItemUnitDetails(
     const unit = await tx.itemUnit.update({
       where: { id: unitId },
       data: {
+        name,
         serialNumber,
         notes,
         updatedById: actorId,
@@ -145,10 +150,12 @@ export async function updateItemUnitDetails(
         entityType: "ITEM_UNIT",
         entityId: unit.id,
         oldValues: {
+          name: before.name,
           serialNumber: before.serialNumber,
           notes: before.notes,
         },
         newValues: {
+          name: unit.name,
           serialNumber: unit.serialNumber,
           notes: unit.notes,
         },

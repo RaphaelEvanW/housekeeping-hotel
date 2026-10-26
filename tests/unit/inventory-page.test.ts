@@ -125,7 +125,7 @@ it("renders lifecycle, custody, physical condition, readiness and loss as separa
     units: [{
       id: "unit-id", unitNumber: 125, unitCode: "HK-000125",
       serialNumber: null, notes: null, lifecycle: "RETIRED", custody: "GUEST",
-      condition: "GOOD", readiness: "CLEAR", lossState: "LOST", location: null,
+      name: null, condition: "GOOD", readiness: "CLEAR", lossState: "LOST", location: null,
       createdAt: new Date("2026-10-21T00:00:00Z"), updatedAt: new Date("2026-10-21T00:00:00Z"),
     }],
   });

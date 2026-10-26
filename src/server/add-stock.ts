@@ -62,6 +62,8 @@ export async function addStock(rawInput: unknown, actorId: string) {
       serialNumber: details?.serialNumber || null,
       notes: details?.notes || null,
       condition: details?.condition ?? "GOOD",
+      // Omit empty names to preserve request hashes for batches created before name support.
+      ...(details?.name ? { name: details.name } : {}),
     };
   });
 
@@ -168,6 +170,7 @@ export async function addStock(rawInput: unknown, actorId: string) {
             itemId: unit.itemId,
             stockBatchId: batch.id,
             unitNumber: unit.unitNumber,
+            name: unit.name,
             locationId: unit.locationId,
             serialNumber: unit.serialNumber,
             notes: unit.notes,

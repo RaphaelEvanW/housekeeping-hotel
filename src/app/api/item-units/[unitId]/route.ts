@@ -87,6 +87,7 @@ export async function PATCH(
           id: unit.id,
           itemId: unit.itemId,
           unitCode: `HK-${String(unit.unitNumber).padStart(6, "0")}`,
+          name: unit.name,
           serialNumber: unit.serialNumber,
           notes: unit.notes,
           updatedAt: unit.updatedAt,
@@ -101,7 +102,7 @@ export async function PATCH(
       return Response.json(
         {
           error: "INVALID_INPUT",
-          message: "Data koreksi serial number atau catatan tidak valid.",
+          message: "Data koreksi nama, nomor seri, atau deskripsi unit tidak valid.",
         },
         {
           status: 400,

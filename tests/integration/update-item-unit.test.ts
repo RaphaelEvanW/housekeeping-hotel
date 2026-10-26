@@ -8,6 +8,7 @@ import { GET as getHistoryGET } from "../../src/app/api/item-units/[unitId]/hist
 
 import {
   ItemUnitNotFoundError,
+  getItemUnits,
   updateItemUnitDetails,
 } from "../../src/server/item-units";
 
@@ -201,10 +202,12 @@ it("stores corrected details with an audit and preserves operational state", asy
     actorId: userId,
     action: "ITEM_UNIT_DETAILS_UPDATED",
     oldValues: {
+      name: null,
       serialNumber: "OLD-SERIAL",
       notes: "Catatan lama.",
     },
     newValues: {
+      name: null,
       serialNumber: "NEW-SERIAL",
       notes: "Label diperbaiki.",
     },
@@ -273,11 +276,13 @@ it("clears details using blank strings and explicit null", async () => {
   });
 
   expect(audit.oldValues).toEqual({
+    name: null,
     serialNumber: "OLD-SERIAL",
     notes: "Catatan lama.",
   });
 
   expect(audit.newValues).toEqual({
+    name: null,
     serialNumber: null,
     notes: null,
   });
@@ -332,10 +337,11 @@ it("rejects a missing unit without creating an audit", async () => {
   ).toBe(0);
 });
 
-it("preserves both concurrent partial corrections and their audit history", async () => {
+it("preserves concurrent name, serial and notes corrections and their audit history", async () => {
   if (!userId) throw new Error("Test user was not created.");
 
   await Promise.all([
+    updateItemUnitDetails(unitId, { name: "Concurrent label" }, userId),
     updateItemUnitDetails(unitId, { serialNumber: "NEW-SERIAL" }, userId),
     updateItemUnitDetails(unitId, { notes: "Catatan baru." }, userId),
   ]);
@@ -345,6 +351,7 @@ it("preserves both concurrent partial corrections and their audit history", asyn
   });
 
   expect(stored).toMatchObject({
+    name: "Concurrent label",
     serialNumber: "NEW-SERIAL",
     notes: "Catatan baru.",
     condition: "DAMAGED",
@@ -359,21 +366,21 @@ it("preserves both concurrent partial corrections and their audit history", asyn
     },
   });
 
-  expect(audits).toHaveLength(2);
+  expect(audits).toHaveLength(3);
 
   expect(audits).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        oldValues: {
+        oldValues: expect.objectContaining({
           serialNumber: "OLD-SERIAL",
           notes: "Catatan lama.",
-        },
+        }),
       }),
       expect.objectContaining({
-        newValues: {
+        newValues: expect.objectContaining({
           serialNumber: "NEW-SERIAL",
           notes: "Catatan baru.",
-        },
+        }),
       }),
     ]),
   );
@@ -434,6 +441,7 @@ it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
         id: unitId,
         itemId: before.itemId,
         unitCode: `HK-${String(before.unitNumber).padStart(6, "0")}`,
+        name: null,
         serialNumber: "OLD-SERIAL",
         notes: "Koreksi API.",
         updatedAt: expect.any(String),
@@ -464,6 +472,8 @@ it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
 );
 
 const invalidApiCorrectionInputs: unknown[] = [
+  { name: 42 },
+  { name: "a".repeat(101) },
   null,
   [],
   {},
@@ -630,10 +640,12 @@ it.each(["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const)(
     expect(body.events[0]).toMatchObject({
       action: "ITEM_UNIT_DETAILS_UPDATED",
       oldValues: {
+        name: null,
         serialNumber: "OLD-SERIAL",
         notes: "Catatan lama.",
       },
       newValues: {
+        name: null,
         serialNumber: "OLD-SERIAL",
         notes: "Catatan baru.",
       },
@@ -860,3 +872,37 @@ it.each(invalidHistoryQueries)(
     });
   },
 );
+
+
+it("persists a name-only API correction, reads it and audits it without changing identity/state", async () => {
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } });
+  const response = await patchUnit(JSON.stringify({ name: "  Hair   dryer 01  " }));
+  expect(response.status).toBe(200);
+  expect((await response.json()).unit).toMatchObject({ id: unitId, name: "Hair dryer 01" });
+  const after = await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } });
+  expect(after).toEqual({ ...before, name: "Hair dryer 01", updatedAt: expect.any(Date) });
+  const list = await getItemUnits(before.itemId);
+  expect(list?.units.find(unit => unit.id === unitId)?.name).toBe("Hair dryer 01");
+  const history = await (await getUnitHistory()).json();
+  expect(history.unit.name).toBe("Hair dryer 01");
+  expect(history.events[0]).toMatchObject({ action: "ITEM_UNIT_DETAILS_UPDATED", oldValues: { name: null }, newValues: { name: "Hair dryer 01" } });
+});
+
+it.each(["", "   ", null])("clears the optional name with %j and keeps serial/notes", async name => {
+  if (!userId) throw new Error("No test actor");
+  await updateItemUnitDetails(unitId, { name: "Unit label" }, userId);
+  expect((await patchUnit(JSON.stringify({ name }))).status).toBe(200);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } })).toMatchObject({ name: null, serialNumber: "OLD-SERIAL", notes: "Catatan lama." });
+  expect((await (await getUnitHistory()).json()).events[0]).toMatchObject({ oldValues: { name: "Unit label" }, newValues: { name: null } });
+});
+
+it("preserves omitted name and does not audit a normalized name no-op", async () => {
+  if (!userId) throw new Error("No test actor");
+  await updateItemUnitDetails(unitId, { name: "Unit label" }, userId);
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } });
+  await updateItemUnitDetails(unitId, { name: "  Unit   label " }, userId);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } })).toEqual(before);
+  expect(await db.auditEvent.count({ where: { entityId: unitId } })).toBe(1);
+  await updateItemUnitDetails(unitId, { notes: "Changed notes" }, userId);
+  expect((await db.itemUnit.findUniqueOrThrow({ where: { id: unitId } })).name).toBe("Unit label");
+});

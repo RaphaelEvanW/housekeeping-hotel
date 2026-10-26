@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { listItemsInputSchema } from "@/server/list-items-input";
 
+export const unitNameSchema = z.string().trim().max(100).nullable()
+  .transform(value => value?.replace(/\s+/gu, " ") || null).optional();
+
 const optionalUnitDetailSchema = z
   .string()
   .trim()
@@ -10,12 +13,14 @@ const optionalUnitDetailSchema = z
 
 export const updateItemUnitInputSchema = z
   .object({
+    name: unitNameSchema,
     serialNumber: optionalUnitDetailSchema,
     notes: optionalUnitDetailSchema,
   })
   .strict()
   .refine(
     (input) =>
+      input.name !== undefined ||
       input.serialNumber !== undefined ||
       input.notes !== undefined,
     {

@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   afterAll,
   afterEach,
@@ -536,5 +536,37 @@ it("rejects oversized JSON without adding stock", async () => {
     error: "PAYLOAD_TOO_LARGE",
   });
 
+  await expectCounts(0, 0);
+});
+
+
+it("stores repeated per-unit names, includes them in creation audit and retries safely", async () => {
+  const input = { ...stockInput(), units: [{ name: "  Hair   dryer 01 " }, { name: "Hair dryer 01" }] };
+  expect((await postStock(input)).status).toBe(201);
+  expect((await postStock(input)).status).toBe(200);
+  const units = await db.itemUnit.findMany({ where: { stockBatchId: input.requestId } });
+  expect(units).toHaveLength(2);
+  for (const unit of units) {
+    expect(unit.name).toBe("Hair dryer 01");
+    expect(await db.auditEvent.findFirstOrThrow({ where: { entityId: unit.id, action: "STOCK_UNIT_CREATED" } })).toMatchObject({ newValues: { name: "Hair dryer 01" } });
+  }
+  expect((await postStock({ ...input, units: [{ name: "Changed" }, { name: "Hair dryer 01" }] })).status).toBe(409);
+  await expectCounts(2, 1);
+});
+
+it("keeps the pre-name request hash and treats null/blank/omitted names as the same retry", async () => {
+  const input = stockInput();
+  const legacyUnits = Array.from({ length: input.quantity }, () => ({ serialNumber: null, notes: null, condition: "GOOD" }));
+  const legacyHash = createHash("sha256").update(JSON.stringify({ itemId, quantity: input.quantity, units: legacyUnits })).digest("hex");
+  expect((await postStock(input)).status).toBe(201);
+  expect((await db.stockBatch.findUniqueOrThrow({ where: { id: input.requestId } })).requestHash).toBe(legacyHash);
+  expect((await postStock({ ...input, units: [{ name: null }, { name: "  " }] })).status).toBe(200);
+  expect((await postStock({ ...input, units: [{ name: "New label" }, {}] })).status).toBe(409);
+  expect(await db.itemUnit.findMany({ where: { stockBatchId: input.requestId } })).toEqual(expect.arrayContaining([expect.objectContaining({ name: null })]));
+  await expectCounts(2, 1);
+});
+
+it.each([42, "a".repeat(101)])("rejects invalid batch names atomically %j", async name => {
+  expect((await postStock({ ...stockInput(), units: [{ name: "Valid" }, { name }] })).status).toBe(400);
   await expectCounts(0, 0);
 });
