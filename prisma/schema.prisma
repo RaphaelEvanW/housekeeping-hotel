@@ -32,6 +32,7 @@ model User {
   itemDeactivationDecisions ItemDeactivationRequest[] @relation("ItemDeactivationDecidedBy")
   guestVisitsCreated GuestVisit[] @relation("GuestVisitCreatedBy")
   guestVisitsUpdated GuestVisit[] @relation("GuestVisitUpdatedBy")
+  borrowingsIssued Borrowing[] @relation("BorrowingIssuedBy")
 
   @@map("user")
 }
@@ -207,6 +208,7 @@ model ItemUnit {
   updatedBy User      @relation("ItemUnitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   stockBatch StockBatch? @relation(fields: [stockBatchId], references: [id], onDelete: Restrict)
   photos ItemUnitPhoto[]
+  borrowingLines BorrowingLine[]
   
   @@index([itemId])
   @@index([locationId])
@@ -303,6 +305,7 @@ model GuestVisit {
 
   createdBy User @relation("GuestVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy User @relation("GuestVisitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
+  borrowings Borrowing[]
 
   @@index([status, roomNumber, checkInDate])
   @@index([normalizedPrimaryGuestName, status, checkInDate])
@@ -315,12 +318,57 @@ model ItemUnitPhoto {
   id           String @id @default(uuid())
   unitId       String
   auditEventId String
+  borrowingLineId String?
   photoKey     String @unique
 
   unit       ItemUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   auditEvent AuditEvent @relation(fields: [auditEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  borrowingLine BorrowingLine? @relation(fields: [borrowingLineId, unitId], references: [id, unitId], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([unitId])
   @@index([auditEventId])
+  @@index([borrowingLineId])
   @@map("item_unit_photo")
+}
+
+enum BorrowingLineStatus {
+  OUTSTANDING
+  RETURNED
+  SETTLED
+}
+
+model Borrowing {
+  id                       String   @id @default(uuid())
+  guestVisitId             String
+  requestHash              String   @db.Char(64)
+  primaryGuestNameSnapshot String
+  roomNumberSnapshot       String
+  issuedById               String
+  issuedAt                 DateTime @default(now()) @db.Timestamptz(3)
+
+  guestVisit GuestVisit @relation(fields: [guestVisitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  issuedBy   User       @relation("BorrowingIssuedBy", fields: [issuedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines      BorrowingLine[]
+
+  @@index([guestVisitId, issuedAt])
+  @@index([issuedById])
+  @@map("borrowing")
+}
+
+model BorrowingLine {
+  id               String              @id @default(uuid())
+  borrowingId      String
+  unitId           String
+  conditionAtIssue UnitCondition
+  status           BorrowingLineStatus @default(OUTSTANDING)
+  resolvedAt       DateTime?           @db.Timestamptz(3)
+
+  borrowing Borrowing @relation(fields: [borrowingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  unit      ItemUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos    ItemUnitPhoto[]
+
+  @@unique([borrowingId, unitId])
+  @@unique([id, unitId])
+  @@index([unitId])
+  @@map("borrowing_line")
 }
