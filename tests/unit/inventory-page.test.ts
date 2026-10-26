@@ -31,7 +31,7 @@ beforeEach(() => {
     pagination: { page: 1, pageSize: 20, total: 0, totalPages: 0, hasNextPage: false },
   });
   mockUnits.mockResolvedValue({
-    item: { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null },
+    item: { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null, photos: [] },
     totalRegistered: 0, units: [], nextCursor: null,
   });
 });
@@ -107,7 +107,7 @@ it("propagates unexpected data failures to the route error boundary", async () =
 
 it("renders stored names safely and keeps the selected-item action and dates readable", async () => {
   mockList.mockResolvedValueOnce({
-    items: [{ id: itemId, name: "Setrika <script>", isActive: true, description: null, photoUrl: null, createdAt: new Date("2026-10-21T00:00:00Z"), updatedAt: new Date("2026-10-21T00:00:00Z") }],
+    items: [{ id: itemId, name: "Setrika <script>", isActive: true, description: null, photoUrl: null, photos: [], createdAt: new Date("2026-10-21T00:00:00Z"), updatedAt: new Date("2026-10-21T00:00:00Z") }],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNextPage: false },
   });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({}) }));
@@ -120,7 +120,7 @@ it("renders stored names safely and keeps the selected-item action and dates rea
 
 it.each([null, "Unit kamar 01"])("renders separate operational facts and real unit name %j", async name => {
   mockUnits.mockResolvedValueOnce({
-    item: { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null },
+    item: { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null, photos: [] },
     totalRegistered: 1, nextCursor: null,
     units: [{
       id: "unit-id", unitNumber: 125, unitCode: "HK-000125",
@@ -141,7 +141,8 @@ it.each([null, "Unit kamar 01"])("renders separate operational facts and real un
 });
 
 it("renders actual catalog photo/description and stock controls for an active item", async () => {
-  const item = { id: itemId, name: "Hair dryer", isActive: true, description: "Pengering <kamar>", photoUrl: `/api/items/${itemId}/photo` };
+  const photoId = "3b32fa7d-fc1b-49d2-91d1-8191c6f83208";
+  const item = { id: itemId, name: "Hair dryer", isActive: true, description: "Pengering <kamar>", photoUrl: `/api/items/${itemId}/photo`, photos: [{ id: photoId, position: 0, url: `/api/items/${itemId}/photos/${photoId}` }] };
   mockList.mockResolvedValueOnce({ items: [{ ...item, createdAt: new Date(), updatedAt: new Date() }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNextPage: false } });
   mockUnits.mockResolvedValueOnce({ item, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
@@ -152,7 +153,7 @@ it("renders actual catalog photo/description and stock controls for an active it
 });
 
 it("does not offer Add Stock for an inactive item", async () => {
-  const item = { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null };
+  const item = { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null, photos: [] };
   mockList.mockResolvedValueOnce({ items: [{ ...item, createdAt: new Date(), updatedAt: new Date() }], pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNextPage: false } });
   mockUnits.mockResolvedValueOnce({ item, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
@@ -178,7 +179,7 @@ it("links inventory readers to all requests and selected-item history", async ()
 
 it("keeps the empty unit table below the registered count and labelled stock action", async () => {
   const name = "Barang panjang ".repeat(12);
-  mockUnits.mockResolvedValueOnce({ item: { id: itemId, name, isActive: true, description: null, photoUrl: null }, totalRegistered: 0, units: [], nextCursor: null });
+  mockUnits.mockResolvedValueOnce({ item: { id: itemId, name, isActive: true, description: null, photoUrl: null, photos: [] }, totalRegistered: 0, units: [], nextCursor: null });
   const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
   const panel = html.slice(html.indexOf('id="inventory-unit-panel"'));
   expect(panel).toContain('aria-label="Edit jenis barang"');

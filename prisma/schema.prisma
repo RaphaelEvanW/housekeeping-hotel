@@ -132,7 +132,7 @@ model Item {
   name           String
   normalizedName String   @unique
   description    String?
-  photoKey       String?
+  photoKey       String? // First-photo cover retained for existing clients.
   isActive       Boolean  @default(true)
   createdById    String
   updatedById    String
@@ -144,9 +144,23 @@ model Item {
   units     ItemUnit[]
   stockBatches StockBatch[]
   deactivationRequests ItemDeactivationRequest[]
+  photos ItemPhoto[]
 
   @@index([isActive, name])
   @@map("item")
+}
+
+model ItemPhoto {
+  id        String   @id @default(uuid())
+  itemId    String
+  photoKey  String   @unique
+  position  Int
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  item Item @relation(fields: [itemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@unique([itemId, position])
+  @@map("item_photo")
 }
 
 enum UnitLifecycle {

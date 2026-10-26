@@ -6,6 +6,8 @@ import { join, resolve } from "node:path";
 import sharp from "sharp";
 
 export const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
+export const MAX_CATALOG_PHOTOS = 10;
+export const MAX_CATALOG_FORM_BYTES = 16 * 1024 * 1024;
 
 export class InvalidItemPhotoError extends Error {}
 type PhotoScope = "item" | "unit";
@@ -80,6 +82,24 @@ export function readPhoto(key: string, scope: PhotoScope = "item") {
 }
 export function removePhoto(key: string, scope: PhotoScope = "item") {
   return rm(photoPath(key, scope).file, { force: true });
+}
+
+export async function itemPhotoResponse(key: string | null | undefined) {
+  const headers = { "Cache-Control": "private, no-store" };
+  if (!key) return new Response(null, { status: 404, headers });
+  try {
+    const bytes = await readPhoto(key);
+    return new Response(new Uint8Array(bytes), { headers: {
+      ...headers,
+      "Content-Type": "image/webp",
+      "Content-Length": String(bytes.byteLength),
+      "X-Content-Type-Options": "nosniff",
+      "Content-Security-Policy": "default-src 'none'; sandbox",
+    } });
+  } catch (error) {
+    if (error instanceof Error && "code" in error && error.code === "ENOENT") return new Response(null, { status: 404, headers });
+    throw error;
+  }
 }
 
 export {

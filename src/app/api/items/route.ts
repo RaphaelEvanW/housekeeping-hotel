@@ -15,7 +15,8 @@ import {
 import { listItems } from "@/server/list-items";
 import { listItemsInputSchema } from "@/server/list-items-input";
 import { readItemForm } from "@/server/read-item-form";
-import { InvalidItemPhotoError, prepareItemPhoto } from "@/server/item-photo";
+import { InvalidItemPhotoError, MAX_CATALOG_FORM_BYTES, MAX_CATALOG_PHOTOS, prepareItemPhoto } from "@/server/item-photo";
+import { itemPhotoUrls } from "@/server/item-catalog-view";
 
 export async function GET(request: Request) {
   const authorization = await authorizeApi("inventory:view");
@@ -66,17 +67,21 @@ export async function POST(request: Request) {
   }
 
   let body: unknown;
-  let photo: File | undefined;
+  const photos: File[] = [];
   const multipart = request.headers.get("content-type")?.toLowerCase().startsWith("multipart/form-data") ?? false;
 
   try {
     if (multipart) {
-      const form = await readItemForm(request);
-      if (["name", "description", "photo"].some(key => form.getAll(key).length > 1)) throw new SyntaxError("Duplicate fields");
+      const form = await readItemForm(request, MAX_CATALOG_FORM_BYTES);
+      if (["name", "description"].some(key => form.getAll(key).length > 1)) throw new SyntaxError("Duplicate fields");
+      if (Array.from(form.keys()).some(key => !["name", "description", "photo"].includes(key))) throw new SyntaxError("Unknown field");
       body = { name: form.get("name"), description: form.get("description") ?? undefined };
-      const entry = form.get("photo");
-      if (entry !== null && !(entry instanceof File)) throw new SyntaxError("Invalid photo field");
-      if (entry instanceof File && (entry.size > 0 || entry.name)) photo = entry;
+      const entries = form.getAll("photo");
+      if (entries.length > MAX_CATALOG_PHOTOS) throw new SyntaxError("Too many catalog photos");
+      for (const entry of entries) {
+        if (!(entry instanceof File)) throw new SyntaxError("Invalid photo field");
+        if (entry.size > 0 || entry.name) photos.push(entry);
+      }
     } else {
       body = await readJsonBody(request);
     }
@@ -87,8 +92,8 @@ export async function POST(request: Request) {
       {
         error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_INPUT",
         message: tooLarge
-          ? (multipart ? "Foto maksimal 2 MiB dan data form harus sesuai batas." : "Ukuran data maksimal 256 KiB.")
-          : (multipart ? "Data form tidak valid." : "Format JSON tidak valid."),
+          ? (multipart ? "Total unggahan maksimal 16 MiB termasuk data form." : "Ukuran data maksimal 256 KiB.")
+          : (multipart ? "Data form tidak valid. Gunakan maksimal 10 foto katalog." : "Format JSON tidak valid."),
       },
       {
         status: tooLarge ? 413 : 400,
@@ -115,9 +120,10 @@ export async function POST(request: Request) {
   }
 
   try {
-    const preparedPhoto = photo ? await prepareItemPhoto(photo) : undefined;
-    const { photoKey, ...created } = await createItem(parsed.data.name, authorization.user.id, { description: parsed.data.description, photo: preparedPhoto });
-    const item = { ...created, photoUrl: photoKey ? `/api/items/${created.id}/photo` : null };
+    const preparedPhotos: Buffer[] = [];
+    for (const photo of photos) preparedPhotos.push(await prepareItemPhoto(photo));
+    const { photoKey, photos: storedPhotos, ...created } = await createItem(parsed.data.name, authorization.user.id, { description: parsed.data.description, photos: preparedPhotos });
+    const item = { ...created, photoUrl: photoKey ? `/api/items/${created.id}/photo` : null, photos: itemPhotoUrls(created.id, storedPhotos) };
 
     return Response.json(
       { item },

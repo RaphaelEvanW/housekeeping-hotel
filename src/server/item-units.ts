@@ -3,6 +3,7 @@ import "server-only";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { updateItemUnitInputSchema } from "@/server/item-unit-input";
+import { catalogPhotoSelect, itemPhotoUrls } from "@/server/item-catalog-view";
 
 const PAGE_SIZE = 50;
 
@@ -41,6 +42,7 @@ export async function getItemUnits(
           isActive: true,
           description: true,
           photoKey: true,
+          photos: { select: catalogPhotoSelect, orderBy: { position: "asc" } },
           _count: {
             select: {
               units: true,
@@ -92,6 +94,7 @@ export async function getItemUnits(
           isActive: item.isActive,
           description: item.description,
           photoUrl: item.photoKey ? `/api/items/${item.id}/photo` : null,
+          photos: itemPhotoUrls(item.id, item.photos),
         },
         totalRegistered: item._count.units,
         units: pageUnits.map((unit) => ({

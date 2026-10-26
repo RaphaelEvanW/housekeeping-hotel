@@ -2,6 +2,7 @@ import "server-only";
 
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
+import { catalogPhotoSelect, itemPhotoUrls } from "@/server/item-catalog-view";
 import {
   listItemsInputSchema,
   type ListItemsInput,
@@ -41,6 +42,7 @@ export async function listItems(input: ListItemsInput) {
           isActive: true,
           description: true,
           photoKey: true,
+          photos: { select: catalogPhotoSelect, orderBy: { position: "asc" } },
           createdAt: true,
           updatedAt: true,
         },
@@ -53,7 +55,7 @@ export async function listItems(input: ListItemsInput) {
   );
 
   return {
-    items: items.map(({ photoKey, ...item }) => ({ ...item, photoUrl: photoKey ? `/api/items/${item.id}/photo` : null })),
+    items: items.map(({ photoKey, photos, ...item }) => ({ ...item, photoUrl: photoKey ? `/api/items/${item.id}/photo` : null, photos: itemPhotoUrls(item.id, photos) })),
     pagination: {
       page,
       pageSize,

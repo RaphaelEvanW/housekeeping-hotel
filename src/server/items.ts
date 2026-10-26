@@ -7,7 +7,9 @@ import {
   updateItemInputSchema,
 } from "@/server/item-input";
 import { db } from "@/server/db";
-import { removeItemPhoto, storeItemPhoto } from "@/server/item-photo";
+import { InvalidItemPhotoError, MAX_CATALOG_PHOTOS, removeItemPhoto, storeItemPhoto } from "@/server/item-photo";
+import { catalogPhotoSelect } from "@/server/item-catalog-view";
+import { isItemNameConflict } from "@/server/item-name-conflict";
 
 export class DuplicateItemNameError extends Error {
   constructor() {
@@ -25,55 +27,71 @@ export function prepareItemName(input: string) {
   };
 }
 
-export async function createItem(name: string, actorId: string, details: { description?: string; photo?: Buffer } = {}) {
+export async function createItem(name: string, actorId: string, details: { description?: string; photos?: Buffer[] } = {}) {
   const input = createItemInputSchema.parse({ name, description: details.description });
   const preparedName = prepareItemName(name);
-  const photoKey = details.photo ? await storeItemPhoto(details.photo) : null;
+  if ((details.photos?.length ?? 0) > MAX_CATALOG_PHOTOS) throw new InvalidItemPhotoError("Maksimal 10 foto katalog.");
+  const photoKeys: string[] = [];
+  let transactionStarted = false;
+  let bodyFailed = false;
 
   try {
+    for (const bytes of details.photos ?? []) photoKeys.push(await storeItemPhoto(bytes));
+    const photoKey = photoKeys[0] ?? null;
     return await db.$transaction(async (tx) => {
-      const item = await tx.item.create({
-        data: {
-          ...preparedName,
-          description: input.description || null,
-          photoKey,
-          createdById: actorId,
-          updatedById: actorId,
-        },
-        select: {
-          id: true,
-          name: true,
-          isActive: true,
-          description: true,
-          photoKey: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      await tx.auditEvent.create({
-        data: {
-          actorId,
-          action: "ITEM_CREATED",
-          entityType: "ITEM",
-          entityId: item.id,
-          newValues: {
-            name: item.name,
-            normalizedName: preparedName.normalizedName,
+      transactionStarted = true;
+      try {
+        const item = await tx.item.create({
+          data: {
+            ...preparedName,
             description: input.description || null,
             photoKey,
+            photos: { create: photoKeys.map((key, position) => ({ photoKey: key, position })) },
+            createdById: actorId,
+            updatedById: actorId,
           },
-        },
-      });
+          select: {
+            id: true,
+            name: true,
+            isActive: true,
+            description: true,
+            photoKey: true,
+            photos: { select: catalogPhotoSelect, orderBy: { position: "asc" } },
+            createdAt: true,
+            updatedAt: true,
+          },
+        });
 
-      return item;
+        await tx.auditEvent.create({
+          data: {
+            actorId,
+            action: "ITEM_CREATED",
+            entityType: "ITEM",
+            entityId: item.id,
+            newValues: {
+              name: item.name,
+              normalizedName: preparedName.normalizedName,
+              description: input.description || null,
+              photoKey,
+              photoKeys,
+              photoIds: item.photos.map(photo => photo.id),
+            },
+          },
+        });
+
+        return item;
+      } catch (error) {
+        bodyFailed = true;
+        throw error;
+      }
     });
   } catch (error) {
-    if (photoKey) await removeItemPhoto(photoKey).catch(() => { console.error("Catalogue photo cleanup failed."); });
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    const knownRollback = bodyFailed || (error instanceof Prisma.PrismaClientKnownRequestError && ["P2002", "P2003", "P2034"].includes(error.code));
+    // Keep evidence if COMMIT may have succeeded despite a lost response.
+    if (!transactionStarted || knownRollback) {
+      await Promise.allSettled(photoKeys.map(key => removeItemPhoto(key)));
+    }
+    if (isItemNameConflict(error)) {
       throw new DuplicateItemNameError();
     }
 
@@ -184,10 +202,7 @@ export async function updateItem(
       return item;
     });
   } catch (error) {
-    if (
-      error instanceof Prisma.PrismaClientKnownRequestError &&
-      error.code === "P2002"
-    ) {
+    if (isItemNameConflict(error)) {
       throw new DuplicateItemNameError();
     }
 

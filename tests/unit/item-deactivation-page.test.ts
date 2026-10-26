@@ -34,7 +34,7 @@ function result() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(getItemUnits).mockResolvedValue({ item: { id: itemId, name: "Setrika", isActive: true, description: null, photoUrl: null }, totalRegistered: 0, units: [], nextCursor: null });
+  vi.mocked(getItemUnits).mockResolvedValue({ item: { id: itemId, name: "Setrika", isActive: true, description: null, photoUrl: null, photos: [] }, totalRegistered: 0, units: [], nextCursor: null });
   user.mockResolvedValue({ id: "operator", name: "Operator", isActive: true, roles: ["HK_STAFF"] });
   list.mockImplementation(async input => {
     listItemDeactivationsInputSchema.parse(input);
