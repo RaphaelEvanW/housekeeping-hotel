@@ -19,6 +19,7 @@ import { getStockLocations } from "@/server/stock-locations";
 import { EditItemDialog } from "./edit-item-dialog";
 import { ItemNameDisclosure } from "@/components/item-name-disclosure";
 import { UnitDetailsDialog } from "./unit-details-dialog";
+import { UnitHistoryPhoto } from "./unit-history-photo";
 import { RequestItemDeactivationDialog } from "./request-item-deactivation-dialog";
 import { WorkspacePageHeading } from "@/components/workspace-page-heading";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
@@ -454,7 +455,19 @@ export default async function InventoryPage({
                   </div>
                 ) : null}
               </div>
-              {selected?.item.photoUrl ? (
+              {selected?.item.photos.length ? (
+                <section aria-label="Foto katalog" className="mt-4">
+                  <ul className="flex flex-wrap gap-3">
+                    {selected.item.photos.map((photo, index) => (
+                      <UnitHistoryPhoto
+                        key={photo.id}
+                        url={photo.url}
+                        label={`Foto ${index + 1}${index === 0 ? " (utama)" : ""}`}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ) : selected?.item.photoUrl ? (
                 <Image
                   src={selected.item.photoUrl}
                   alt={selected.item.name}

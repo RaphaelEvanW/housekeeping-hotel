@@ -1,11 +1,11 @@
 # Housekeeping working context
 
-Snapshot: 26 Oktober 2026, HEAD8bc1823, branch feature/backend. BE foto katalog banyak sedang uncommitted: ItemPhoto/migration, repeated-file POST dan URL galeri privat; generate/migration/checks menunggu owner. FE belum diubah untuk pilihan foto kumulatif. BE pengembalian ditunda oleh revisi foto owner. Diagnosis timeout sebelumnya pulih setelah restart dev; itu bukan verifikasi patch schema baru.
+Snapshot: 26 Oktober 2026, HEADa125ebf, branch feature/frontend, perubahan FE foto kumulatif sedang uncommitted. Owner sudah menggabungkan BE galeri katalog; FE kini menambahkan pilihan foto bertahap/hapus per foto untuk stok, peminjaman, dan jenis barang, serta menampilkan galeri detail jenis barang. Lint/typecheck/tests dan cek browser menunggu owner. BE pengembalian ditunda oleh revisi foto.
 
 ## Sumber dan cara kerja
 
 - Aturan bisnis: PROJECT.md. Desain aktif: docs/DESIGN_SYSTEM.md, dengan ringkasan INVENTORY-DESIGN.md dan LOGIN-DESIGN.md. Bukti historis: DEVLOG.md; proposal dalam docs/design-history tidak aktif.
-- Bahasa UI/komunikasi Indonesia. Sebut FE atau BE sebelum berpindah scope. Instruksi terbaru26Oktober: owner menerapkan kode dan menjalankan semua checks/testing; agent memberi potongan/anchor/baris/perintah, tidak mengedit source kecuali diminta khusus. Owner mengizinkan edit MD untuk flow/progres. Jangan menyamakan panduan dengan implementasi. Catat hasil owner terpisah dari bukti historis agent.
+- Bahasa UI/komunikasi Indonesia. Sebut FE atau BE sebelum berpindah scope. Instruksi terbaru26Oktober: owner menjalankan checks/testing; agent tidak menjalankannya kecuali diminta. Source boleh diedit saat owner meminta penerapan langsung. Catatan progres MD ringkas boleh, jangan menaruh kode implementasi di MD. Catat hasil owner terpisah dari bukti historis agent.
 - Gunakan skill relevan otomatis; Housekeeping Context untuk handoff, Ponytail untuk kode, Humanizer untuk prose, Design Taste/Impeccable untuk UI, Better Icons dengan ikon existing, Playwright untuk browser. Ikuti AGENTS.md dan docs Next terpasang.
 - Jangan commit/push/switch/stash, menambah dependency, migrasi atau data DB tanpa scope yang sesuai. Dokumentasi progres boleh diperbarui setelah langkah terverifikasi.
 
@@ -20,7 +20,7 @@ Snapshot: 26 Oktober 2026, HEAD8bc1823, branch feature/backend. BE foto katalog 
 - Registrasi/daftar tamu: server/{guest-visit-input,guest-visits,list-guest-visits-input,list-guest-visits}.ts; POST/GET /api/guest-visits dan GET /api/guest-visits/[visitId]. Kontrak registrasi di GUEST-VISIT-REGISTRATION.md. Permission guests:create = Staff/Supervisor; guests:view termasuk Management. Daftar mendukung q nama/kamar/booking, status STAYING default/CHECKED_OUT/ALL dan pagination10/max50; bukan daftar pinjaman aktif.
 - Penonaktifan FE: inventory/request-item-deactivation-dialog.tsx dan inventory/deactivation-requests/. BE existing: server/item-deactivation.ts, list-item-deactivation.ts dan API deactivation-requests. Pengajuan, keputusan Supervisor dan pembatalan pengaju tersambung; role/validasi tetap server-side.
 - DB memakai src/server/serialized-prisma-pg.ts: queryRaw/executeRaw diantrekan per transaksi; transaksi berbeda tetap paralel. Lihat DATABASE-QUERY-SERIALIZATION.md; restart dev bila global client lama masih tercache. Tidak memerlukan generate/migrasi.
-- Foto katalog: server/{item-photo,item-catalog-view}.ts; ItemPhoto/migration20261026060000 menambah galeri berurutan dan menyalin cover lama. POST menerima0–10 repeated photo,2MiB/file,total16MiB. photoUrl/Item.photoKey tetap cover pertama; photos berisi ID/position/URL privat. GET /api/items/[itemId]/photos/[photoId] memeriksa parent dan izin. Disk .data/item-photos atau ITEM_PHOTO_DIR; lihat ITEM-CATALOG-STORAGE.md. PATCH tetap nama/deskripsi. Generate/migrate belum dijalankan; FE tambah bertahap/galeri serta perbaikan pilihan unit yang menimpa belum dikerjakan, sesuai urutan BE dulu dari owner.
+- Foto katalog: server/{item-photo,item-catalog-view}.ts; ItemPhoto/migration20261026060000 menambah galeri berurutan dan menyalin cover lama. POST menerima0–10 repeated photo,2MiB/file,total16MiB. photoUrl/Item.photoKey tetap cover pertama; photos berisi ID/position/URL privat. GET /api/items/[itemId]/photos/[photoId] memeriksa parent dan izin. Disk .data/item-photos atau ITEM_PHOTO_DIR; lihat ITEM-CATALOG-STORAGE.md. PATCH tetap nama/deskripsi. FE kini mengakumulasi pilihan foto dan menampilkan galeri detail; checks menunggu owner.
 
 ## Flow yang sudah terpasang
 

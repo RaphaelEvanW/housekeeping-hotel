@@ -6,6 +6,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { FieldError } from "@/components/field-error";
 import { useInventoryForm } from "@/lib/use-inventory-form";
+import { usePhotoSelection } from "@/lib/use-photo-selection";
+import { MAX_UPLOAD_BYTES, stockPhotoError } from "@/lib/stock-upload";
+
+const MAX_CATALOG_PHOTOS = 10;
 
 const primaryClass =
   "inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm leading-5 font-medium tracking-[0.01em] text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
@@ -22,14 +26,11 @@ export function CreateItemDialog() {
   const [invalidName, setInvalidName] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [notice, setNotice] = useState("");
-  const [preview, setPreview] = useState("");
-  const [photoName, setPhotoName] = useState("");
-  const previewUrl = useRef("");
+  const photoSelection = usePhotoSelection(MAX_CATALOG_PHOTOS);
 
   useEffect(() => {
     const element = dialog.current;
     return () => {
-      if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
       if (element?.open) {
         element.close();
         document.body.style.overflow = previousOverflow.current;
@@ -39,10 +40,7 @@ export function CreateItemDialog() {
 
   function open() {
     validation.reset();
-    if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
-    previewUrl.current = "";
-    setPreview("");
-    setPhotoName("");
+    photoSelection.reset();
     setError("");
     setInvalidName(false);
     setSessionExpired(false);
@@ -69,11 +67,23 @@ export function CreateItemDialog() {
       nameInput.current?.focus();
       return;
     }
-    const photo = form.get("photo");
-    if (photo instanceof File && photo.size > 2 * 1024 * 1024) {
-      setError("Foto maksimal 2 MiB.");
+    const photos = form
+      .getAll("photo")
+      .filter(
+        (entry): entry is File =>
+          entry instanceof File && (entry.size > 0 || entry.name !== ""),
+      );
+    const photoError = photos.length ? stockPhotoError(photos) : "";
+    if (photoError || photos.length > MAX_CATALOG_PHOTOS) {
+      setError(photoError || `Maksimal ${MAX_CATALOG_PHOTOS} foto katalog.`);
       return;
     }
+    if (photos.reduce((total, photo) => total + photo.size, 0) >= MAX_UPLOAD_BYTES) {
+      setError("Total unggahan maksimal 16 MiB. Kurangi ukuran atau jumlah foto.");
+      return;
+    }
+    form.delete("photo");
+    photos.forEach((photo) => form.append("photo", photo));
     form.set("name", name);
     submitting.current = true;
     setPending(true);
@@ -107,7 +117,7 @@ export function CreateItemDialog() {
                 : response.status === 403
                   ? "Akun Anda tidak memiliki izin untuk menambah jenis barang."
                   : response.status === 413
-                    ? "Foto maksimal 2 MiB. Pilih file yang lebih kecil."
+                    ? "Total unggahan maksimal 16 MiB termasuk data form. Kurangi ukuran atau jumlah foto."
                     : "Penyimpanan belum dapat dipastikan. Periksa katalog sebelum mencoba kembali.",
         );
         return;
@@ -228,26 +238,17 @@ export function CreateItemDialog() {
           </label>
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-ws-control p-2">
             <input
+              ref={photoSelection.input}
               id="create-item-photo"
               name="photo"
               type="file"
               accept="image/jpeg,image/png,image/webp"
+              multiple
               disabled={pending}
-              aria-describedby="create-item-photo-help"
-              onChange={(event) => {
-                if (previewUrl.current) URL.revokeObjectURL(previewUrl.current);
-                const file = event.currentTarget.files?.[0];
-                setPhotoName(file?.name ?? "");
-                previewUrl.current =
-                  file &&
-                  ["image/jpeg", "image/png", "image/webp"].includes(
-                    file.type,
-                  ) &&
-                  file.size <= 2 * 1024 * 1024
-                    ? URL.createObjectURL(file)
-                    : "";
-                setPreview(previewUrl.current);
-              }}
+              aria-describedby="create-item-photo-help create-item-photo-error"
+              onChange={(event) =>
+                photoSelection.append(Array.from(event.currentTarget.files ?? []))
+              }
               className="peer sr-only"
             />
             <label
@@ -255,25 +256,58 @@ export function CreateItemDialog() {
               aria-disabled={pending}
               className="ws-button-secondary shrink-0 cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ws-primary peer-disabled:cursor-wait"
             >
-              Pilih foto
+              {photoSelection.previews.length ? "Tambah foto" : "Pilih foto"}
             </label>
-            <span className="min-w-0 break-all text-xs">
-              {photoName || "Belum ada foto dipilih"}
+            <span className="min-w-0 break-all text-xs" aria-live="polite">
+              {photoSelection.previews.length
+                ? `${photoSelection.previews.length}/${MAX_CATALOG_PHOTOS} foto dipilih`
+                : "Belum ada foto dipilih"}
             </span>
+            {photoSelection.previews.length ? (
+              <button
+                type="button"
+                disabled={pending}
+                className="ws-button-secondary ml-auto"
+                onClick={photoSelection.reset}
+              >
+                Hapus semua
+              </button>
+            ) : null}
           </div>
+          <FieldError
+            id="create-item-photo-error"
+            message={photoSelection.error}
+          />
           <p id="create-item-photo-help" className="mt-2 text-xs leading-5">
-            JPEG, PNG, atau WebP statis. Maksimal 2 MiB; foto mewakili jenis
-            barang.
+            JPEG, PNG, atau WebP statis. Maksimal {MAX_CATALOG_PHOTOS} foto, 2 MiB per foto, dan 16 MiB per unggahan. Foto pertama menjadi foto utama.
           </p>
-          {preview ? (
-            <Image
-              src={preview}
-              alt="Pratinjau foto katalog"
-              width={160}
-              height={120}
-              unoptimized
-              className="mt-3 h-28 w-full rounded-md bg-ws-inset object-contain"
-            />
+          {photoSelection.previews.length ? (
+            <ul className="mt-3 flex flex-wrap gap-3">
+              {photoSelection.previews.map((photo, index) => (
+                <li key={photo.url} className="w-24 min-w-0">
+                  <Image
+                    src={photo.url}
+                    alt={`Pratinjau foto katalog ${index + 1}`}
+                    width={96}
+                    height={80}
+                    unoptimized
+                    className="h-20 w-24 rounded-md border border-ws-divider object-cover"
+                  />
+                  <p className="mt-1 truncate text-xs" title={photo.name}>
+                    {index === 0 ? `Foto utama · ${photo.name}` : photo.name}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={pending}
+                    className="ws-button-secondary mt-2 min-h-11 w-full px-2 text-xs"
+                    aria-label={`Hapus foto katalog ${index + 1}: ${photo.name}`}
+                    onClick={() => photoSelection.remove(index)}
+                  >
+                    Hapus
+                  </button>
+                </li>
+              ))}
+            </ul>
           ) : null}
           <p
             id="create-item-error"

@@ -1,6 +1,6 @@
 const MAX_PHOTO_BYTES = 2 * 1024 * 1024;
 const MAX_METADATA_BYTES = 256 * 1024;
-const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 16 * 1024 * 1024;
 
 export function stockPhotoError(files: File[]) {
   if (files.length === 0) return "Pilih minimal satu foto awal unit.";

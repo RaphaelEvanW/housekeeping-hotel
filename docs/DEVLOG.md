@@ -920,3 +920,8 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Owner screenshot showed item.findMany validation failure. Existing dev-session logs confirmed Unknown field photos; generated Item types on disk already contained the gallery relation. db.ts retains its client on globalThis during hot reload, so the running process still used the earlier model.
 - Stopped the agent-started dev session and restarted npm run dev on port3000. Authenticated browser /inventory then rendered the real catalog and existing cover image. No application/schema/migration change or test-suite execution. This verifies the runtime read after restart, not multi-photo creation or the pending duplicate-name regression suite. Skills: Debugging/Ponytail/Playwright/Verification. Restart dev after schema generation before checking browser routes.
+
+## 2026-10-26 — FE akumulasi foto unit dan katalog
+
+- Menyambungkan picker bersama agar pilihan foto bertahap tetap terkumpul, dapat dihapus per foto, tervalidasi, dan terkirim melalui input multipart yang sudah ada. Berlaku untuk foto awal unit, foto saat peminjaman, dan foto katalog; drawer detail jenis barang menampilkan seluruh foto berurutan dengan foto pertama sebagai utama.
+- Tidak mengubah API, schema, atau bukti foto historis. Lint, typecheck, tests, dan browser check belum dijalankan atas permintaan owner. Skills: Housekeeping Context/Ponytail untuk reuse dan scope; Design Taste/Antislop selama dan React/Next untuk pola interaksi serta batas client; TDD/Verification dibaca, checks tetap milik owner.
