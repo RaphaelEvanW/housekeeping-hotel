@@ -15,6 +15,8 @@ import { ItemNameDisclosure } from "@/components/item-name-disclosure";
 import { FieldError } from "@/components/field-error";
 import { useInventoryForm } from "@/lib/use-inventory-form";
 import { normalizeUnitName } from "@/lib/unit-display-name";
+import { prepareStockUpload } from "@/lib/stock-upload";
+import { UnitPhotoField } from "./unit-photo-field";
 type Item = {
   id: string;
   name: string;
@@ -31,6 +33,7 @@ type Attempt = {
   initialLocationId: string;
   quantity: number;
   units: Unit[];
+  photos: File[][];
 };
 const StockContext = createContext<((item: Item) => void) | null>(null);
 const conditions = {
@@ -92,6 +95,7 @@ export function StockRegistrationProvider({
   const [item, setItem] = useState<Item | null>(null);
   const [quantity, setQuantity] = useState("1");
   const [openUnit, setOpenUnit] = useState<number | null>(0);
+  const [formRevision, setFormRevision] = useState(0);
   const [pending, setPending] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const [error, setError] = useState("");
@@ -124,6 +128,7 @@ export function StockRegistrationProvider({
       setItem(selected);
       setQuantity("1");
       setOpenUnit(0);
+      setFormRevision(previous => previous + 1);
       setError("");
       setExpired(false);
       setSuccess(0);
@@ -166,14 +171,10 @@ export function StockRegistrationProvider({
         initialLocationId,
         quantity: count,
         units,
+        photos: Array.from({ length: count }, (_, index) =>
+          values.getAll(`photo-${index}`).filter((file): file is File => file instanceof File),
+        ),
       };
-      if (
-        new TextEncoder().encode(JSON.stringify(payload)).byteLength >
-        256 * 1024
-      ) {
-        setError("Data terlalu besar. Ringkas nomor seri atau deskripsi unit.");
-        return;
-      }
       attempt.current = payload;
     }
     const payload = attempt.current;
@@ -182,10 +183,18 @@ export function StockRegistrationProvider({
     setError("");
     setExpired(false);
     try {
+      let upload: Awaited<ReturnType<typeof prepareStockUpload>>;
+      try {
+        upload = await prepareStockUpload(payload);
+      } catch (error) {
+        if (!uncertain) attempt.current = null;
+        setError(error instanceof Error ? error.message : "Foto belum dapat disiapkan. Pilih ulang foto dan coba lagi.");
+        return;
+      }
       const response = await fetch("/api/stock-batches", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        headers: { "Content-Type": upload.contentType },
+        body: upload.body,
       });
       const body: unknown = await response.json().catch(() => null);
       if (response.status === 200 || response.status === 201) {
@@ -239,6 +248,12 @@ export function StockRegistrationProvider({
                     : code === "STORAGE_UNAVAILABLE" ||
                         code === "LOCATION_UNAVAILABLE"
                       ? "Lokasi awal tidak tersedia atau sudah nonaktif. Muat ulang daftar lokasi sebelum mencoba kembali."
+                      : code === "PHOTOS_REQUIRED"
+                        ? "Setiap unit wajib memiliki minimal satu foto awal."
+                        : code === "INVALID_PHOTO"
+                          ? "Foto tidak dapat diterima. Gunakan JPEG, PNG, atau WebP statis maksimal 2 MiB dan 20 megapiksel."
+                          : response.status === 413
+                            ? "Total unggahan maksimal 16 MiB. Kurangi ukuran foto atau jumlah unit."
                       : "Periksa jumlah dan detail unit sebelum menyimpan kembali.",
           );
         } else throw new Error("Unconfirmed rejection");
@@ -470,7 +485,7 @@ export function StockRegistrationProvider({
               <div className="space-y-3">
                 {Array.from({ length: count }, (_, index) => (
                   <details
-                    key={index}
+                    key={`${formRevision}-${index}`}
                     name="stock-units"
                     open={openUnit === index}
                     onToggle={(event) => {
@@ -605,6 +620,7 @@ export function StockRegistrationProvider({
                           className={`${inputClass} resize-none py-3`}
                         />
                       </div>
+                      <UnitPhotoField index={index} error={validation.errors[`stock-unit-photo-${index}`]} />
                     </fieldset>
                   </details>
                 ))}

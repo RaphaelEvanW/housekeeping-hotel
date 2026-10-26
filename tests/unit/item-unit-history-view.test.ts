@@ -9,6 +9,17 @@ import {
 const unitId = "unit-1";
 const unitCode = "HK-000001";
 
+it("preserves event photo references scoped to this unit", () => {
+  const body = historyBody();
+  const photo = { id: "photo-1", url: `/api/item-units/${unitId}/photos/photo-1` };
+  const withPhotos = { ...body, events: [{ ...body.events[0], photos: [photo] }] };
+  expect(parseUnitHistory(withPhotos, unitId, unitCode, 1)?.events[0].photos).toEqual([photo]);
+  for (const url of ["https://example.test/photo", "/api/item-units/other/photos/photo-1", "javascript:alert(1)"]) {
+    expect(parseUnitHistory({ ...body, events: [{ ...body.events[0], photos: [{ ...photo, url }] }] }, unitId, unitCode, 1)).toBeNull();
+  }
+  expect(parseUnitHistory({ ...body, events: [{ ...body.events[0], photos: [photo, photo] }] }, unitId, unitCode, 1)).toBeNull();
+});
+
 function historyBody() {
   return {
     unit: { id: unitId, unitCode },

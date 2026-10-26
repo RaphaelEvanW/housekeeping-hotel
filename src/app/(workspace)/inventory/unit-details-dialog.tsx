@@ -440,9 +440,6 @@ export function UnitDetailsDialog({
                       {current.notes || "Belum ada deskripsi."}
                     </p>
                   </section>
-                  <p className="mt-5 text-xs leading-5">
-                    Foto awal unit belum tersedia.
-                  </p>
 
                   <UnitHistory
                     key={`${unit.id}-${current.updatedAt}`}

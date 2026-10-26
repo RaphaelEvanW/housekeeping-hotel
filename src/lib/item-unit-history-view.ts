@@ -21,6 +21,7 @@ const historySchema = z.object({
           id: z.string(),
           name: z.string(),
         }),
+        photos: z.array(z.object({ id: z.string().min(1), url: z.string() })).optional(),
       }),
     )
     .max(HISTORY_PAGE_SIZE),
@@ -56,7 +57,13 @@ export function parseUnitHistory(
     pagination.pageSize !== HISTORY_PAGE_SIZE ||
     pagination.totalPages !== Math.ceil(pagination.total / HISTORY_PAGE_SIZE) ||
     pagination.hasNextPage !== page * HISTORY_PAGE_SIZE < pagination.total ||
-    data.events.length > pagination.total
+    data.events.length > pagination.total ||
+    data.events.some(event => {
+      const photos = event.photos ?? [];
+      return new Set(photos.map(photo => photo.id)).size !== photos.length || photos.some(photo =>
+        photo.url !== `/api/item-units/${encodeURIComponent(unitId)}/photos/${encodeURIComponent(photo.id)}`,
+      );
+    })
   ) {
     return null;
   }

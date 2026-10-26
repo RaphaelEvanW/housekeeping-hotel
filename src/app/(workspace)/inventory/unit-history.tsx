@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
+import { UnitHistoryPhoto } from "./unit-history-photo";
 import {
   HISTORY_MAX_PAGE,
   HISTORY_PAGE_SIZE,
@@ -276,6 +277,16 @@ export function UnitHistory({
                           ))}
                         </dl>
                       </details>
+                    ) : null}
+
+                    {event.photos?.length ? (
+                      <ul aria-label="Foto aktivitas unit" className="mt-3 flex flex-wrap gap-3">
+                        {event.photos.map((photo, index) => (
+                          <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto ${index + 1}`} />
+                        ))}
+                      </ul>
+                    ) : registration ? (
+                      <p className="mt-2 text-xs leading-5">Tidak ada foto pada pencatatan awal ini.</p>
                     ) : null}
                   </li>
                 );
