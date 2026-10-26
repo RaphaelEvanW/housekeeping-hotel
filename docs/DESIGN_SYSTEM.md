@@ -202,6 +202,8 @@ Aplikasi independen tanpa PMS sync. Nama tamu, nomor kamar dan nomor booking dim
 
 ## 12. Panduan penerimaan dan implementasi berikutnya
 
+Flow tamu/pinjaman disepakati26Oktober: daftar pengunjung hanya untuk kunjungan yang hendak meminjam, bukan seluruh kedatangan hotel. Dari daftar pilih kunjungan, lalu Tambah pinjaman, pilih jenis/unit siap dan foto kondisi per unit sebelum simpan. Satu detail kunjungan mengelompokkan aktivitas pinjam/kembali pada waktu berbeda, dengan petugas/foto/status masing-masing. Pinjaman aktif berisi unit yang masih outstanding, bukan semua kunjungan STAYING. Return bisa satu per satu atau gabungan; satu unit kembali tidak menyelesaikan yang lain. Checkout tetap mengizinkan return outstanding tetapi tidak menerima pinjaman baru. Halaman tamu/pinjaman belum diimplementasikan; ini acuan flow berikutnya.
+
 1. Baca dokumen ini, PROJECT yang relevan, CONTEXT dan source aktual sebelum mengubah UI. Preserve dirty work dan fungsi di luar screenshot.
 2. Gunakan Tailwind/token existing; jangan kembali ke palet crimson/brass atau memasang glass ke semua kartu. Figma menjadi acuan visual bersama override pemilik di atas.
 3. Periksa 320/390px, tablet 768px, desktop 1280/1366px, dan mode panel 1440px. Uji sidebar ciut, nama panjang, loading/empty/error/pending, keyboard dan reduced motion. Lebar kartu tidak berubah hanya karena sidebar berubah.

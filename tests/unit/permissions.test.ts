@@ -3,6 +3,12 @@ import { describe, expect, it } from "vitest";
 import { hasPermission } from "../../src/lib/permissions";
 
 describe("hasPermission", () => {
+  it("limits guest registration to staff and supervisors", () => {
+    expect(hasPermission(["HK_STAFF"], "guests:create")).toBe(true);
+    expect(hasPermission(["HK_SUPERVISOR"], "guests:create")).toBe(true);
+    expect(hasPermission(["MANAGEMENT"], "guests:create")).toBe(false);
+    expect(hasPermission(["SYSTEM_ADMIN"], "guests:create")).toBe(false);
+  });
   it("allows staff and supervisors to create borrowings", () => {
     expect(
       hasPermission(["HK_STAFF"], "borrowing:create"),

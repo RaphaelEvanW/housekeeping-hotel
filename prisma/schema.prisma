@@ -288,6 +288,8 @@ model GuestVisit {
   primaryGuestName           String
   normalizedPrimaryGuestName String
   roomNumber                 String
+  bookingNumber              String?
+  registrationRequestHash    String?          @db.Char(64)
   checkInDate                DateTime         @db.Date
   plannedCheckoutDate        DateTime         @db.Date
   status                     GuestVisitStatus @default(STAYING)
@@ -303,6 +305,7 @@ model GuestVisit {
   updatedBy User @relation("GuestVisitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
 
   @@index([status, roomNumber, checkInDate])
+  @@index([normalizedPrimaryGuestName, status, checkInDate])
   @@index([createdById])
   @@index([updatedById])
   @@map("guest_visit")

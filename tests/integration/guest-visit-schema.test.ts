@@ -43,13 +43,13 @@ it("stores date-only stay details and defaults to staying", async () => {
       status: "STAYING",
       checkedOutAt: null,
       isDuplicate: false,
+      bookingNumber: null,
+      registrationRequestHash: null,
       createdById: user.id,
       updatedById: user.id,
     });
 
-    expect(visit.checkInDate).toEqual(
-      new Date("2026-01-01T00:00:00.000Z"),
-    );
+    expect(visit.checkInDate).toEqual(new Date("2026-01-01T00:00:00.000Z"));
 
     expect(visit.plannedCheckoutDate).toEqual(
       new Date("2026-01-03T00:00:00.000Z"),
@@ -127,6 +127,15 @@ const invalidUpdates: {
   name: string;
   data: Prisma.GuestVisitUncheckedUpdateInput;
 }[] = [
+  { name: "blank booking number", data: { bookingNumber: "   " } },
+  {
+    name: "invalid registration hash",
+    data: { registrationRequestHash: "invalid" },
+  },
+  {
+    name: "registration hash without booking number",
+    data: { registrationRequestHash: "a".repeat(64) },
+  },
   {
     name: "blank primary guest name",
     data: { primaryGuestName: " \t\n " },

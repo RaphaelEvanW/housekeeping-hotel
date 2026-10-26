@@ -15,6 +15,7 @@ export const permissionRoles = {
   "administration:view": ["SYSTEM_ADMIN"],
 
   // Business actions
+  "guests:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "borrowing:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inventory:item:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inventory:item:update": ["HK_STAFF", "HK_SUPERVISOR"],
