@@ -14,11 +14,13 @@ import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { ItemNameDisclosure } from "@/components/item-name-disclosure";
 import { FieldError } from "@/components/field-error";
 import { useInventoryForm } from "@/lib/use-inventory-form";
+import { normalizeUnitName } from "@/lib/unit-display-name";
 type Item = {
   id: string;
   name: string;
 };
 type Unit = {
+  name: string | null;
   serialNumber: string;
   notes: string;
   condition: string;
@@ -97,7 +99,7 @@ export function StockRegistrationProvider({
   const [success, setSuccess] = useState(0);
   const [successUnits, setSuccessUnits] = useState<Unit[]>([]);
   const [unitTitles, setUnitTitles] = useState<
-    Record<number, { serial?: string }>
+    Record<number, { name?: string; serial?: string }>
   >({});
   useEffect(() => {
     if (!uncertain) return;
@@ -153,6 +155,7 @@ export function StockRegistrationProvider({
         return;
       }
       const units = Array.from({ length: count }, (_, index) => ({
+        name: normalizeUnitName(String(values.get(`name-${index}`) ?? "")),
         serialNumber: String(values.get(`serial-${index}`) ?? "").trim(),
         notes: String(values.get(`notes-${index}`) ?? "").trim(),
         condition: String(values.get(`condition-${index}`) || "GOOD"),
@@ -324,7 +327,7 @@ export function StockRegistrationProvider({
                     <tr key={index} className="align-top">
                       <td className="py-3 tabular-nums">{index + 1}</td>
                       <td className="py-3 pr-3 text-ws-strong [overflow-wrap:anywhere]">
-                        {item?.name}
+                        {unit.name || item?.name}
                       </td>
                       <td className="py-3 [overflow-wrap:anywhere]">
                         {unit.serialNumber || "Tanpa nomor seri"}
@@ -484,7 +487,7 @@ export function StockRegistrationProvider({
                     >
                       <span className="min-w-0 line-clamp-2 text-left [overflow-wrap:anywhere]">
                         <span className="tabular-nums">{index + 1}</span> —{" "}
-                        {item?.name} —{" "}
+                        {normalizeUnitName(unitTitles[index]?.name ?? "") || item?.name} —{" "}
                         <span className="font-normal text-ws-text">
                           {unitTitles[index]?.serial?.trim() ||
                             "Tanpa nomor seri"}
@@ -514,19 +517,16 @@ export function StockRegistrationProvider({
                         </label>
                         <input
                           id={`stock-unit-name-${index}`}
-                          disabled
-                          value=""
-                          readOnly
+                          name={`name-${index}`}
+                          maxLength={100}
                           className={inputClass}
-                          aria-describedby={`stock-unit-name-help-${index}`}
+                          aria-invalid={Boolean(validation.errors[`stock-unit-name-${index}`])}
+                          aria-describedby={validation.errors[`stock-unit-name-${index}`] ? `stock-unit-name-error-${index}` : undefined}
+                          onChange={event => setUnitTitles(previous => ({
+                            ...previous, [index]: { ...previous[index], name: event.target.value },
+                          }))}
                         />
-                        <p
-                          id={`stock-unit-name-help-${index}`}
-                          className="mt-2 text-xs leading-5"
-                        >
-                          belom bisa nih, sabar ye, perlu jadiin backendnya dlu,
-                          makasih.
-                        </p>
+                        <FieldError id={`stock-unit-name-error-${index}`} message={validation.errors[`stock-unit-name-${index}`]} />
                       </div>
                       <div className="min-w-0">
                         <label

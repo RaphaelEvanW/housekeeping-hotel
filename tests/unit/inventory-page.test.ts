@@ -118,14 +118,14 @@ it("renders stored names safely and keeps the selected-item action and dates rea
   expect(html).toContain("21 Okt 2026");
 });
 
-it("renders lifecycle, custody, physical condition, readiness and loss as separate facts", async () => {
+it.each([null, "Unit kamar 01"])("renders separate operational facts and real unit name %j", async name => {
   mockUnits.mockResolvedValueOnce({
     item: { id: itemId, name: "Setrika", isActive: false, description: null, photoUrl: null },
     totalRegistered: 1, nextCursor: null,
     units: [{
       id: "unit-id", unitNumber: 125, unitCode: "HK-000125",
       serialNumber: null, notes: null, lifecycle: "RETIRED", custody: "GUEST",
-      name: null, condition: "GOOD", readiness: "CLEAR", lossState: "LOST", location: null,
+      name, condition: "GOOD", readiness: "CLEAR", lossState: "LOST", location: null,
       createdAt: new Date("2026-10-21T00:00:00Z"), updatedAt: new Date("2026-10-21T00:00:00Z"),
     }],
   });
@@ -135,7 +135,7 @@ it("renders lifecycle, custody, physical condition, readiness and loss as separa
   expect(html).toContain("Kesiapan: Siap");
   expect(html).not.toContain("Siklus unit: Dipensiunkan");
   expect(html).toContain("Hilang");
-  expect(html).toContain('aria-label="Detail unit HK-000125"');
+  expect(html).toContain(`aria-label="Detail unit ${name ? `${name} (HK-000125)` : "HK-000125"}"`);
   expect(html).toContain('aria-haspopup="dialog"');
   expect(html).not.toContain(">Siap dipinjam<");
 });

@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
-import { unitDisplayName } from "@/lib/unit-display-name";
+import { normalizeUnitName, unitDisplayName } from "@/lib/unit-display-name";
+import { FieldError } from "@/components/field-error";
 import { useInventoryForm } from "@/lib/use-inventory-form";
 import { UnitHistory } from "./unit-history";
 
@@ -42,9 +43,10 @@ export function UnitDetailsDialog({
   const router = useRouter();
   const validation = useInventoryForm();
   const dialog = useRef<HTMLDialogElement>(null);
-  const serialInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const editButton = useRef<HTMLButtonElement>(null);
   const [attempted, setAttempted] = useState<{
+    name: string | null;
     serialNumber: string | null;
     notes: string | null;
   } | null>(null);
@@ -58,7 +60,7 @@ export function UnitDetailsDialog({
   const [success, setSuccess] = useState(false);
   const [current, setCurrent] = useState(unit);
   const headingId = `unit-details-${unit.id}`;
-  const displayName = unitDisplayName(unit);
+  const displayName = unitDisplayName(current);
 
   useEffect(() => {
     if (!open) return;
@@ -79,7 +81,7 @@ export function UnitDetailsDialog({
   }, [open]);
 
   useEffect(() => {
-    if (editing) serialInput.current?.focus();
+    if (editing) nameInput.current?.focus();
     else if (open) editButton.current?.focus();
   }, [editing, open]);
 
@@ -109,6 +111,7 @@ export function UnitDetailsDialog({
     if (!validation.validate(event.currentTarget)) return;
     const values = new FormData(event.currentTarget);
     const payload = {
+      name: normalizeUnitName(String(values.get("name") ?? "")),
       serialNumber: String(values.get("serialNumber") ?? "").trim() || null,
       notes: String(values.get("notes") ?? "").trim() || null,
     };
@@ -146,6 +149,8 @@ export function UnitDetailsDialog({
           saved.itemId !== unit.itemId ||
           !("unitCode" in saved) ||
           saved.unitCode !== unit.unitCode ||
+          !("name" in saved) ||
+          saved.name !== payload.name ||
           !("serialNumber" in saved) ||
           saved.serialNumber !== payload.serialNumber ||
           !("notes" in saved) ||
@@ -171,7 +176,7 @@ export function UnitDetailsDialog({
               ? "Anda tidak memiliki izin mengubah unit."
               : response.status === 404
                 ? "Unit tidak ditemukan. Muat ulang daftar barang."
-                : "Periksa nomor seri dan deskripsi sebelum menyimpan kembali.",
+                : "Periksa nama, nomor seri, dan deskripsi unit sebelum menyimpan kembali.",
         );
       } else throw new Error("Unconfirmed unit update");
     } catch {
@@ -201,7 +206,7 @@ export function UnitDetailsDialog({
         <span className="line-clamp-2 [overflow-wrap:anywhere]">
           {displayName}
         </span>
-        <span className="text-xs leading-5 font-normal text-ws-text">{unit.serialNumber ? unit.unitCode : "Tanpa nomor seri"}</span>
+        <span className="text-xs leading-5 font-normal text-ws-text">{current.serialNumber || current.name ? unit.unitCode : "Tanpa nomor seri"}</span>
       </button>
       {open
         ? createPortal(
@@ -255,6 +260,7 @@ export function UnitDetailsDialog({
                     className="ws-button-secondary"
                     aria-label={`Edit unit ${unit.unitCode}`}
                     onClick={() => {
+                      validation.reset();
                       setSuccess(false);
                       setError("");
                       setEditing(true);
@@ -294,20 +300,16 @@ export function UnitDetailsDialog({
                         </span>
                       </label>
                       <input
+                        ref={nameInput}
                         id={`${headingId}-name`}
-                        disabled
-                        value=""
-                        readOnly
+                        name="name"
+                        maxLength={100}
+                        defaultValue={(unconfirmed ? attempted?.name : current.name) ?? ""}
                         className={inputClass}
-                        aria-describedby={`${headingId}-name-help`}
+                        aria-invalid={Boolean(validation.errors[`${headingId}-name`])}
+                        aria-describedby={validation.errors[`${headingId}-name`] ? `${headingId}-name-error` : undefined}
                       />
-                      <p
-                        id={`${headingId}-name-help`}
-                        className="mt-2 text-xs leading-5"
-                      >
-                        belom bisa nih, sabar ye, perlu jadiin backendnya dlu,
-                        makasih.
-                      </p>
+                      <FieldError id={`${headingId}-name-error`} message={validation.errors[`${headingId}-name`]} />
                     </div>
                     <div>
                       <label
@@ -320,7 +322,6 @@ export function UnitDetailsDialog({
                         </span>
                       </label>
                       <input
-                        ref={serialInput}
                         id={`${headingId}-serial`}
                         name="serialNumber"
                         defaultValue={

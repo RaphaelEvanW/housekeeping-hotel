@@ -537,7 +537,7 @@ export default async function InventoryPage({
                               id: unit.id,
                               itemId: selected.item.id,
                               unitCode: unit.unitCode,
-                              name: null,
+                              name: unit.name,
                               serialNumber: unit.serialNumber,
                               notes: unit.notes,
                               createdAt: unit.createdAt.toISOString(),

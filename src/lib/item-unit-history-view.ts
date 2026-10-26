@@ -94,6 +94,7 @@ export function historyChanges(event: UnitHistoryEvent) {
   }
 
   const fields = [
+    ["name", "Nama unit"],
     ["serialNumber", "Nomor seri"],
     ["notes", "Deskripsi"],
   ] as const;

@@ -1,6 +1,6 @@
 # Nama unit — backend
 
-Status26Oktober2026, base6bd5e14: implementasi langsung disetujui owner untuk nama unit saja. Tidak menambah endpoint, approval, dependency, unique-name constraint atau fitur foto. Frontend belum diaktifkan.
+Status26Oktober2026, base6bd5e14: implementasi langsung disetujui owner untuk nama unit saja. Tidak menambah endpoint, approval, dependency, unique-name constraint atau fitur foto. Frontend dihubungkan26Oktober2026 pada base e95d331, menunggu checks/manual test owner.
 
 ## Data dan kontrak
 
@@ -16,7 +16,7 @@ Status26Oktober2026, base6bd5e14: implementasi langsung disetujui owner untuk na
 - Agent menjalankan db:generate, db:validate, db:migrate:test dan db:migrate. Migrasi test/dev berhasil; tidak mengubah data operasional dev selain schema aditif. Semua actor/mutasi tes berada di housekeeping_test dengan guard env existing.
 - Ditemukan direktori lama20261023050000_item_unit_name kosong/tidak tracked, sisa rollback23Oktober. Dihapus hanya setelah path diverifikasi dan dipastikan kosong; tidak menghapus file migrasi/data. Percobaan deploy test awal P3015 berhenti karena folder itu; deploy berikutnya berhasil tanpa reset.
 - Restart npm run dev setelah pembaruan generated Prisma client agar global cached client tidak memakai model lama. Tidak ada restart server/user process otomatis pada slice ini.
-- FE Add Unit/Edit masih disabled untuk nama; inventory page masih memasok name:null. Integrasi FE berikutnya perlu mengaktifkan input/payload, membaca unit.name, memvalidasi response nama serta menampilkan perubahan nama pada history dengan komponen existing. Jangan menganggap nama sudah terlihat/tersimpan dari form sekarang. Foto, peminjaman dan return tetap di luar scope.
+- FE Add Unit/Edit kini memakai nama opsional max100, input existing/FieldError dan normalizeUnitName bersama di unit-display-name.ts. Batch menyimpan name di payload frozen/accordion/success summary; read memakai unit.name. PATCH response wajib cocok termasuk nama; sukses memperbarui current state/judul/trigger, hasil belum pasti mempertahankan nama percobaan dan lock existing. HistoryChanges mencakup name dengan snapshot lama/baru dan tidak mengarang nama pada legacy events. Foto, peminjaman dan return tetap di luar scope. Pemeriksaan FE menunggu owner; belum ada klaim browser/persistence dari form.
 
 ## Verifikasi26Oktober
 

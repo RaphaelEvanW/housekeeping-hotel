@@ -39,6 +39,26 @@ function historyBody() {
   };
 }
 
+it.each([
+  { before: null, after: "Unit A" },
+  { before: "Unit A", after: "Unit B" },
+  { before: "Unit A", after: null },
+])("shows the real audited name change %j", ({ before, after }) => {
+  const event = historyBody().events[0];
+  expect(historyChanges({ ...event, oldValues: { name: before }, newValues: { name: after } })).toEqual([
+    { key: "name", label: "Nama unit", before, after },
+  ]);
+});
+
+it("shows a registration name without inventing names for legacy records", () => {
+  const event = historyBody().events[0];
+  expect(historyChanges({ ...event, action: "STOCK_UNIT_CREATED", oldValues: null, newValues: { name: "Unit A" } })).toEqual([
+    { key: "name", label: "Nama unit", before: null, after: "Unit A" },
+  ]);
+  expect(historyChanges({ ...event, oldValues: {}, newValues: { name: "Unit A" } })).toEqual([]);
+  expect(historyChanges({ ...event, oldValues: { name: "Unit A" }, newValues: { name: "Unit A" } })).toEqual([]);
+});
+
 it("accepts history for the requested unit and page", () => {
   expect(
     parseUnitHistory(historyBody(), unitId, unitCode, 1),
