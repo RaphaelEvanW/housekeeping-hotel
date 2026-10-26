@@ -11,7 +11,7 @@ type Result = { query: Query } & (
   { data: ItemFilterOptions } | { error: string; expired: boolean }
 );
 
-export function ItemFilter({ initialItem }: { initialItem: Item | null }) {
+export function ItemFilter({ initialItem, onSelect, activeOnly = false }: { initialItem: Item | null; onSelect?: (item: Item) => void; activeOnly?: boolean }) {
   const [selected, setSelected] = useState(initialItem);
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState<Query>({ q: "", page: 1, revision: 0 });
@@ -48,13 +48,14 @@ export function ItemFilter({ initialItem }: { initialItem: Item | null }) {
 
   function choose(item: Item | null) {
     setSelected(item);
+    if (item) onSelect?.(item);
   }
 
   return (
     <>
-      {selected ? <input type="hidden" name="itemId" value={selected.id} /> : null}
+      {selected && !onSelect ? <input type="hidden" name="itemId" value={selected.id} /> : null}
       <WorkspaceFilterDropdown
-        id="item-filter" label="Jenis barang" value={selected?.name ?? "Semua jenis barang"}
+        id={onSelect ? "issue-item-filter" : "item-filter"} label="Jenis barang" value={selected?.name ?? (onSelect ? "Pilih jenis barang" : "Semua jenis barang")}
         className="flex-1 basis-full sm:min-w-56 sm:basis-56"
         onOpenChange={opened => {
           setExpanded(opened);
@@ -69,7 +70,7 @@ export function ItemFilter({ initialItem }: { initialItem: Item | null }) {
             onKeyDown={event => { if (event.key === "Enter") event.preventDefault(); }}
             className="min-h-11 w-full min-w-0 rounded-md border border-ws-control bg-ws-inset px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
           />
-          <button type="button" onClick={event => { choose(null); closeFilterDropdown(event); }} className="mt-2 flex min-h-11 w-full items-center rounded-md px-2 text-left text-sm font-medium text-ws-primary hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">Semua jenis barang</button>
+          {!onSelect ? <button type="button" onClick={event => { choose(null); closeFilterDropdown(event); }} className="mt-2 flex min-h-11 w-full items-center rounded-md px-2 text-left text-sm font-medium text-ws-primary hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">Semua jenis barang</button> : null}
           {!current ? <p role="status" className="px-2 py-4 text-xs">Memuat jenis barang…</p> : "error" in current ? (
             <div className="py-3">
               <p role="alert" className="text-xs leading-5 text-ws-danger">{current.error}</p>
@@ -81,8 +82,8 @@ export function ItemFilter({ initialItem }: { initialItem: Item | null }) {
                 {current.data.items.map(item => (
                   <li key={item.id}>
                     <button
-                      type="button" onClick={event => { choose(item); closeFilterDropdown(event); }}
-                      className={`${filterOptionClass} ${selected?.id === item.id ? "bg-ws-inset font-medium text-ws-primary" : "text-ws-strong"}`}
+                      type="button" disabled={activeOnly && !item.isActive} onClick={event => { choose(item); closeFilterDropdown(event); }}
+                      className={`${filterOptionClass} disabled:cursor-not-allowed disabled:opacity-50 ${selected?.id === item.id ? "bg-ws-inset font-medium text-ws-primary" : "text-ws-strong"}`}
                     >
                       <span className="min-w-0 [overflow-wrap:anywhere]">{item.name}</span>
                       {!item.isActive ? <span className="shrink-0 text-xs text-ws-text">Nonaktif</span> : null}

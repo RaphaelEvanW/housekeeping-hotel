@@ -5,13 +5,14 @@ import { useEffect, useRef, useState } from "react";
 import { FieldError } from "@/components/field-error";
 import { stockPhotoError } from "@/lib/stock-upload";
 
-export function UnitPhotoField({ index, error }: { index: number; error?: string }) {
+export function UnitPhotoField({ index, error, purpose = "initial" }: { index: number; error?: string; purpose?: "initial" | "issue" }) {
   const input = useRef<HTMLInputElement>(null);
   const previewUrls = useRef<string[]>([]);
   const [previews, setPreviews] = useState<{ name: string; url: string }[]>([]);
   const [selectionError, setSelectionError] = useState<string | null>(null);
   const message = selectionError ?? error;
-  const id = `stock-unit-photo-${index}`;
+  const id = `${purpose === "initial" ? "stock" : "issue"}-unit-photo-${index}`;
+  const label = purpose === "issue" ? "Foto saat dipinjamkan" : "Foto awal unit";
 
   useEffect(() => {
     const urls = previewUrls.current;
@@ -19,7 +20,7 @@ export function UnitPhotoField({ index, error }: { index: number; error?: string
   }, []);
 
   function select(files: File[]) {
-    const invalid = stockPhotoError(files);
+    const invalid = files.length === 0 && purpose === "issue" ? "Pilih minimal satu foto saat dipinjamkan." : stockPhotoError(files);
     input.current?.setCustomValidity(invalid);
     setSelectionError(invalid);
     previewUrls.current.forEach(url => URL.revokeObjectURL(url));
@@ -35,7 +36,7 @@ export function UnitPhotoField({ index, error }: { index: number; error?: string
   return (
     <div className="min-w-0 sm:col-span-2">
       <label htmlFor={id} className="block text-sm font-medium text-ws-strong">
-        Foto awal unit <span aria-hidden="true">*</span>
+        {label} <span aria-hidden="true">*</span>
       </label>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <input
@@ -46,7 +47,7 @@ export function UnitPhotoField({ index, error }: { index: number; error?: string
           accept="image/jpeg,image/png,image/webp"
           multiple
           required
-          data-required-message="Pilih minimal satu foto awal unit."
+          data-required-message={`Pilih minimal satu ${label.toLowerCase()}.`}
           aria-invalid={Boolean(message)}
           aria-describedby={`${id}-help ${id}-error`}
           className="peer sr-only"
@@ -71,7 +72,7 @@ export function UnitPhotoField({ index, error }: { index: number; error?: string
         ) : null}
       </div>
       <p id={`${id}-help`} className="mt-2 text-xs leading-5">
-        Minimal satu foto kondisi awal. JPEG, PNG, atau WebP statis, maksimal 2 MiB per foto.
+        {purpose === "issue" ? "Foto kondisi unit saat diserahkan ke tamu." : "Minimal satu foto kondisi awal."} JPEG, PNG, atau WebP statis, maksimal 2 MiB per foto.
       </p>
       <FieldError id={`${id}-error`} message={message} />
       {previews.length ? (

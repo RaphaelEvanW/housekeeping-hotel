@@ -18,6 +18,13 @@ export async function prepareStockUpload<T extends { quantity: number; photos: F
   if (photos.length !== data.quantity || photos.some(files => stockPhotoError(files))) {
     throw new Error("Setiap unit wajib memiliki foto JPEG, PNG, atau WebP maksimal 2 MiB.");
   }
+  return prepareUnitPhotoUpload(data, photos);
+}
+
+export async function prepareUnitPhotoUpload(data: object, photos: File[][]) {
+  if (photos.length === 0 || photos.some(files => stockPhotoError(files))) {
+    throw new Error("Setiap unit wajib memiliki foto JPEG, PNG, atau WebP maksimal 2 MiB.");
+  }
   const metadata = JSON.stringify(data);
   if (new TextEncoder().encode(metadata).byteLength > MAX_METADATA_BYTES) {
     throw new Error("Data terlalu besar. Ringkas nama, nomor seri, atau deskripsi unit.");

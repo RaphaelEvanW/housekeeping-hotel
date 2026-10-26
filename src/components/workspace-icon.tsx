@@ -6,7 +6,8 @@ const navigationIcons: Record<string, string> = {
 };
 
 export function WorkspaceIcon({ href }: { href: string }) {
-  const path = navigationIcons[href] ?? navigationIcons["/inventory"];
+  const iconHref = href === "/guests" ? "/administration" : href;
+  const path = navigationIcons[iconHref] ?? navigationIcons["/inventory"];
 
   return (
     <svg aria-hidden="true" focusable="false" viewBox="0 0 256 256" className="h-5 w-5 shrink-0 fill-current">

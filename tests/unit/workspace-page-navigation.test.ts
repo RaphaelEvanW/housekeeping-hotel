@@ -4,6 +4,7 @@ import { workspaceBreadcrumbs } from "../../src/lib/workspace-breadcrumbs";
 import { WorkspaceBackButton } from "../../src/components/workspace-back-button";
 import { WorkspacePageHeading } from "../../src/components/workspace-page-heading";
 import { WorkspaceBreadcrumbs } from "../../src/components/workspace-breadcrumbs";
+import { getNavigationItems } from "../../src/lib/navigation";
 
 const router = vi.hoisted(() => ({ back: vi.fn(), replace: vi.fn() }));
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/inventory/deactivation-requests" }));
@@ -53,4 +54,23 @@ it("keeps a labelled icon button beside the heading, including error headings", 
 it("does not add back navigation to a root menu heading", () => {
   const html = renderToStaticMarkup(WorkspacePageHeading({ children: "Inventaris" }));
   expect(html).not.toContain('aria-label="Kembali ke halaman sebelumnya"');
+});
+
+it("exposes the guest page for permitted roles with matching breadcrumbs", () => {
+  for (const role of ["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const) {
+    expect(getNavigationItems([role])).toContainEqual(
+      expect.objectContaining({ href: "/guests", available: true }),
+    );
+  }
+  expect(workspaceBreadcrumbs("/guests")).toEqual([
+    { href: "/guests", label: "Tamu" },
+  ]);
+  expect(workspaceBreadcrumbs("/guests-other")).toEqual([]);
+});
+
+it("keeps the guest list as parent of a visit detail", () => {
+  expect(workspaceBreadcrumbs("/guests/22222222-2222-4222-8222-222222222222")).toEqual([
+    { href: "/guests", label: "Tamu" },
+    { href: "/guests/22222222-2222-4222-8222-222222222222", label: "Detail tamu" },
+  ]);
 });

@@ -58,6 +58,7 @@ const navigationItems = [
 const availableRoutes = new Set<string>([
   "/dashboard",
   "/inventory",
+  "/guests",
   "/administration",
 ]);
 
