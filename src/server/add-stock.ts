@@ -176,6 +176,7 @@ export async function addStock(
         SELECT "id", "isActive"
         FROM "location"
         WHERE "id" = ${input.initialLocationId}
+          AND "code" <> 'WITH_GUEST'
         FOR SHARE
       ` : await tx.$queryRaw<
         { id: string; isActive: boolean }[]

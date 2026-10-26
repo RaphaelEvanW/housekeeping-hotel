@@ -12,7 +12,10 @@ export async function seedReferenceData(tx: Prisma.TransactionClient) {
     skipDuplicates: true,
   });
   await tx.location.createMany({
-    data: [{ code: "HK_MAIN_STORAGE", name: "HK Main Storage" }],
+    data: [
+      { code: "HK_MAIN_STORAGE", name: "HK Main Storage" },
+      { code: "WITH_GUEST", name: "Bersama tamu" },
+    ],
     skipDuplicates: true,
   });
 }

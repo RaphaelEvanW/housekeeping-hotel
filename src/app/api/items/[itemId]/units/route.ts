@@ -5,6 +5,10 @@ import { getItemUnits } from "@/server/item-units";
 
 const inputSchema = z.object({
   itemId: z.string().uuid(),
+  borrowableOnly: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   after: z
     .string()
     .regex(/^[1-9]\d*$/)
@@ -33,6 +37,7 @@ export async function GET(
   const url = new URL(request.url);
 
   const parsed = inputSchema.safeParse({
+    borrowableOnly: url.searchParams.get("borrowableOnly") ?? undefined,
     itemId,
     after: url.searchParams.get("after") ?? undefined,
   });
@@ -53,6 +58,7 @@ export async function GET(
   const result = await getItemUnits(
     parsed.data.itemId,
     parsed.data.after,
+    parsed.data.borrowableOnly,
   );
 
   if (!result) {

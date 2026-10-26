@@ -8,6 +8,7 @@ import {
   vi,
 } from "vitest";
 
+import type { Prisma } from "../../src/generated/prisma/client";
 import { GET } from "../../src/app/api/items/[itemId]/units/route";
 import { db } from "../../src/server/db";
 import { getActiveUser } from "../../src/server/get-active-user";
@@ -41,13 +42,20 @@ let actor: ActiveUser;
 let userId: string | undefined;
 let itemId: string;
 
-function getUnits(targetItemId = itemId, after?: string) {
+function getUnits(
+  targetItemId = itemId,
+  after?: string,
+  borrowableOnly?: string,
+) {
   const url = new URL(
     `http://localhost/api/items/${targetItemId}/units`,
   );
 
   if (after !== undefined) {
     url.searchParams.set("after", after);
+  }
+  if (borrowableOnly !== undefined) {
+    url.searchParams.set("borrowableOnly", borrowableOnly);
   }
 
   return GET(new Request(url), {
@@ -309,4 +317,185 @@ it("keeps inactive items and retired or lost units readable", async () => {
       }),
     ]),
   });
+});
+
+it.each(["", "1", "yes", "TRUE"])(
+  "rejects an invalid borrowableOnly flag: %j",
+  async (flag) => {
+    expect((await getUnits(itemId, undefined, flag)).status).toBe(400);
+  },
+);
+
+it.each([undefined, "false"])(
+  "keeps inventory units visible when filtering is disabled: %j",
+  async (flag) => {
+    const [unit] = await createUnits(1);
+    await db.itemUnit.update({
+      where: { id: unit.id },
+      data: { readiness: "ON_HOLD" },
+    });
+
+    const response = await getUnits(itemId, undefined, flag);
+    expect(response.status).toBe(200);
+
+    const body = (await response.json()) as UnitsResponse;
+    expect(body.units.map((value) => value.id)).toEqual([unit.id]);
+    expect(body.totalRegistered).toBe(1);
+  },
+);
+
+it.each([
+  { lifecycle: "RETIRED" },
+  { custody: "GUEST" },
+  { custody: "ENGINEERING" },
+  { custody: "EXTERNAL_VENDOR" },
+  { readiness: "ON_HOLD" },
+  { readiness: "PENDING_INSPECTION" },
+  { readiness: "PENDING_VERIFICATION" },
+  { lossState: "MISSING" },
+  { lossState: "LOST" },
+] satisfies Prisma.ItemUnitUpdateInput[])(
+  "excludes blocked units from borrowing selection: %j",
+  async (state) => {
+    const [blocked, available] = await createUnits(2);
+
+    await db.itemUnit.update({
+      where: { id: blocked.id },
+      data: state,
+    });
+
+    const response = await getUnits(itemId, undefined, "true");
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+
+    const body = (await response.json()) as UnitsResponse;
+    expect(body.units.map((unit) => unit.id)).toEqual([available.id]);
+    expect(body.totalRegistered).toBe(2);
+    expect(body.nextCursor).toBeNull();
+  },
+);
+
+it("excludes units of inactive types without hiding inventory history", async () => {
+  const [unit] = await createUnits(1);
+
+  await db.item.update({
+    where: { id: itemId },
+    data: { isActive: false },
+  });
+
+  const filtered = await getUnits(itemId, undefined, "true");
+  expect(filtered.status).toBe(200);
+  expect(await filtered.json()).toMatchObject({
+    item: { id: itemId, isActive: false },
+    totalRegistered: 1,
+    units: [],
+    nextCursor: null,
+  });
+
+  const inventory = await getUnits();
+  expect(await inventory.json()).toMatchObject({
+    units: [expect.objectContaining({ id: unit.id })],
+  });
+});
+
+it("paginates eligible units after filtering and preserves the registered total", async () => {
+  const created = await createUnits(52);
+  const ordered = [...created].sort(
+    (left, right) => left.unitNumber - right.unitNumber,
+  );
+
+  await db.itemUnit.update({
+    where: { id: ordered[0].id },
+    data: { readiness: "ON_HOLD" },
+  });
+
+  const firstResponse = await getUnits(itemId, undefined, "true");
+  expect(firstResponse.status).toBe(200);
+  const first = (await firstResponse.json()) as UnitsResponse;
+
+  expect(first.totalRegistered).toBe(52);
+  expect(first.units.map((unit) => unit.id)).toEqual(
+    ordered.slice(1, 51).map((unit) => unit.id),
+  );
+  expect(first.nextCursor).toBe(ordered[50].unitNumber);
+
+  const secondResponse = await getUnits(
+    itemId,
+    String(first.nextCursor),
+    "true",
+  );
+  expect(secondResponse.status).toBe(200);
+  const second = (await secondResponse.json()) as UnitsResponse;
+
+  expect(second.totalRegistered).toBe(52);
+  expect(second.units.map((unit) => unit.id)).toEqual([ordered[51].id]);
+  expect(second.nextCursor).toBeNull();
+});
+
+it("excludes outstanding obligations and allows resolved historical lines", async () => {
+  const [unit] = await createUnits(1);
+  const visit = await db.guestVisit.create({
+    data: {
+      primaryGuestName: "Selection Guest",
+      normalizedPrimaryGuestName: "selection guest",
+      roomNumber: "0101",
+      bookingNumber: "SELECTION-TEST",
+      checkInDate: new Date("2026-10-26T00:00:00Z"),
+      plannedCheckoutDate: new Date("2026-10-28T00:00:00Z"),
+      createdById: actor.id,
+      updatedById: actor.id,
+    },
+  });
+
+  let borrowingId: string | undefined;
+
+  try {
+    const borrowing = await db.borrowing.create({
+      data: {
+        guestVisitId: visit.id,
+        requestHash: "a".repeat(64),
+        primaryGuestNameSnapshot: visit.primaryGuestName,
+        roomNumberSnapshot: visit.roomNumber,
+        issuedById: actor.id,
+        lines: {
+          create: {
+            unitId: unit.id,
+            conditionAtIssue: "GOOD",
+          },
+        },
+      },
+      select: {
+        id: true,
+        lines: { select: { id: true } },
+      },
+    });
+    borrowingId = borrowing.id;
+
+    const blocked = await getUnits(itemId, undefined, "true");
+    expect(blocked.status).toBe(200);
+    expect(await blocked.json()).toMatchObject({
+      totalRegistered: 1,
+      units: [],
+    });
+
+    for (const status of ["RETURNED", "SETTLED"] as const) {
+      await db.borrowingLine.update({
+        where: { id: borrowing.lines[0].id },
+        data: { status, resolvedAt: new Date() },
+      });
+
+      const available = await getUnits(itemId, undefined, "true");
+      expect(available.status).toBe(200);
+      expect(await available.json()).toMatchObject({
+        units: [expect.objectContaining({ id: unit.id })],
+      });
+    }
+  } finally {
+    if (borrowingId) {
+      await db.borrowingLine.deleteMany({ where: { borrowingId } });
+      await db.borrowing.delete({ where: { id: borrowingId } });
+    }
+
+    await db.guestVisit.delete({ where: { id: visit.id } });
+  }
 });

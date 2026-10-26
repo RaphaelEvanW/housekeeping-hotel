@@ -89,7 +89,7 @@ Enforce permissions **on the server**. Do not add approvals to routine staff dat
 - Only HK Supervisor may approve or reject a pending request. Supervisor may approve their own request; submitting and approving must be separate deliberate actions with an opportunity to inspect the Item, reason, and effect.
 - The requester may cancel their own pending request. Cancellation and rejection leave the Item active.
 - Approval sets the Item inactive atomically with the request decision and audit. Record requester/reason and decision actor/time. Preserve physical units and historical records; this action does not retire units or change their operational dimensions.
-- Existing Add Stock behavior rejects inactive Items. Whether deactivation also blocks new borrowing of otherwise eligible units, and the Item reactivation workflow, remain open decisions; do not infer them from deactivation.
+- Owner-confirmed26October2026: inactive item types reject both Add Stock and every new borrowing of their units, even when a unit would otherwise be eligible. Existing borrowing, history and physical returns remain accessible; deactivation does not resolve obligations or change unit custody/condition/lifecycle. Recheck item activity on the server when issuing, including concurrent deactivation. The Item reactivation workflow remains an open decision.
 
 ### 5.2 Bulk Add Stock
 

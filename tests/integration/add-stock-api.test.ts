@@ -740,3 +740,28 @@ it("retains staged files when the transaction outcome is unknown", async () => {
     await Promise.all(keys.map(key => unitPhotos.removeUnitPhoto(key)));
   }
 });
+
+it("excludes the guest logical location and rejects it as a stock destination", async () => {
+  const location = await db.location.findUniqueOrThrow({
+    where: { code: "WITH_GUEST" },
+  });
+
+  expect(location.isActive).toBe(true);
+
+  expect(await getStockLocations()).not.toContainEqual({
+    id: location.id,
+    name: location.name,
+  });
+
+  const response = await postStock({
+    ...stockInput(),
+    initialLocationId: location.id,
+  });
+
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({
+    error: "LOCATION_UNAVAILABLE",
+  });
+
+  await expectCounts(0, 0);
+});

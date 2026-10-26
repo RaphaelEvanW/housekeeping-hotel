@@ -6,7 +6,31 @@ import { updateItemUnitInputSchema } from "@/server/item-unit-input";
 
 const PAGE_SIZE = 50;
 
-export async function getItemUnits(itemId: string, after?: number) {
+export async function getItemUnits(
+  itemId: string,
+  after?: number,
+  borrowableOnly = false,
+) {
+  const unitWhere: Prisma.ItemUnitWhereInput = {
+    ...(after === undefined
+      ? {}
+      : {
+          unitNumber: { gt: after },
+        }),
+    ...(borrowableOnly
+      ? {
+          item: { isActive: true },
+          lifecycle: "ACTIVE",
+          custody: "HOUSEKEEPING",
+          readiness: "CLEAR",
+          lossState: "NONE",
+          borrowingLines: {
+            none: { status: "OUTSTANDING" },
+          },
+        }
+      : {}),
+  };
+
   return db.$transaction(
     async (tx) => {
       const item = await tx.item.findUnique({
@@ -23,7 +47,7 @@ export async function getItemUnits(itemId: string, after?: number) {
             },
           },
           units: {
-            where: after === undefined ? {} : { unitNumber: { gt: after } },
+            where: unitWhere,
             orderBy: {
               unitNumber: "asc",
             },
@@ -120,10 +144,7 @@ export async function updateItemUnitDetails(
         ? before.serialNumber
         : input.serialNumber;
 
-    const notes =
-      input.notes === undefined
-        ? before.notes
-        : input.notes;
+    const notes = input.notes === undefined ? before.notes : input.notes;
 
     if (
       name === before.name &&

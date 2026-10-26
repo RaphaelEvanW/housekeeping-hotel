@@ -848,3 +848,23 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Owner explicitly requested direct completion after partial application. Kept existing input validator/GET/unit tests and service contents; renamed singular list-guest-visit.ts to the plural import path, removed duplicate POST import, added the missing list helper and three integration cases for search/status/pagination/permissions. No unrelated source/schema/FE changes.
 - Deleted the now-consumed GUEST-VISIT-LIST-IMPLEMENTATION.md code guide and replaced live references with source/status notes. Future code belongs in chat unless requested otherwise; MD tracks flow/progress/contracts. Skills: Context/Ponytail/Debugging for inspected targeted fixes, TDD/Verification for authored cases and pending checks. Agent ran no lint/typecheck/tests/migration; owner testing and registration migration/generate prerequisites remain.
+
+## 2026-10-26 — Confirm deactivation borrowing policy
+
+- Owner confirmed inactive item types block new borrowing, including otherwise eligible units; existing borrowing/history/returns remain accessible. Updated PROJECT's formerly open decision. Issuance must recheck item activity with a row lock. Foundation commit fbd1ed0 inspected; owner reports WITH_GUEST prerequisite tests passed, changes still uncommitted. Endpoint code is supplied in chat for owner application/testing, not written into a guide or application files by agent. No checks or DB commands executed.
+
+## 2026-10-26 — Isolate seed assertions from concurrent fixtures
+
+- Owner reported 590 tests passed and one seed assertion failed because it expected zero users in a shared test database. On explicit request, changed the first seed test to compare user/account/assignment counts against its initial Repeatable Read snapshot. Limited location assertions and rollback counts to the two seeded reference codes so unrelated location fixtures do not affect them. Production seed and borrowing code unchanged.
+- Inspected the patch using git diff; no lint/typecheck/tests or database commands executed. Owner must rerun the seed test and full suite. Skills: Debugging/Ponytail for the focused fix, Postgres for snapshot isolation, Verification for the pending status.
+
+## 2026-10-26 — Add borrowable-unit selection filter
+
+- Owner reports tests passed after the seed fix; no new command output/totals supplied. Inspected the working-tree issuance service/API and shared multipart parser. This is owner-reported validation, not an agent test run.
+- Added optional borrowableOnly filter to the existing item-units API/service and integration coverage for filters, inactive types, obligations and filtered cursor pagination. It preserves the default inventory response and totalRegistered. No new endpoint, schema or dependency. Agent inspected git diff; per owner preference, no lint/typecheck/tests or database commands were run. Owner must verify this change.
+
+## 2026-10-26 — Add per-visit borrowing history read model
+
+- Added `GET /api/guest-visits/[visitId]/borrowings` for paginated line history with `ALL`, `OUTSTANDING`, `RETURNED`, and `SETTLED` filters. The response keeps visit-wide counts independent of the current page/filter, current visit details separate from issue snapshots, unit/photo evidence, and settled obligations separate from physical returns. It remains readable after checkout or item-type deactivation.
+- Added integration cases to the existing issue fixture for empty history, multiple occasions, partial return, settlement, per-stay isolation, pagination, photo URL privacy, validation, not-found, and role access. No schema or migration change. `git diff --check` passed; lint, typecheck, and tests were not run and await owner verification.
+- Owner typecheck exposed mixed one/two-argument tuples and literal inference in the invalid-input test. Made the callback's visit ID optional with an explicit string type and the existing fixture ID as its default. Typecheck rerun remains with owner.
