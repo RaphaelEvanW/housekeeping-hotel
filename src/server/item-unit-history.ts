@@ -5,8 +5,7 @@ import { db } from "@/server/db";
 import { itemUnitHistoryInputSchema } from "@/server/item-unit-input";
 
 export async function getItemUnitHistory(rawInput: unknown) {
-  const { unitId, page, pageSize } =
-    itemUnitHistoryInputSchema.parse(rawInput);
+  const { unitId, page, pageSize } = itemUnitHistoryInputSchema.parse(rawInput);
 
   return db.$transaction(
     async (tx) => {
@@ -38,10 +37,7 @@ export async function getItemUnitHistory(rawInput: unknown) {
       const [events, total] = await Promise.all([
         tx.auditEvent.findMany({
           where,
-          orderBy: [
-            { createdAt: "desc" },
-            { id: "desc" },
-          ],
+          orderBy: [{ createdAt: "desc" }, { id: "desc" }],
           skip: (page - 1) * pageSize,
           take: pageSize,
           select: {
@@ -51,6 +47,11 @@ export async function getItemUnitHistory(rawInput: unknown) {
             oldValues: true,
             newValues: true,
             createdAt: true,
+            photos: {
+              where: { unitId },
+              orderBy: { id: "asc" },
+              select: { id: true },
+            },
             actor: {
               select: {
                 id: true,
@@ -69,7 +70,13 @@ export async function getItemUnitHistory(rawInput: unknown) {
           unitCode: `HK-${String(unit.unitNumber).padStart(6, "0")}`,
           item: unit.item,
         },
-        events,
+        events: events.map((event) => ({
+          ...event,
+          photos: event.photos.map((photo) => ({
+            id: photo.id,
+            url: `/api/item-units/${unitId}/photos/${photo.id}`,
+          })),
+        })),
         pagination: {
           page,
           pageSize,

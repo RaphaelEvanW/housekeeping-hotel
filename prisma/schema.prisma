@@ -206,7 +206,8 @@ model ItemUnit {
   createdBy User      @relation("ItemUnitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy User      @relation("ItemUnitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   stockBatch StockBatch? @relation(fields: [stockBatchId], references: [id], onDelete: Restrict)
-
+  photos ItemUnitPhoto[]
+  
   @@index([itemId])
   @@index([locationId])
   @@index([stockBatchId])
@@ -239,6 +240,7 @@ model AuditEvent {
   reason     String?
   oldValues  Json?
   newValues  Json?
+  photos ItemUnitPhoto[]
   createdAt  DateTime @default(now()) @db.Timestamptz(3)
   actor      User     @relation(fields: [actorId], references: [id], onDelete: Restrict, onUpdate: Restrict)
 
@@ -304,4 +306,18 @@ model GuestVisit {
   @@index([createdById])
   @@index([updatedById])
   @@map("guest_visit")
+}
+
+model ItemUnitPhoto {
+  id           String @id @default(uuid())
+  unitId       String
+  auditEventId String
+  photoKey     String @unique
+
+  unit       ItemUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  auditEvent AuditEvent @relation(fields: [auditEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([unitId])
+  @@index([auditEventId])
+  @@map("item_unit_photo")
 }

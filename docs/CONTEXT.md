@@ -43,6 +43,10 @@ Snapshot: 26 Oktober 2026, base HEAD e95d331, branch feature/frontend. Owner men
 
 ## Bukti terakhir dan batas
 
+-26Oktober owner reports all storage checks passed (lint/typecheck/unit-photo/catalog integration), totals not supplied; no agent rerun. Next guidance is evidence metadata + private scoped read/history URLs; schema/endpoint/test snippets are proposals for owner typing, not implemented facts. Upload/mandatory stock photo and FE remain pending.
+
+-26Oktober storage foundation: owner edited item-photo.ts; agent fixed scope/template/export errors and added unit-photo.ts + unit-photo.test.ts. Shared sharp validation reused, unit/catalog roots separate, catalog aliases retained. No upload/read API, evidence schema or Add Stock photo enforcement yet. Agent ran no checks; lint/typecheck/unit-photo/catalog integration await owner. Prior FE name test-passed report is owner evidence without supplied totals.
+
 -26Oktober: warning lint artifact ditelusuri ke raw callback CLI yang tersimpan sebagai .js; file kini output/verify-drawer-layout-browser.snippet.txt. Tidak mematikan ESLint. Lint rerun menunggu owner; catatan .js di bawah adalah hasil historis.
 
 - Integrasi FE26Oktober pada base e95d331 hanya ditinjau source/diff. Agent tidak menjalankan lint/typecheck/tests/browser/build/DB, sesuai instruksi terbaru owner. Tes nama/normalisasi/history/read ditambahkan untuk dijalankan owner; angka test BE di bawah adalah bukti historis, bukan hasil FE baru.
