@@ -1,6 +1,6 @@
 # Housekeeping working context
 
-Snapshot: 26 Oktober 2026, base HEAD e95d331, branch feature/frontend. Owner mengizinkan integrasi FE nama unit ke BE existing. Form/binding/read/history sudah diubah pada working tree; verifikasi runtime/lint/typecheck/test menunggu owner. Tidak ada perubahan BE/migrasi/DB/Git dalam slice FE ini.
+Snapshot: 26 Oktober 2026, base HEAD d1997e7, branch feature/backend. Owner mengizinkan penerapan panduan BE foto wajib saat Tambah unit. Source/tests/dokumentasi berubah pada working tree; agent hanya meninjau source/diff. Lint/typecheck/test tetap dijalankan owner. Tidak ada perubahan FE, schema, migrasi, dependency, atau data DB pada langkah ini.
 
 ## Sumber dan cara kerja
 
@@ -24,9 +24,9 @@ Snapshot: 26 Oktober 2026, base HEAD e95d331, branch feature/frontend. Owner men
 
 - Items adalah jenis; ItemUnits adalah unit fisik. Total terdaftar dihitung dari records, bukan stok siap dipinjam. Search/pagination/selected item dan cursor50 unit tetap memakai layanan nyata.
 - Tambah jenis: nama wajib, deskripsi/foto katalog opsional. Sukses menutup form dan mencari nama baru di page1 agar hasil terlihat; tidak menambah unit otomatis. Edit jenis hanya nama/deskripsi; konfirmasi berhasil satu baris + X, tanpa auto-dismiss.
-- Tambah unit: jumlah1–100, satu lokasi awal aktif per batch, accordion per unit (maksimal satu terbuka; ubah jumlah menutup semua). Kondisi wajib/default Baik; serial/deskripsi opsional. Deskripsi dikirim sebagai notes. Nama unit FE aktif/opsional/max100, dinormalisasi trim/collapse dan dikirim sebagai name; BE menerima kontrak yang sama. Foto awal belum didukung alur simpan.
+- Tambah unit: jumlah1–100, satu lokasi awal aktif per batch, accordion per unit (maksimal satu terbuka; ubah jumlah menutup semua). Kondisi wajib/default Baik; serial/deskripsi opsional. Deskripsi dikirim sebagai notes. Nama unit FE aktif/opsional/max100, dinormalisasi trim/collapse dan dikirim sebagai name; BE menerima kontrak yang sama. BE kini mewajibkan minimal satu foto awal per unit baru melalui multipart; binding foto FE masih pending.
 - Batch mempertahankan requestId/lokasi/payload saat hasil belum pasti; pending mengunci submit/close. Recovery page-local, bukan persisten lintas reload. Pemeriksaan lokasi, izin, replay/conflict tetap server-side.
-- Detail unit: identitas nama → seri → HK; FE memakai unit.name dari read; edit mengirim name/serialNumber/notes dan mencocokkan response, termasuk null untuk clear; keadaan hasil belum pasti perlu reload. UnitHistory membaca audit nyata10event/page; belum ada riwayat peminjaman/foto yang belum didukung backend.
+- Detail unit: identitas nama → seri → HK; FE memakai unit.name dari read; edit mengirim name/serialNumber/notes dan mencocokkan response, termasuk null untuk clear; keadaan hasil belum pasti perlu reload. UnitHistory membaca audit nyata10event/page. BE history sudah menyertakan URL foto privat terkait unit/event; rendering foto FE dan riwayat peminjaman belum tersedia.
 - Penonaktifan: header katalog membuka daftar global; Riwayat pengajuan di drawer membuka daftar sama dengan itemId/status ALL. Ajukan penonaktifan merah hanya membuat request; Supervisor menyetujui/menolak terpisah, pengaju membatalkan pending miliknya. Management read-only untuk alur ini.
 - Daftar: default PENDING,10/page, filter jenis searchable/paginated dan status dengan WorkspaceFilterDropdown yang sama. Terapkan mengirim keduanya dan reset page; X setelah filter diterapkan menghapus query dan kembali default PENDING. Keputusan/batal memakai konfirmasi, pending guard dan lock hasil tidak pasti.
 
@@ -43,24 +43,17 @@ Snapshot: 26 Oktober 2026, base HEAD e95d331, branch feature/frontend. Owner men
 
 ## Bukti terakhir dan batas
 
--26Oktober owner reports all storage checks passed (lint/typecheck/unit-photo/catalog integration), totals not supplied; no agent rerun. Next guidance is evidence metadata + private scoped read/history URLs; schema/endpoint/test snippets are proposals for owner typing, not implemented facts. Upload/mandatory stock photo and FE remain pending.
-
--26Oktober storage foundation: owner edited item-photo.ts; agent fixed scope/template/export errors and added unit-photo.ts + unit-photo.test.ts. Shared sharp validation reused, unit/catalog roots separate, catalog aliases retained. No upload/read API, evidence schema or Add Stock photo enforcement yet. Agent ran no checks; lint/typecheck/unit-photo/catalog integration await owner. Prior FE name test-passed report is owner evidence without supplied totals.
-
--26Oktober: warning lint artifact ditelusuri ke raw callback CLI yang tersimpan sebagai .js; file kini output/verify-drawer-layout-browser.snippet.txt. Tidak mematikan ESLint. Lint rerun menunggu owner; catatan .js di bawah adalah hasil historis.
-
-- Integrasi FE26Oktober pada base e95d331 hanya ditinjau source/diff. Agent tidak menjalankan lint/typecheck/tests/browser/build/DB, sesuai instruksi terbaru owner. Tes nama/normalisasi/history/read ditambahkan untuk dijalankan owner; angka test BE di bawah adalah bukti historis, bukan hasil FE baru.
-
-- Agent26Oktober: db:generate/db:validate/typecheck dan targeted lint passed; unit18file/164test, focused integration3file/102test, full31file/458test passed. Migration20261026010000_item_unit_name applied to test/dev. Full lint result dicatat di DEVLOG. Tidak ada browser/build atau perubahan FE/foto; test actors/data hanya DB test.
-
-- Historis23Oktober: typecheck passed; unit18file/155test passed. Full lint exit0 dengan1warning pada output/verify-drawer-layout-browser.js (callback expression); targeted lint source yang disentuh lolos. Jangan menyebut seluruh tree bebas warning.
-- Browser fixture source aktual:52assertion drawer (320–1440px/50unit/nama panjang/kosong/Management),23assertion konfirmasi/reset, serta uji tabel1366/390/320px. Read services/router terisolasi; PATCH sukses diintersep; tidak membuktikan live login/persistence DB. Screenshot di output/. Penetapan akhir +36x36/ikon16 hanya targeted lint, belum screenshot ulang.
-- Adapter pg: probe read-only fresh-process list/history0warning; unit antrean termasuk dalam suite155. Integrasi transaksi/rollback/concurrency aktual belum diulang untuk adapter.
-- Full suite21file/367test dari langkah lokasi batch22Oktober adalah bukti historis, bukan full-suite HEAD a0eb555. Build/integration/live-auth browser belum diulang setelah revisi terbaru. Tugas MD ini tidak menjalankan ulang npm/browser/DB.
+- Owner melaporkan semua checks fondasi foto/storage/schema/read/history passed sebelum commit d1997e7; output/totals tidak disuplai. Ini bukti owner untuk checkpoint sebelumnya, bukan hasil patch multipart baru.
+- Patch BE saat ini ditinjau melalui source/diff saja. Agent tidak menjalankan lint/typecheck/tests/browser/build/DB, mengikuti pilihan owner. Tes parser, required photos, per-unit association, multi-photo, replay/conflict, concurrency, rollback, staging failure, dan unknown-outcome retention ditambahkan/disesuaikan untuk dijalankan owner.
+- Batas transport: JSON/metadata256KiB, total multipart16MiB termasuk framing, JPEG/PNG/WebP statis2MiB per foto. Jumlah1–100 tetap; ukuran foto harus muat total request. File disiapkan sebelum transaksi; batch/unit/audit/photo metadata satu transaksi SQL. Foto dipasangkan lewat UUID unit, bukan urutan bulk-return.
+- Replay requestId memerlukan metadata/bytes/urutan foto per unit yang sama; hash memakai bytes asli. JSON tanpa foto hanya dapat replay batch legacy yang sudah committed; batch baru ditolak PHOTOS_REQUIRED. Foto finalized tidak dihapus/diganti oleh endpoint ini.
+- Cleanup file dilakukan saat staging gagal atau rollback diketahui. Saat hasil COMMIT belum pasti file dipertahankan agar evidence yang mungkin committed tidak hilang; file privat orphan dapat tertinggal. Rekonsiliasi orphan belum dibuat; filesystem bukan bagian transaksi SQL.
+- Bukti agent/test/browser terdahulu, detail adapter pg, dan hasil FE historis ada di DEVLOG.md. Jangan menganggap hasil historis sebagai verifikasi working tree terbaru.
 
 ## Belum selesai dan batas langkah berikutnya
 
-- BE nama unit selesai26Oktober: name nullable/max100/trim-collapse, omission preserve, blank/null clear, duplicate allowed, old HK/UUID unchanged. Kontrak/rollout: UNIT-NAMES.md. FE activation26Oktober diterapkan pada form/payload/read/history labels; tes menunggu owner. Foto awal minimal1per unit dan evidence append-only disetujui sebagai kebutuhan; persistence/upload/private read/batch/history belum dibuat. Foto katalog bukan bukti unit. Jangan aktifkan form seolah data tersimpan.
-- Langkah berikutnya: owner menjalankan checks dan uji Tambah/Edit/clear/nama di history/retry. Setelah integrasi nama terverifikasi, foto memerlukan slice BE terpisah. Tidak ada otorisasi foto otomatis.
+- Jalankan checks pada guides/UNIT-PHOTO-STOCK-IMPLEMENTATION.md bagian8. Patch panduan sudah diterapkan; hasil runtime/test baru belum diketahui. Tidak perlu schema/migrasi baru pada slice ini.
+- Setelah checks BE passed, owner commit checkpoint SEBELUM pindah FE. Integrasi FE berikutnya: simpan File per unit, kirim FormData data + photo-0/photo-1/dst, pertahankan File/payload untuk retry, tampilkan lampiran history. Form FE lama masih JSON dan akan ditolak saat membuat batch baru.
+- Nama unit BE/FE sudah terintegrasi pada checkpoint sebelumnya; kontrak di UNIT-NAMES.md. Fondasi evidence memakai ItemUnitPhoto + AuditEvent, private local disk di luar public/, scoped authorized GET dan URL history. Foto katalog tetap terpisah dari evidence unit. Jangan menampilkan status foto tersimpan sebelum response server memastikan.
 - GuestVisit baru schema/constraint; service/API/form termasuk nomor booking manual belum tersedia. Borrowing/partial-combined return/inspection-maintenance/lost-settlement/retirement-report belum selesai. Dashboard demonstrasi bukan metrik hotel live.
 - Independen dari PMS/AppSheet; tanpa barcode/kategori/pantry-distribution pada scope ini. Report export nanti. Jangan menambah workflow/permissions atau memakai data foto/tamu palsu untuk menutup fitur yang belum ada.

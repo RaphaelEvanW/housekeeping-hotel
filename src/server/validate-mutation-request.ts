@@ -66,7 +66,7 @@ export function validateMutationRequest(
     return Response.json(
       {
         error: "UNSUPPORTED_MEDIA_TYPE",
-        message: "Permintaan harus menggunakan application/json.",
+        message: `Permintaan harus menggunakan ${allowedMediaTypes.join(" atau ")}.`,
       },
       {
         status: 415,

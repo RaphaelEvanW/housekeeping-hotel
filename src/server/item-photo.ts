@@ -63,7 +63,15 @@ export async function storePhoto(bytes: Buffer, scope: PhotoScope = "item") {
   const key = `${randomUUID()}.webp`;
   const { root, file } = photoPath(key, scope);
   await mkdir(root, { recursive: true, mode: 0o700 });
-  await writeFile(file, bytes, { flag: "wx", mode: 0o600 });
+  try {
+    await writeFile(file, bytes, { flag: "wx", mode: 0o600 });
+  } catch (error) {
+    // EEXIST means the file was not created by this attempt.
+    if (!(error instanceof Error && "code" in error && error.code === "EEXIST")) {
+      await rm(file, { force: true }).catch(() => undefined);
+    }
+    throw error;
+  }
   return key;
 }
 

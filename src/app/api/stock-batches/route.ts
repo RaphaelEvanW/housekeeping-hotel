@@ -2,12 +2,11 @@ import { ZodError } from "zod";
 
 import { authorizeApi } from "@/server/authorize-api";
 import { addStock, AddStockError } from "@/server/add-stock";
+import { readStockRequest } from "@/server/read-stock-request";
+import { InvalidUnitPhotoError } from "@/server/unit-photo";
 import { validateMutationRequest } from "@/server/validate-mutation-request";
 
-import {
-  PayloadTooLargeError,
-  readJsonBody,
-} from "@/server/read-json-body";
+import { PayloadTooLargeError } from "@/server/read-json-body";
 
 const responseHeaders = {
   "Cache-Control": "no-store",
@@ -19,25 +18,34 @@ export async function POST(request: Request) {
     return authorization.response;
   }
 
-  const rejectedRequest = validateMutationRequest(request);
+  const rejectedRequest = validateMutationRequest(request, [
+    "application/json",
+    "multipart/form-data",
+  ]);
 
   if (rejectedRequest) {
     return rejectedRequest;
   }
 
-    let body: unknown;
+  let body: unknown;
+  let photos: File[][] = [];
 
   try {
-    body = await readJsonBody(request);
+    const parsed = await readStockRequest(request);
+    body = parsed.body;
+    photos = parsed.photos;
   } catch (error) {
     const tooLarge = error instanceof PayloadTooLargeError;
+    if (!tooLarge && !(error instanceof SyntaxError) && !(error instanceof ZodError) && !(error instanceof TypeError)) {
+      throw error;
+    }
 
     return Response.json(
       {
         error: tooLarge ? "PAYLOAD_TOO_LARGE" : "INVALID_INPUT",
         message: tooLarge
-          ? "Ukuran data maksimal 256 KiB."
-          : "Format JSON tidak valid.",
+          ? "Ukuran JSON/metadata maksimal 256 KiB; total multipart maksimal 16 MiB."
+          : "Format data penambahan unit tidak valid.",
       },
       {
         status: tooLarge ? 413 : 400,
@@ -47,13 +55,20 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await addStock(body, authorization.user.id);
+    const result = await addStock(body, authorization.user.id, photos);
 
     return Response.json(result, {
       status: result.replayed ? 200 : 201,
       headers: responseHeaders,
     });
   } catch (error) {
+    if (error instanceof InvalidUnitPhotoError) {
+      return Response.json(
+        { error: "INVALID_PHOTO", message: error.message },
+        { status: 400, headers: responseHeaders },
+      );
+    }
+
     if (error instanceof ZodError) {
       return Response.json(
         {
@@ -73,6 +88,7 @@ export async function POST(request: Request) {
 
     if (error instanceof AddStockError) {
       const statusByCode = {
+        PHOTOS_REQUIRED: 400,
         REQUEST_CONFLICT: 409,
         ITEM_NOT_FOUND: 404,
         ITEM_INACTIVE: 409,

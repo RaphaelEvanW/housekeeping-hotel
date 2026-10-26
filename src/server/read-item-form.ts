@@ -5,7 +5,7 @@ import { PayloadTooLargeError } from "./read-json-body";
 // Includes multipart framing; the decoded file has a separate 2 MiB limit.
 const MAX_FORM_BYTES = 2 * 1024 * 1024 + 64 * 1024;
 
-export async function readItemForm(request: Request) {
+export async function readItemForm(request: Request, maxBytes = MAX_FORM_BYTES) {
   const reader = request.body?.getReader();
   if (!reader) throw new Error("Missing form body");
   const chunks: Uint8Array[] = [];
@@ -15,7 +15,7 @@ export async function readItemForm(request: Request) {
       const { done, value } = await reader.read();
       if (done) break;
       size += value.byteLength;
-      if (size > MAX_FORM_BYTES) {
+      if (size > maxBytes) {
         await reader.cancel();
         throw new PayloadTooLargeError();
       }

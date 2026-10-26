@@ -1,16 +1,24 @@
 import "server-only";
 
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { Prisma, type StockBatch } from "@/generated/prisma/client";
 import { addStockInputSchema } from "@/server/add-stock-input";
 import { db } from "@/server/db";
+import {
+  InvalidUnitPhotoError,
+  MAX_PHOTO_BYTES,
+  prepareUnitPhoto,
+  removeUnitPhoto,
+  storeUnitPhoto,
+} from "@/server/unit-photo";
 
 type AddStockErrorCode =
   | "REQUEST_CONFLICT"
   | "ITEM_NOT_FOUND"
   | "ITEM_INACTIVE"
   | "LOCATION_UNAVAILABLE"
-  | "STORAGE_UNAVAILABLE";
+  | "STORAGE_UNAVAILABLE"
+  | "PHOTOS_REQUIRED";
 
 export class AddStockError extends Error {
   constructor(
@@ -52,7 +60,11 @@ function replayBatch(
   return batchResult(batch, true);
 }
 
-export async function addStock(rawInput: unknown, actorId: string) {
+export async function addStock(
+  rawInput: unknown,
+  actorId: string,
+  photos: File[][] = [],
+) {
   const input = addStockInputSchema.parse(rawInput);
 
   const units = Array.from({ length: input.quantity }, (_, index) => {
@@ -67,6 +79,24 @@ export async function addStock(rawInput: unknown, actorId: string) {
     };
   });
 
+  let photoHashes: string[][] | undefined;
+  if (photos.length > 0) {
+    if (photos.length !== input.quantity || photos.some(files => !Array.isArray(files) || files.length === 0)) {
+      throw new AddStockError("PHOTOS_REQUIRED", "Setiap unit wajib memiliki minimal satu foto awal.");
+    }
+    photoHashes = [];
+    for (const files of photos) {
+      const hashes: string[] = [];
+      for (const file of files) {
+        if (!(file instanceof File) || file.size === 0 || file.size > MAX_PHOTO_BYTES) {
+          throw new InvalidUnitPhotoError("Setiap foto harus berukuran 1 byte sampai 2 MiB.");
+        }
+        hashes.push(createHash("sha256").update(Buffer.from(await file.arrayBuffer())).digest("hex"));
+      }
+      photoHashes.push(hashes);
+    }
+  }
+
   const requestHash = createHash("sha256")
     .update(
       JSON.stringify({
@@ -74,6 +104,7 @@ export async function addStock(rawInput: unknown, actorId: string) {
         quantity: input.quantity,
         units,
         ...(input.initialLocationId ? { initialLocationId: input.initialLocationId } : {}),
+        ...(photoHashes ? { photoHashes } : {}),
       }),
     )
     .digest("hex");
@@ -86,7 +117,27 @@ export async function addStock(rawInput: unknown, actorId: string) {
     return replayBatch(existingBatch, actorId, requestHash);
   }
 
+  if (!photoHashes) {
+    throw new AddStockError("PHOTOS_REQUIRED", "Setiap unit wajib memiliki minimal satu foto awal.");
+  }
+
+  const unitIds = units.map(() => randomUUID());
+  const storedKeys: string[] = [];
+  const keysByUnitId = new Map<string, string[]>();
+  let transactionStarted = false;
+
   try {
+    for (const [index, files] of photos.entries()) {
+      const keys: string[] = [];
+      for (const file of files) {
+        const prepared = await prepareUnitPhoto(file);
+        const key = await storeUnitPhoto(prepared);
+        storedKeys.push(key);
+        keys.push(key);
+      }
+      keysByUnitId.set(unitIds[index], keys);
+    }
+    transactionStarted = true;
     return await db.$transaction(async (tx) => {
       const batch = await tx.stockBatch.create({
         data: {
@@ -143,7 +194,8 @@ export async function addStock(rawInput: unknown, actorId: string) {
       }
 
       const createdUnits = await tx.itemUnit.createManyAndReturn({
-        data: units.map((unit) => ({
+        data: units.map((unit, index) => ({
+          id: unitIds[index],
           ...unit,
           itemId: input.itemId,
           stockBatchId: batch.id,
@@ -160,7 +212,7 @@ export async function addStock(rawInput: unknown, actorId: string) {
         })),
       });
 
-      await tx.auditEvent.createMany({
+      const createdEvents = await tx.auditEvent.createManyAndReturn({
         data: createdUnits.map((unit) => ({
           actorId,
           action: "STOCK_UNIT_CREATED",
@@ -183,9 +235,32 @@ export async function addStock(rawInput: unknown, actorId: string) {
         })),
       });
 
+      await tx.itemUnitPhoto.createMany({
+        data: createdEvents.flatMap(event => {
+          const keys = keysByUnitId.get(event.entityId);
+          if (!keys?.length) {
+            throw new AddStockError("PHOTOS_REQUIRED", "Referensi foto unit tidak lengkap.");
+          }
+          return keys.map(photoKey => ({
+            unitId: event.entityId,
+            auditEventId: event.id,
+            photoKey,
+          }));
+        }),
+      });
+
       return batchResult(batch, false);
     });
   } catch (error) {
+    const rollbackKnown = error instanceof AddStockError || (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      ["P2002", "P2003", "P2034"].includes(error.code)
+    );
+    // Keep files when COMMIT outcome is unknown: they may be referenced by committed evidence.
+    if (!transactionStarted || rollbackKnown) {
+      await Promise.allSettled(storedKeys.map(key => removeUnitPhoto(key)));
+    }
+
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
         const committedBatch = await db.stockBatch.findUnique({

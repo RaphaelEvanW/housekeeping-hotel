@@ -1,4 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
+import sharp from "sharp";
+import * as unitPhotos from "../../src/server/unit-photo";
 import {
   afterAll,
   afterEach,
@@ -30,7 +32,7 @@ let itemId: string;
 let storageId: string;
 let extraLocationIds: string[] = [];
 
-function postStock(body: unknown) {
+function postLegacyStock(body: unknown) {
   return POST(
     new Request("http://localhost/api/stock-batches", {
       method: "POST",
@@ -41,6 +43,31 @@ function postStock(body: unknown) {
       body: JSON.stringify(body),
     }),
   );
+}
+
+async function stockPhoto(color = "#131B2E") {
+  const bytes = await sharp({
+    create: { width: 16, height: 12, channels: 3, background: color },
+  }).png().toBuffer();
+  return new File([new Uint8Array(bytes)], "unit.png", { type: "image/png" });
+}
+
+async function postStock(body: unknown, suppliedPhotos?: File[][]) {
+  const quantity = body && typeof body === "object" && "quantity" in body
+    ? body.quantity : undefined;
+  if (typeof quantity !== "number" || !Number.isInteger(quantity) || quantity < 1 || quantity > 100) {
+    return postLegacyStock(body);
+  }
+  const form = new FormData();
+  form.set("data", JSON.stringify(body));
+  const defaultPhoto = suppliedPhotos ? undefined : await stockPhoto();
+  for (let index = 0; index < quantity; index++) {
+    const files = suppliedPhotos?.[index] ?? (defaultPhoto ? [defaultPhoto] : []);
+    for (const file of files) form.append(`photo-${index}`, file);
+  }
+  return POST(new Request("http://localhost/api/stock-batches", {
+    method: "POST", headers: { Origin: "http://localhost:3000" }, body: form,
+  }));
 }
 
 function stockInput() {
@@ -134,9 +161,14 @@ beforeEach(async () => {
 afterEach(async () => {
   vi.unstubAllEnvs();
 
+  vi.restoreAllMocks();
   if (!userId) return;
 
+  const photos = await db.itemUnitPhoto.findMany({
+    where: { unit: { createdById: userId } }, select: { photoKey: true },
+  });
   await db.$transaction([
+    db.itemUnitPhoto.deleteMany({ where: { unit: { createdById: userId } } }),
     db.auditEvent.deleteMany({
       where: { actorId: userId },
     }),
@@ -154,6 +186,7 @@ afterEach(async () => {
     }),
   ]);
 
+  await Promise.all(photos.map(photo => unitPhotos.removeUnitPhoto(photo.photoKey)));
   userId = undefined;
   await db.location.deleteMany({ where: { id: { in: extraLocationIds } } });
 });
@@ -443,6 +476,7 @@ it("creates one batch for concurrent copies of the same request", async () => {
   ).toEqual([200, 200, 201]);
 
   await expectCounts(2, 1);
+  expect(await db.itemUnitPhoto.count({ where: { unit: { createdById: actor.id } } })).toBe(2);
 });
 
 it("creates distinct unit numbers for concurrent different batches", async () => {
@@ -525,7 +559,7 @@ it.each([
 });
 
 it("rejects oversized JSON without adding stock", async () => {
-  const response = await postStock({
+  const response = await postLegacyStock({
     ...stockInput(),
     extra: "A".repeat(256 * 1024),
   });
@@ -558,10 +592,25 @@ it("keeps the pre-name request hash and treats null/blank/omitted names as the s
   const input = stockInput();
   const legacyUnits = Array.from({ length: input.quantity }, () => ({ serialNumber: null, notes: null, condition: "GOOD" }));
   const legacyHash = createHash("sha256").update(JSON.stringify({ itemId, quantity: input.quantity, units: legacyUnits })).digest("hex");
-  expect((await postStock(input)).status).toBe(201);
+  await db.$transaction(async tx => {
+    await tx.stockBatch.create({ data: {
+      id: input.requestId, itemId, quantity: input.quantity,
+      requestHash: legacyHash, createdById: actor.id,
+    } });
+    const oldUnits = await tx.itemUnit.createManyAndReturn({ data:
+      Array.from({ length: input.quantity }, () => ({
+        itemId, stockBatchId: input.requestId, locationId: storageId,
+        createdById: actor.id, updatedById: actor.id,
+      })),
+    });
+    await tx.auditEvent.createMany({ data: oldUnits.map(unit => ({
+      actorId: actor.id, action: "STOCK_UNIT_CREATED",
+      entityType: "ITEM_UNIT", entityId: unit.id,
+    })) });
+  });
   expect((await db.stockBatch.findUniqueOrThrow({ where: { id: input.requestId } })).requestHash).toBe(legacyHash);
-  expect((await postStock({ ...input, units: [{ name: null }, { name: "  " }] })).status).toBe(200);
-  expect((await postStock({ ...input, units: [{ name: "New label" }, {}] })).status).toBe(409);
+  expect((await postLegacyStock({ ...input, units: [{ name: null }, { name: "  " }] })).status).toBe(200);
+  expect((await postLegacyStock({ ...input, units: [{ name: "New label" }, {}] })).status).toBe(409);
   expect(await db.itemUnit.findMany({ where: { stockBatchId: input.requestId } })).toEqual(expect.arrayContaining([expect.objectContaining({ name: null })]));
   await expectCounts(2, 1);
 });
@@ -569,4 +618,125 @@ it("keeps the pre-name request hash and treats null/blank/omitted names as the s
 it.each([42, "a".repeat(101)])("rejects invalid batch names atomically %j", async name => {
   expect((await postStock({ ...stockInput(), units: [{ name: "Valid" }, { name }] })).status).toBe(400);
   await expectCounts(0, 0);
+});
+
+it("requires photos for new JSON stock without changing existing data", async () => {
+  const response = await postLegacyStock(stockInput());
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: "PHOTOS_REQUIRED" });
+  await expectCounts(0, 0);
+});
+
+it("requires photos for every unit and validates actual image bytes", async () => {
+  const missing = await postStock(stockInput(), [[await stockPhoto()], []]);
+  expect(missing.status).toBe(400);
+  expect(await missing.json()).toMatchObject({ error: "PHOTOS_REQUIRED" });
+  const invalid = new File(["not a photo"], "fake.png", { type: "image/png" });
+  const response = await postStock(stockInput(), [[invalid], [await stockPhoto()]]);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: "INVALID_PHOTO" });
+  await expectCounts(0, 0);
+});
+
+it("rejects a per-file size violation even when the multipart body fits", async () => {
+  const oversized = new File([new Uint8Array(2 * 1024 * 1024 + 1)], "large.png", { type: "image/png" });
+  const response = await postStock(stockInput(), [[oversized], [await stockPhoto()]]);
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({ error: "INVALID_PHOTO" });
+  await expectCounts(0, 0);
+});
+
+it("retains multiple initial photos under the same unit creation event", async () => {
+  const input = { ...stockInput(), quantity: 1 };
+  const files = [[await stockPhoto("#ff0000"), await stockPhoto("#0000ff")]];
+  expect((await postStock(input, files)).status).toBe(201);
+  expect((await postStock(input, files)).status).toBe(200);
+  const photos = await db.itemUnitPhoto.findMany({
+    where: { unit: { stockBatchId: input.requestId } },
+  });
+  expect(photos).toHaveLength(2);
+  expect(new Set(photos.map(photo => photo.unitId)).size).toBe(1);
+  expect(new Set(photos.map(photo => photo.auditEventId)).size).toBe(1);
+  await expectCounts(1, 1);
+});
+
+it("binds different photos to the right unit/event and replays without duplicate evidence", async () => {
+  const input = { ...stockInput(), units: [{ name: "Unit A" }, { name: "Unit B" }] };
+  const files = [[await stockPhoto("#ff0000")], [await stockPhoto("#0000ff")]];
+  expect((await postStock(input, files)).status).toBe(201);
+  expect((await postStock(input, files)).status).toBe(200);
+
+  const units = await db.itemUnit.findMany({ where: { stockBatchId: input.requestId }, include: {
+    photos: { include: { auditEvent: true } },
+  } });
+  expect(units).toHaveLength(2);
+  for (const unit of units) {
+    const index = unit.name === "Unit A" ? 0 : 1;
+    expect(unit.photos).toHaveLength(1);
+    expect(unit.photos[0].auditEvent).toMatchObject({
+      entityType: "ITEM_UNIT", entityId: unit.id, action: "STOCK_UNIT_CREATED", actorId: actor.id,
+    });
+    expect(await unitPhotos.readUnitPhoto(unit.photos[0].photoKey))
+      .toEqual(await unitPhotos.prepareUnitPhoto(files[index][0]));
+  }
+  const changed = [[await stockPhoto("#00ff00")], files[1]];
+  expect((await postStock(input, changed)).status).toBe(409);
+  await expectCounts(2, 1);
+});
+
+it("rolls back units/batch/audits if photo metadata fails and cleans uncommitted files", async () => {
+  const originalStore = unitPhotos.storeUnitPhoto;
+  let sharedKey: string | undefined;
+  vi.spyOn(unitPhotos, "storeUnitPhoto").mockImplementation(async bytes => {
+    sharedKey ??= await originalStore(bytes);
+    return sharedKey;
+  });
+  // The duplicate key forces a real metadata unique-constraint failure inside SQL transaction.
+  await expect(postStock(stockInput())).rejects.toMatchObject({ code: "P2002" });
+  await expectCounts(0, 0);
+  expect(await db.itemUnitPhoto.count({ where: { unit: { createdById: actor.id } } })).toBe(0);
+  if (!sharedKey) throw new Error("Expected staged fixture file");
+  await expect(unitPhotos.readUnitPhoto(sharedKey)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("removes already staged photos when a later image fails before the transaction", async () => {
+  const originalStore = unitPhotos.storeUnitPhoto;
+  const keys: string[] = [];
+  vi.spyOn(unitPhotos, "storeUnitPhoto").mockImplementation(async bytes => {
+    const key = await originalStore(bytes);
+    keys.push(key);
+    return key;
+  });
+  try {
+    const invalid = new File(["invalid image"], "invalid.png", { type: "image/png" });
+    const response = await postStock(stockInput(), [[await stockPhoto()], [invalid]]);
+    expect(response.status).toBe(400);
+    expect(keys).toHaveLength(1);
+    await expectCounts(0, 0);
+    await expect(unitPhotos.readUnitPhoto(keys[0])).rejects.toMatchObject({ code: "ENOENT" });
+  } finally {
+    await Promise.all(keys.map(key => unitPhotos.removeUnitPhoto(key)));
+  }
+});
+
+it("retains staged files when the transaction outcome is unknown", async () => {
+  const originalStore = unitPhotos.storeUnitPhoto;
+  const keys: string[] = [];
+  vi.spyOn(unitPhotos, "storeUnitPhoto").mockImplementation(async bytes => {
+    const key = await originalStore(bytes);
+    keys.push(key);
+    return key;
+  });
+  const failure = new Error("Connection lost; transaction outcome unknown");
+  vi.spyOn(db, "$transaction").mockRejectedValueOnce(failure);
+  try {
+    await expect(postStock(stockInput())).rejects.toBe(failure);
+    expect(keys).toHaveLength(2);
+    for (const key of keys) {
+      expect((await unitPhotos.readUnitPhoto(key)).byteLength).toBeGreaterThan(0);
+    }
+  } finally {
+    // This fixture's transaction never reached the DB, so its files are safe to remove.
+    await Promise.all(keys.map(key => unitPhotos.removeUnitPhoto(key)));
+  }
 });
