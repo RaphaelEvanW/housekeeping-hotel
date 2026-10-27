@@ -18,6 +18,7 @@ type UnitDetails = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  statusLabel: string;
   facts: { label: string; value: string }[];
 };
 
@@ -222,8 +223,9 @@ export function UnitDetailsDialog({
                 if (inFlight.current) event.preventDefault();
                 else setOpen(false);
               }}
-              className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-xl overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-5 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-6"
+              className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-xl flex-col overflow-hidden rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]"
             >
+              <header className="shrink-0 border-b border-ws-divider px-5 pt-3 pb-4 sm:px-6">
               <div className="mb-4 flex items-center justify-between gap-3 border-b border-ws-divider pb-3">
                 <p className="text-xs font-medium">
                   {editing ? "Edit unit" : "Detail unit"}
@@ -252,6 +254,10 @@ export function UnitDetailsDialog({
                   >
                     {itemName}
                   </p>
+                    <p className="mt-2 flex items-start gap-2 text-xs leading-5">
+                      <span aria-hidden="true" className="mt-1.5 size-2 shrink-0 rounded-full bg-ws-sidebar" />
+                      <span className="[overflow-wrap:anywhere]">Status saat ini: <span className="font-medium text-ws-strong">{unit.statusLabel}</span></span>
+                    </p>
                 </div>
                 {canEdit && !editing ? (
                   <button
@@ -277,14 +283,16 @@ export function UnitDetailsDialog({
               >
                 {success ? "Unit berhasil diperbarui." : ""}
               </p>
+              </header>
               {editing ? (
                 <form
                   onSubmit={submit}
                   noValidate
                   onInput={validation.onInput}
                   aria-busy={pending}
-                  className="mt-5"
+                  className="flex min-h-0 flex-col"
                 >
+                  <div className="min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-6">
                   <fieldset
                     disabled={pending || unconfirmed}
                     className="min-w-0 space-y-4 border-0 p-0"
@@ -371,7 +379,8 @@ export function UnitDetailsDialog({
                       Ke halaman masuk
                     </a>
                   ) : null}
-                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-ws-divider px-5 py-4 sm:px-6">
                     <button
                       type="button"
                       disabled={pending}
@@ -406,15 +415,20 @@ export function UnitDetailsDialog({
                   </div>
                 </form>
               ) : (
-                <>
-                  <dl className="mt-5 grid grid-cols-2 gap-x-4 gap-y-4 border-y border-ws-divider py-5 text-sm sm:gap-x-6">
+                <div className="min-h-0 overflow-y-auto overscroll-contain p-5 sm:p-6">
+                  <UnitHistory
+                    key={`${unit.id}-${current.updatedAt}`}
+                    unitId={unit.id}
+                    unitCode={unit.unitCode}
+                  >
+                  <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-b border-ws-divider pb-5 text-sm sm:gap-x-6">
                     {[
                       { label: "Kode aset", value: unit.unitCode },
                       {
                         label: "Nomor seri",
                         value: current.serialNumber || "—",
                       },
-                      ...unit.facts,
+                      ...unit.facts.filter((fact) => fact.label !== "Pemegang unit"),
                       {
                         label: "Ditambahkan",
                         value: dateFormat.format(new Date(unit.createdAt)),
@@ -441,12 +455,8 @@ export function UnitDetailsDialog({
                     </p>
                   </section>
 
-                  <UnitHistory
-                    key={`${unit.id}-${current.updatedAt}`}
-                    unitId={unit.id}
-                    unitCode={unit.unitCode}
-                  />
-                </>
+                  </UnitHistory>
+                </div>
               )}
             </dialog>,
             document.body,

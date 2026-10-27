@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
+import Link from "next/link";
 
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { UnitHistoryPhoto } from "./unit-history-photo";
@@ -8,6 +9,7 @@ import {
   HISTORY_MAX_PAGE,
   HISTORY_PAGE_SIZE,
   historyChanges,
+  historyEventDetails,
   historyEventTitle,
   parseUnitHistory,
   type UnitHistoryData,
@@ -57,15 +59,20 @@ function responseMessage(status: number) {
 export function UnitHistory({
   unitId,
   unitCode,
+  children,
 }: {
   unitId: string;
   unitCode: string;
+  children?: ReactNode;
 }) {
   const [request, setRequest] = useState<HistoryRequest>({
     page: 1,
     revision: 0,
   });
   const [result, setResult] = useState<HistoryResult | null>(null);
+  const [preview, setPreview] = useState<{ unitId: string; event: UnitHistoryData["events"][number] } | null>(null);
+  const [photoError, setPhotoError] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -105,6 +112,32 @@ export function UnitHistory({
         if (!data) throw new Error("Invalid history response");
         if (controller.signal.aborted) return;
 
+        if (request.page === 1) {
+          let initialEvent = data.events.find((event) => event.action === "STOCK_UNIT_CREATED");
+          setPhotoError(false);
+          try {
+            const lastPage = data.pagination.totalPages;
+            if (!initialEvent && lastPage > 1) {
+              if (lastPage > HISTORY_MAX_PAGE) throw new Error("Initial photos outside history page limit");
+              const initialQuery = new URLSearchParams({ page: String(lastPage), pageSize: String(HISTORY_PAGE_SIZE) });
+              const initialResponse = await fetch(`/api/item-units/${encodeURIComponent(unitId)}/history?${initialQuery}`, {
+                cache: "no-store", credentials: "same-origin", signal: controller.signal,
+              });
+              if (!initialResponse.ok) throw new Error("Initial photos unavailable");
+              const oldest = parseUnitHistory(await initialResponse.json(), unitId, unitCode, lastPage);
+              if (!oldest) throw new Error("Invalid initial photo response");
+              initialEvent = oldest.events.find((event) => event.action === "STOCK_UNIT_CREATED");
+              if (!initialEvent && oldest.pagination.hasNextPage) throw new Error("Initial photo history changed; retry");
+            }
+            if (controller.signal.aborted) return;
+            setPreview(initialEvent ? { unitId, event: initialEvent } : null);
+          } catch {
+            if (controller.signal.aborted) return;
+            setPreview(null);
+            setPhotoError(true);
+          }
+        }
+
         setResult({
           request,
           unitId,
@@ -134,6 +167,8 @@ export function UnitHistory({
 
   const loading = current === null;
   const headingId = `unit-history-heading-${unitId}`;
+  const photoEvent = preview?.unitId === unitId ? preview.event : null;
+  const contentId = `${headingId}-content`;
 
   function reload() {
     setRequest((previous) => ({
@@ -143,22 +178,44 @@ export function UnitHistory({
   }
 
   return (
+    <>
+      <section aria-label="Foto unit" className="mb-5">
+        <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+          <h3 className="text-sm font-medium text-ws-strong">Foto barang</h3>
+          {photoEvent ? <time dateTime={photoEvent.createdAt} className="text-xs tabular-nums">{dateFormat.format(new Date(photoEvent.createdAt))} WIB</time> : null}
+        </div>
+        {photoEvent?.photos?.length ? (
+        <ul className="flex flex-wrap gap-3">
+          {photoEvent.photos.map((photo, index) => (
+            <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto barang ${index + 1}`} size={index === 0 ? "preview" : "thumbnail"} />
+          ))}
+        </ul>
+        ) : loading && request.page === 1 ? <p role="status" className="text-xs leading-5">Memuat foto barang…</p>
+          : photoError || current?.status === "error" ? <div><p role="status" className="text-xs leading-5">Foto barang belum berhasil dimuat.</p><button type="button" onClick={reload} className="ws-button-secondary mt-2 text-xs">Muat ulang foto</button></div>
+          : <p className="text-xs leading-5">Foto barang belum tersedia.</p>}
+      </section>
+    {children}
     <section
       aria-labelledby={headingId}
       aria-busy={loading}
       className="mt-6 border-t border-ws-divider pt-5"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 id={headingId} className="text-sm font-medium text-ws-strong">
-          Riwayat unit
-        </h3>
-
+      <h3 id={headingId}>
+        <button type="button" aria-expanded={historyOpen} aria-controls={contentId} onClick={() => {
+          if (!historyOpen && request.page !== 1) setRequest({ page: 1, revision: 0 });
+          setHistoryOpen((previous) => !previous);
+        }} className="flex min-h-11 w-full items-center gap-3 rounded text-left text-sm font-medium text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">
+        <span className="flex-1">Riwayat unit</span>
         {current?.status === "ready" ? (
           <span className="text-xs text-ws-text tabular-nums">
             {current.data.pagination.total} aktivitas
           </span>
         ) : null}
-      </div>
+        <span className={historyOpen ? "rotate-90" : ""}><WorkspaceControlIcon name="caretRight" /></span>
+        </button>
+      </h3>
+
+      {historyOpen ? <div id={contentId}>
 
       {loading ? (
         <p role="status" className="mt-3 text-sm leading-6">
@@ -199,17 +256,28 @@ export function UnitHistory({
                 : "Tidak ada aktivitas pada halaman ini."}
             </p>
           ) : (
-            <ol className="mt-3 divide-y divide-ws-divider">
-              {current.data.events.map((event) => {
+            <ol className="mt-5 ml-1">
+              {current.data.events.map((event, eventIndex) => {
                 const changes = historyChanges(event);
                 const registration = event.action === "STOCK_UNIT_CREATED";
+                const details = historyEventDetails(event);
+                const borrowingEvent = event.action === "BORROWING_ISSUED" || event.action === "BORROWING_RETURNED";
+                const transfer = changes.find((change) => change.key === "custody" && typeof change.before === "string" && typeof change.after === "string");
+                const remainingChanges = transfer ? changes.filter((change) => change.key !== "custody") : changes;
+                const guest = details.facts.find((fact) => fact.key === "primaryGuestNameSnapshot")?.value;
+                const room = details.facts.find((fact) => fact.key === "roomNumberSnapshot")?.value;
+                const facts = transfer ? details.facts.filter((fact) => fact.key !== "primaryGuestNameSnapshot" && fact.key !== "roomNumberSnapshot") : details.facts;
 
                 return (
-                  <li key={event.id} className="py-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-                      <p className="text-sm font-medium text-ws-strong">
+                  <li key={event.id} className="relative border-l border-ws-divider pb-7 pl-6 last:border-l-transparent last:pb-0">
+                    <span aria-hidden="true" className={`absolute top-1 -left-[5px] size-2.5 rounded-full border-2 border-ws-surface ${eventIndex === 0 && request.page === 1 ? "bg-ws-sidebar" : "bg-ws-control"}`} />
+                    <details open={eventIndex === 0} className="group/activity">
+                    <summary className="flex min-h-11 cursor-pointer list-none items-start gap-3 rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary [&::-webkit-details-marker]:hidden">
+                    <span className="min-w-0 flex-1">
+                    <span className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                      <span className="text-sm font-medium text-ws-strong">
                         {historyEventTitle(event.action)}
-                      </p>
+                      </span>
 
                       <time
                         dateTime={event.createdAt}
@@ -217,11 +285,15 @@ export function UnitHistory({
                       >
                         {dateFormat.format(new Date(event.createdAt))} WIB
                       </time>
-                    </div>
+                    </span>
 
-                    <p className="mt-1 text-xs leading-5 [overflow-wrap:anywhere]">
-                      Oleh {event.actor.name}
-                    </p>
+                    <span className="mt-1 block text-xs leading-5 [overflow-wrap:anywhere]">
+                      Petugas · {event.actor.name}
+                    </span>
+                    </span>
+                    <span className="mt-0.5 transition-transform group-open/activity:rotate-90 motion-reduce:transition-none"><WorkspaceControlIcon name="caretRight" /></span>
+                    </summary>
+                    <div className="pt-1">
 
                     {event.reason ? (
                       <p className="mt-2 whitespace-pre-wrap text-sm leading-6 [overflow-wrap:anywhere]">
@@ -229,65 +301,127 @@ export function UnitHistory({
                       </p>
                     ) : null}
 
-                    {changes.length > 0 ? (
-                      <details className="group mt-2">
-                        <summary className="flex min-h-11 list-none items-center justify-between gap-3 rounded text-sm text-ws-strong hover:text-ws-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary [&::-webkit-details-marker]:hidden">
-                          <span>
+                    {transfer ? (
+                      <div role="group" aria-label="Alur penyerahan unit" className="mt-4 rounded-md border border-ws-divider px-3 py-3">
+                        <div aria-hidden="true" className="flex items-center gap-1.5">
+                          <span className="size-2.5 shrink-0 rounded-full border-2 border-ws-control bg-ws-surface" />
+                          <span className="flex-1 border-t border-dashed border-ws-sidebar/30" />
+                          <span className="text-ws-sidebar [&>svg]:size-3"><WorkspaceControlIcon name="caretRight" /></span>
+                          <span className="flex-1 border-t border-dashed border-ws-sidebar/30" />
+                          <span className="size-2.5 shrink-0 rounded-full bg-ws-sidebar" />
+                        </div>
+                        <dl className="mt-2 grid grid-cols-2 gap-5 text-xs leading-5">
+                          {[{ label: "Dari", value: transfer.before }, { label: "Ke", value: transfer.after }].map((point, index) => (
+                            <div key={point.label} className={`min-w-0 ${index === 1 ? "text-right" : ""}`}>
+                              <dt className="text-ws-text">{point.label}</dt>
+                              <dd className="font-medium text-ws-strong [overflow-wrap:anywhere]">
+                                {point.value}
+                                {point.value === "Tamu" && (guest || room) ? <span className="mt-0.5 block font-normal text-ws-text">{guest}{room ? <span className="block">Kamar {room}</span> : null}</span> : null}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </div>
+                    ) : null}
+
+                    {facts.length > 0 ? (
+                      <dl className="mt-3 grid gap-x-5 gap-y-3 sm:grid-cols-2">
+                        {facts.map((fact) => (
+                          <div key={fact.key} className="min-w-0">
+                            <dt className="text-xs text-ws-text">{fact.label}</dt>
+                            <dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-ws-strong [overflow-wrap:anywhere]">
+                              {fact.value}
+                            </dd>
+                          </div>
+                        ))}
+                      </dl>
+                    ) : null}
+
+                    {borrowingEvent && event.photos?.length ? (
+                      <ul aria-label={details.photoLabel} className="mt-3 flex flex-wrap gap-3">
+                        {event.photos.map((photo, index) => (
+                          <UnitHistoryPhoto key={photo.id} url={photo.url} label={`${details.photoLabel} ${index + 1}`} />
+                        ))}
+                      </ul>
+                    ) : null}
+
+                    {details.visitHref ? (
+                      <Link
+                        href={details.visitHref}
+                        prefetch={false}
+                        className="mt-2 inline-flex min-h-11 items-center gap-2 rounded text-xs font-medium text-ws-strong underline decoration-ws-sidebar/25 underline-offset-4 hover:decoration-ws-sidebar focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary"
+                      >
+                        Detail pinjaman
+                        <span className="[&>svg]:size-4"><WorkspaceControlIcon name="caretRight" /></span>
+                      </Link>
+                    ) : null}
+
+                    {remainingChanges.length > 0 ? (
+                      <section className="mt-3">
+                        <h4 className="text-xs font-medium text-ws-strong">
                             {registration
-                              ? "Lihat detail pencatatan"
-                              : "Lihat perubahan"}
-                          </span>
+                              ? "Data awal unit"
+                              : event.action === "ITEM_UNIT_DETAILS_UPDATED" ? "Rincian pembaruan" : "Perubahan kondisi & kesiapan"}
+                        </h4>
 
-                          <span className="transition-transform duration-150 group-open:rotate-90 motion-reduce:transition-none">
-                            <WorkspaceControlIcon name="caretRight" />
-                          </span>
-                        </summary>
-
-                        <dl className="space-y-4 pb-2">
-                          {changes.map((change) => (
+                        <dl className="mt-3 space-y-4 pb-2">
+                          {remainingChanges.map((change) => (
                             <div key={change.key}>
                               <dt className="text-xs font-medium text-ws-strong">
                                 {change.label}
                               </dt>
 
-                              <dd className="mt-2 space-y-2 text-sm leading-6">
+                              <dd className={`mt-2 text-sm leading-6 ${registration ? "" : "grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-start gap-3"}`}>
                                 {!registration ? (
                                   <div>
                                     <p className="text-xs text-ws-text">
-                                      Sebelum
+                                      Semula
                                     </p>
                                     <p className="whitespace-pre-wrap [overflow-wrap:anywhere]">
-                                      {change.before || "—"}
+                                      {change.before || "Belum diisi"}
                                     </p>
                                   </div>
                                 ) : null}
 
+                                {!registration ? <span aria-hidden="true" className="pt-5 text-ws-control [&>svg]:size-4"><WorkspaceControlIcon name="caretRight" /></span> : null}
+
                                 <div>
                                   {!registration ? (
                                     <p className="text-xs text-ws-text">
-                                      Sesudah
+                                      Menjadi
                                     </p>
                                   ) : null}
                                   <p className="whitespace-pre-wrap text-ws-strong [overflow-wrap:anywhere]">
-                                    {change.after || "—"}
+                                    {change.after || "Dikosongkan"}
                                   </p>
                                 </div>
                               </dd>
                             </div>
                           ))}
                         </dl>
-                      </details>
+                      </section>
                     ) : null}
 
-                    {event.photos?.length ? (
-                      <ul aria-label="Foto aktivitas unit" className="mt-3 flex flex-wrap gap-3">
+                    {!borrowingEvent && !registration ? event.photos?.length ? (
+                      <ul
+                        aria-label={`${details.photoLabel} aktivitas unit`}
+                        className="mt-3 flex flex-wrap gap-3"
+                      >
                         {event.photos.map((photo, index) => (
-                          <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto ${index + 1}`} />
+                          <UnitHistoryPhoto
+                            key={photo.id}
+                            url={photo.url}
+                            label={`${details.photoLabel} ${index + 1}`}
+                          />
                         ))}
                       </ul>
-                    ) : registration ? (
-                      <p className="mt-2 text-xs leading-5">Tidak ada foto pada pencatatan awal ini.</p>
-                    ) : null}
+                    ) : details.photoLabel !== "Foto aktivitas" ? (
+                      <p className="mt-2 text-xs leading-5">
+                        Tidak ada foto yang tercatat pada aktivitas ini.
+                      </p>
+                    ) : null : null}
+                    </div>
+                    </details>
                   </li>
                 );
               })}
@@ -347,6 +481,8 @@ export function UnitHistory({
           ) : null}
         </>
       ) : null}
+      </div> : <div id={contentId} hidden />}
     </section>
+    </>
   );
 }

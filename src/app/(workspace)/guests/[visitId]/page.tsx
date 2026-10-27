@@ -10,8 +10,13 @@ import { requireActiveUser } from "@/server/require-active-user";
 import { guestVisitIdSchema } from "@/server/guest-visit-input";
 import { listGuestBorrowings } from "@/server/list-guest-borrowings";
 import { listGuestBorrowingsInputSchema } from "@/server/list-guest-borrowings-input";
+import { getStockLocations } from "@/server/stock-locations";
 import { StatusFilter } from "../status-filter";
 import { IssueBorrowingDialog } from "../issue-borrowing-dialog";
+import { ReceiveReturnDialog } from "../receive-return-dialog";
+import { CheckoutGuestDialog } from "../checkout-guest-dialog";
+import { EditGuestDialog } from "../edit-guest-dialog";
+import { ReportUnitDamageDialog } from "../report-unit-damage-dialog";
 import { UnitHistoryPhoto } from "../../inventory/unit-history-photo";
 
 export const metadata: Metadata = { title: "Detail tamu | Housekeeping" };
@@ -32,9 +37,13 @@ export default async function GuestDetailPage({ params, searchParams }: {
   const raw = await searchParams;
   const parsed = listGuestBorrowingsInputSchema.safeParse({ visitId, page: raw.page, pageSize: "10", status: raw.status });
   if (!parsed.success) return <main className="mx-auto max-w-[1440px] space-y-4 p-4 md:p-6 lg:p-8"><WorkspacePageHeading fallbackHref="/guests"><h1 className="text-2xl font-semibold text-ws-strong">Detail tamu</h1></WorkspacePageHeading><p role="alert" className="text-sm text-ws-danger">Parameter halaman atau status pinjaman tidak valid.</p><Link href={path} className="ws-button-secondary">Reset filter</Link></main>;
-  const result = await listGuestBorrowings({ visitId, page: String(parsed.data.page), pageSize: "10", status: parsed.data.status });
+  const [result, locations] = await Promise.all([
+    listGuestBorrowings({ visitId, page: String(parsed.data.page), pageSize: "10", status: parsed.data.status }),
+    hasPermission(user.roles, "returns:create") ? getStockLocations() : Promise.resolve([]),
+  ]);
   if (!result) notFound();
   const { visit, summary, lines, pagination } = result;
+  const visitIdentity = { id: visit.id, primaryGuestName: visit.primaryGuestName, roomNumber: visit.roomNumber };
   const { page, status } = parsed.data;
   const href = (target: number) => `${path}?${new URLSearchParams({ status, page: String(target) })}`;
   if (page > Math.max(1, pagination.totalPages)) redirect(href(1));
@@ -46,16 +55,23 @@ export default async function GuestDetailPage({ params, searchParams }: {
         <h1 className="break-words font-heading text-2xl font-semibold text-ws-strong">{visit.primaryGuestName}</h1>
         <p className="mt-2 break-words text-sm">Kamar {visit.roomNumber} · Booking {visit.bookingNumber ?? "tidak tersedia"}</p>
         <p className="mt-1 text-xs leading-5 tabular-nums">{date.format(visit.checkInDate)} – {date.format(visit.plannedCheckoutDate)}</p>
+        {visit.checkedOutAt ? <p className="mt-1 text-xs leading-5">Checkout {time.format(visit.checkedOutAt)} WIB</p> : null}
         {visit.isDuplicate ? <p className="mt-2 text-xs text-ws-warning">Registrasi duplikat</p> : null}
       </WorkspacePageHeading>
-      {visit.status === "STAYING" && hasPermission(user.roles, "borrowing:create") ? <IssueBorrowingDialog visit={{ id: visit.id, primaryGuestName: visit.primaryGuestName, roomNumber: visit.roomNumber }} /> : null}
+      <div className="flex flex-wrap items-center gap-3">
+        {hasPermission(user.roles, "guests:update") ? <EditGuestDialog key={visit.id} visit={{ ...visitIdentity, updatedAt: visit.updatedAt.toISOString() }} /> : null}
+        {visit.status === "STAYING" && hasPermission(user.roles, "borrowing:create") ? <IssueBorrowingDialog visit={visitIdentity} /> : null}
+        {summary.hasOutstanding && hasPermission(user.roles, "returns:create") ? <ReceiveReturnDialog visit={visitIdentity} locations={locations} /> : null}
+        {visit.status === "STAYING" && hasPermission(user.roles, "guests:checkout") ? <CheckoutGuestDialog visit={visitIdentity} outstandingLines={summary.outstandingLines} /> : null}
+      </div>
     </header>
     <dl className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-ws-divider py-5 sm:grid-cols-4">
       {[{ label: "Masih dipinjam", value: summary.outstandingLines }, { label: "Dikembalikan", value: summary.returnedLines }, { label: "Diselesaikan", value: summary.settledLines }, { label: "Kali peminjaman", value: summary.totalOccasions }].map(fact => <div key={fact.label}><dt className="text-xs">{fact.label}</dt><dd className="mt-1 text-2xl font-semibold text-ws-strong tabular-nums">{fact.value}</dd></div>)}
     </dl>
-    <section aria-labelledby="visit-borrowings-heading" className="rounded-lg border border-ws-divider bg-ws-surface">
+    {visit.status === "CHECKED_OUT" && summary.hasOutstanding ? <p className="text-sm leading-6 text-ws-warning">Tamu sudah checkout. Masih ada {summary.outstandingLines} unit yang belum dikembalikan; penerimaan pengembalian tetap tersedia.</p> : null}
+    <section id="riwayat-peminjaman" aria-labelledby="visit-borrowings-heading" className="scroll-mt-20 rounded-lg border border-ws-divider bg-ws-surface">
       <div className="flex flex-wrap items-end justify-between gap-4 border-b border-ws-divider p-4 md:p-5">
-        <div><h2 id="visit-borrowings-heading" className="font-semibold text-ws-strong">Pinjaman & riwayat</h2><p className="mt-1 text-xs">{pagination.total} unit · Terbaru lebih dulu</p></div>
+        <div><h2 id="visit-borrowings-heading" className="font-semibold text-ws-strong">Riwayat peminjaman</h2><p className="mt-1 text-xs">{pagination.total} unit · Terbaru lebih dulu</p></div>
         <form action={path} method="get" className="flex w-full flex-wrap items-end gap-3 sm:w-auto">
           <StatusFilter key={`borrowing-${status}-${page}`} initialValue={status} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} label="Status pinjaman" />
           <button type="submit" className="inline-flex min-h-11 items-center justify-center rounded-md bg-ws-primary px-4 text-sm font-medium text-white hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary">Terapkan</button>
@@ -67,9 +83,16 @@ export default async function GuestDetailPage({ params, searchParams }: {
           <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><h3 className="break-words text-sm font-semibold text-ws-strong">{unitDisplayName(line.unit)}</h3><p className="mt-1 break-words text-xs">{line.unit.item.name} · {line.unit.unitCode}</p></div><span className={`shrink-0 rounded px-2 py-1 text-xs ${line.status === "OUTSTANDING" ? "bg-ws-warning/10 text-ws-warning" : "bg-ws-inset text-ws-strong"}`}>{statusLabels[line.status]}</span></div>
           <p className="mt-3 text-xs leading-5">Dipinjamkan {time.format(line.borrowing.issuedAt)} WIB · {line.borrowing.issuedBy.name}</p>
           <details className="mt-3 group"><summary className="inline-flex min-h-11 cursor-pointer list-none items-center gap-2 rounded-md text-xs text-ws-strong focus-visible:outline-2 focus-visible:outline-ws-primary [&::-webkit-details-marker]:hidden">Detail & foto<span className="rotate-90 group-open:-rotate-90"><WorkspaceControlIcon name="caretRight" /></span></summary>
-            <dl className="grid gap-x-6 gap-y-3 py-3 text-xs sm:grid-cols-2"><div><dt>Tamu saat peminjaman</dt><dd className="mt-1 break-words text-ws-strong">{line.borrowing.primaryGuestNameSnapshot}</dd></div><div><dt>Kamar saat peminjaman</dt><dd className="mt-1 text-ws-strong">{line.borrowing.roomNumberSnapshot}</dd></div><div><dt>Kondisi saat dipinjamkan</dt><dd className="mt-1 text-ws-strong">{conditionLabels[line.conditionAtIssue]}</dd></div><div><dt>Nomor seri saat ini</dt><dd className="mt-1 break-words text-ws-strong">{line.unit.serialNumber || "Belum diisi"}</dd></div>{line.resolvedAt ? <div><dt>{line.status === "RETURNED" ? "Dikembalikan" : "Diselesaikan"}</dt><dd className="mt-1 text-ws-strong">{time.format(line.resolvedAt)} WIB</dd></div> : null}</dl>
-            <ul aria-label={`Foto peminjaman ${unitDisplayName(line.unit)}`} className="flex flex-wrap gap-3">{line.photos.map((photo, photoIndex) => <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto ${photoIndex + 1} · ${time.format(photo.event.createdAt)} WIB`} />)}</ul>
-            {line.photos.length === 0 ? <p className="py-2 text-xs">Belum ada foto yang tercatat.</p> : null}
+            <dl className="grid gap-x-6 gap-y-3 py-3 text-xs sm:grid-cols-2"><div><dt>Tamu saat peminjaman</dt><dd className="mt-1 break-words text-ws-strong">{line.borrowing.primaryGuestNameSnapshot}</dd></div><div><dt>Kamar saat peminjaman</dt><dd className="mt-1 text-ws-strong">{line.borrowing.roomNumberSnapshot}</dd></div><div><dt>Kondisi saat dipinjamkan</dt><dd className="mt-1 text-ws-strong">{conditionLabels[line.conditionAtIssue]}</dd></div><div><dt>Nomor seri saat ini</dt><dd className="mt-1 break-words text-ws-strong">{line.unit.serialNumber || "Belum diisi"}</dd></div>{line.returnLine ? <><div><dt>Dikembalikan</dt><dd className="mt-1 text-ws-strong">{time.format(line.returnLine.returnBatch.receivedAt)} WIB</dd></div><div><dt>Diterima oleh</dt><dd className="mt-1 break-words text-ws-strong">{line.returnLine.returnBatch.receivedBy.name}</dd></div><div><dt>Kondisi saat dikembalikan</dt><dd className="mt-1 text-ws-strong">{conditionLabels[line.returnLine.condition]}</dd></div><div><dt>Lokasi penerimaan</dt><dd className="mt-1 break-words text-ws-strong">{line.returnLine.location.name}</dd></div></> : line.resolvedAt ? <div><dt>{line.status === "RETURNED" ? "Dikembalikan" : "Diselesaikan"}</dt><dd className="mt-1 text-ws-strong">{time.format(line.resolvedAt)} WIB</dd></div> : null}</dl>
+            <div className="space-y-4 pb-2">
+              <section aria-label={`Foto saat dipinjamkan ${unitDisplayName(line.unit)}`}><h4 className="mb-2 text-xs font-medium text-ws-strong">Foto saat dipinjamkan</h4><ul className="flex flex-wrap gap-3">{line.photos.filter(photo => photo.returnLineId === null).map((photo, photoIndex) => <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto peminjaman ${photoIndex + 1} · ${time.format(photo.event.createdAt)} WIB`} />)}</ul>{!line.photos.some(photo => photo.returnLineId === null) ? <p className="text-xs">Belum ada foto peminjaman yang tercatat.</p> : null}</section>
+              {line.returnLine ? <section aria-label={`Foto pengembalian ${unitDisplayName(line.unit)}`} className="border-t border-ws-divider pt-4"><h4 className="mb-2 text-xs font-medium text-ws-strong">Foto pengembalian</h4><ul className="flex flex-wrap gap-3">{line.photos.filter(photo => photo.returnLineId === line.returnLine?.id).map((photo, photoIndex) => <UnitHistoryPhoto key={photo.id} url={photo.url} label={`Foto pengembalian ${photoIndex + 1} · ${time.format(photo.event.createdAt)} WIB`} />)}</ul>{!line.photos.some(photo => photo.returnLineId === line.returnLine?.id) ? <p className="text-xs">Tidak ada foto pengembalian yang dilampirkan.</p> : null}</section> : null}
+              {line.status === "RETURNED" && line.returnLine?.condition === "GOOD" && line.unit.lifecycle === "ACTIVE" && line.unit.custody !== "GUEST" && line.unit.lossState === "NONE" && hasPermission(user.roles, "inventory:unit:damage:report") ? (
+                <div className="border-t border-ws-divider pt-4">
+                  <ReportUnitDamageDialog unit={{ id: line.unit.id, displayName: unitDisplayName(line.unit), itemName: line.unit.item.name, unitCode: line.unit.unitCode }} />
+                </div>
+              ) : null}
+            </div>
           </details>
         </div></div>
       </li>)}</ol>}

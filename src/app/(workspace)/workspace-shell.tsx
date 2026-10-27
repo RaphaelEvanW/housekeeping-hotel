@@ -74,7 +74,7 @@ export function WorkspaceShell({ userName, items, children }: {
       </aside>
 
       <div className="min-w-0">
-        <header className="bg-white px-4 py-3 shadow-[0_1px_8px_rgba(0,0,0,0.04)] sm:px-8">
+        <header className="sticky top-0 z-30 bg-white px-4 py-3 shadow-[0_1px_8px_rgba(0,0,0,0.04)] sm:px-8">
           <div className="flex min-h-10 items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-2">
               <button type="button" aria-label="Buka sidebar" aria-haspopup="dialog" aria-controls="mobile-navigation" onClick={openMobileMenu} className="inline-flex size-11 shrink-0 items-center justify-center rounded text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary lg:hidden"><WorkspaceControlIcon name="menu" /></button>

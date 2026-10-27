@@ -287,7 +287,7 @@ export function StockRegistrationProvider({
         onClose={() => {
           document.body.style.overflow = overflow.current;
         }}
-        className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-2xl flex-col overflow-hidden rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]"
+        className={`fixed inset-0 m-auto ${success ? "max-h-[calc(100svh-24px)]" : "h-[calc(100svh-24px)] max-h-[860px]"} w-[calc(100%-24px)] max-w-2xl flex-col overflow-clip rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]`}
       >
         <header className="shrink-0 border-b border-ws-divider px-5 py-5 sm:px-7">
           <div className="flex items-center justify-between gap-3">
@@ -313,7 +313,7 @@ export function StockRegistrationProvider({
         </header>
         {success ? (
           <>
-            <div className="overflow-y-auto overscroll-contain p-5 sm:p-7">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-5 sm:p-7">
               <h3 className="text-lg font-semibold text-ws-strong">
                 Penambahan unit berhasil
               </h3>
@@ -369,7 +369,7 @@ export function StockRegistrationProvider({
             noValidate
             onInput={validation.onInput}
             aria-busy={pending}
-            className="flex min-h-0 flex-1 flex-col"
+            className="flex min-h-0 flex-1 flex-col overflow-clip"
           >
             <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7">
               <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">

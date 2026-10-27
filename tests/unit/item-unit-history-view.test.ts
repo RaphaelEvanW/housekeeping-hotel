@@ -2,6 +2,7 @@ import { expect, it } from "vitest";
 
 import {
   historyChanges,
+  historyEventDetails,
   historyEventTitle,
   parseUnitHistory,
 } from "../../src/lib/item-unit-history-view";
@@ -188,4 +189,154 @@ it("does not invent changes for unknown actions or malformed values", () => {
 
   expect(historyEventTitle("FUTURE_ACTION"))
     .toBe("Aktivitas unit");
+});
+
+it.each([
+  ["BORROWING_ISSUED", "Unit dipinjamkan"],
+  ["BORROWING_RETURNED", "Unit dikembalikan"],
+  ["ITEM_UNIT_DAMAGE_REPORTED", "Kerusakan dilaporkan"],
+  ["ITEM_UNIT_VERIFIED", "Unit diverifikasi"],
+])("labels %s history", (action, title) => {
+  expect(historyEventTitle(action)).toBe(title);
+});
+
+it("shows issue snapshots and a safe borrowing-history link without internal IDs", () => {
+  const event = {
+    ...historyBody().events[0],
+    action: "BORROWING_ISSUED",
+    oldValues: { custody: "HOUSEKEEPING", locationId: "location-id" },
+    newValues: {
+      custody: "GUEST",
+      locationId: "destination-id",
+      conditionAtIssue: "GOOD",
+      guestVisitId: "c26f706a-d579-48f0-84d8-7aa67442bda0",
+      primaryGuestNameSnapshot: "Ayu Guest",
+      roomNumberSnapshot: "201",
+      borrowingId: "borrowing-id",
+    },
+  };
+
+  expect(historyEventDetails(event)).toEqual({
+    facts: [
+      { key: "primaryGuestNameSnapshot", label: "Tamu", value: "Ayu Guest" },
+      { key: "roomNumberSnapshot", label: "Kamar", value: "201" },
+      { key: "conditionAtIssue", label: "Kondisi saat dipinjamkan", value: "Baik" },
+    ],
+    visitHref: "/guests/c26f706a-d579-48f0-84d8-7aa67442bda0?status=ALL#riwayat-peminjaman",
+    photoLabel: "Foto peminjaman",
+  });
+  expect(historyChanges(event)).toEqual([
+    { key: "custody", label: "Pemegang unit", before: "Housekeeping", after: "Tamu" },
+  ]);
+});
+
+it("shows the return snapshot, received time, condition and return photos", () => {
+  const event = {
+    ...historyBody().events[0],
+    action: "BORROWING_RETURNED",
+    oldValues: { condition: "GOOD", readiness: "CLEAR", custody: "GUEST" },
+    newValues: {
+      condition: "MINOR_DAMAGE",
+      readiness: "ON_HOLD",
+      custody: "HOUSEKEEPING",
+      guestVisitId: "c26f706a-d579-48f0-84d8-7aa67442bda0",
+      primaryGuestNameSnapshot: "Ayu Guest",
+      roomNumberSnapshot: "201",
+      receivedAt: "2026-10-23T04:30:00.000Z",
+    },
+  };
+
+  const details = historyEventDetails(event);
+  expect(details).toMatchObject({
+    facts: [
+      { key: "primaryGuestNameSnapshot", label: "Tamu", value: "Ayu Guest" },
+      { key: "roomNumberSnapshot", label: "Kamar", value: "201" },
+      { key: "condition", label: "Kondisi saat dikembalikan", value: "Rusak ringan" },
+      { key: "readiness", label: "Kesiapan setelah kejadian", value: "Belum siap" },
+      { key: "receivedAt", label: "Diterima kembali" },
+    ],
+    visitHref: "/guests/c26f706a-d579-48f0-84d8-7aa67442bda0?status=ALL#riwayat-peminjaman",
+    photoLabel: "Foto pengembalian",
+  });
+  const receivedAt = details.facts.find((fact) => fact.key === "receivedAt");
+  expect(receivedAt?.value).toMatch(/11[.:]30 WIB/u);
+});
+
+it("shows damage and verification state transitions without changing physical condition on FIT", () => {
+  const base = historyBody().events[0];
+  const damage = {
+    ...base,
+    action: "ITEM_UNIT_DAMAGE_REPORTED",
+    oldValues: { condition: "GOOD", readiness: "CLEAR" },
+    newValues: { condition: "DAMAGED", readiness: "ON_HOLD", requestHash: "internal" },
+  };
+  expect(historyEventDetails(damage)).toMatchObject({
+    facts: [
+      { key: "condition", label: "Kondisi tercatat", value: "Rusak" },
+      { key: "readiness", label: "Kesiapan setelah kejadian", value: "Belum siap" },
+    ],
+    visitHref: null,
+    photoLabel: "Foto laporan kerusakan",
+  });
+  expect(historyChanges(damage)).toEqual([
+    { key: "condition", label: "Kondisi", before: "Baik", after: "Rusak" },
+    { key: "readiness", label: "Kesiapan", before: "Siap", after: "Belum siap" },
+  ]);
+
+  const verification = {
+    ...base,
+    action: "ITEM_UNIT_VERIFIED",
+    oldValues: { condition: "MINOR_DAMAGE", readiness: "PENDING_VERIFICATION" },
+    newValues: {
+      result: "FIT_FOR_USE",
+      condition: "MINOR_DAMAGE",
+      readiness: "CLEAR",
+    },
+  };
+  expect(historyEventDetails(verification)).toMatchObject({
+    facts: [
+      { key: "result", label: "Hasil verifikasi", value: "Layak digunakan" },
+      { key: "condition", label: "Kondisi tercatat", value: "Rusak ringan" },
+      { key: "readiness", label: "Kesiapan setelah kejadian", value: "Siap" },
+    ],
+    photoLabel: "Foto verifikasi",
+  });
+  expect(historyChanges(verification)).toEqual([
+    {
+      key: "readiness",
+      label: "Kesiapan",
+      before: "Menunggu verifikasi",
+      after: "Siap",
+    },
+  ]);
+});
+
+it("does not render malformed guest links or unrecognized audited values", () => {
+  const event = {
+    ...historyBody().events[0],
+    action: "BORROWING_RETURNED",
+    oldValues: { condition: "GOOD", readiness: "CLEAR", custody: "GUEST" },
+    newValues: {
+      condition: "UNKNOWN_CONDITION",
+      readiness: "UNKNOWN_READINESS",
+      custody: "HOUSEKEEPING",
+      guestVisitId: "javascript:alert(1)",
+      primaryGuestNameSnapshot: "Ayu Guest",
+      receivedAt: "not-a-date",
+      locationId: "private-id",
+    },
+  };
+  expect(historyEventDetails(event)).toEqual({
+    facts: [{ key: "primaryGuestNameSnapshot", label: "Tamu", value: "Ayu Guest" }],
+    visitHref: null,
+    photoLabel: "Foto pengembalian",
+  });
+  expect(historyChanges(event)).toEqual([
+    { key: "custody", label: "Pemegang unit", before: "Tamu", after: "Housekeeping" },
+  ]);
+  expect(historyEventDetails({ ...event, action: "FUTURE_ACTION" })).toEqual({
+    facts: [],
+    visitHref: null,
+    photoLabel: "Foto aktivitas",
+  });
 });

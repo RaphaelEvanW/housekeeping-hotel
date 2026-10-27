@@ -8,22 +8,39 @@ export function UnitPhotoField({
   index,
   error,
   purpose = "initial",
+  required = true,
 }: {
   index: number;
   error?: string;
-  purpose?: "initial" | "issue";
+  purpose?: "initial" | "issue" | "return" | "condition" | "verification";
+  required?: boolean;
 }) {
   const { input, previews, error: selectionError, append, remove, reset } =
     usePhotoSelection();
   const message = selectionError || error;
-  const id = `${purpose === "initial" ? "stock" : "issue"}-unit-photo-${index}`;
-  const label =
-    purpose === "issue" ? "Foto saat dipinjamkan" : "Foto awal unit";
+  const id = `${purpose === "initial" ? "stock" : purpose}-unit-photo-${index}`;
+  const labels = {
+    initial: "Foto awal unit",
+    issue: "Foto saat dipinjamkan",
+    return: "Foto pengembalian",
+    condition: "Foto kondisi unit",
+    verification: "Foto verifikasi",
+  } as const;
+  const helpers = {
+    initial: "Minimal satu foto kondisi awal.",
+    issue: "Foto kondisi unit saat diserahkan ke tamu.",
+    return: required
+      ? "Minimal satu foto wajib untuk kondisi selain baik."
+      : "Foto boleh dilampirkan untuk kondisi baik.",
+    condition: "Lampirkan foto yang memperlihatkan kerusakan atau komponen yang kurang.",
+    verification: "Minimal satu foto hasil pemeriksaan untuk setiap unit.",
+  } as const;
+  const label = labels[purpose];
 
   return (
     <div className="min-w-0 sm:col-span-2">
       <label htmlFor={id} className="block text-sm font-medium text-ws-strong">
-        {label} <span aria-hidden="true">*</span>
+        {label} {required ? <span aria-hidden="true">*</span> : <span className="font-normal">(opsional)</span>}
       </label>
       <div className="mt-2 flex flex-wrap items-center gap-3">
         <input
@@ -33,11 +50,12 @@ export function UnitPhotoField({
           type="file"
           accept="image/jpeg,image/png,image/webp"
           multiple
-          required
+          required={required}
           data-required-message={`Pilih minimal satu ${label.toLowerCase()}.`}
           aria-invalid={Boolean(message)}
           aria-describedby={`${id}-help ${id}-error`}
           className="peer sr-only"
+          onCancel={(event) => event.stopPropagation()}
           onChange={(event) =>
             append(Array.from(event.currentTarget.files ?? []))
           }
@@ -64,9 +82,7 @@ export function UnitPhotoField({
         ) : null}
       </div>
       <p id={`${id}-help`} className="mt-2 text-xs leading-5">
-        {purpose === "issue"
-          ? "Foto kondisi unit saat diserahkan ke tamu."
-          : "Minimal satu foto kondisi awal."}{" "}
+        {helpers[purpose]}{" "}
         JPEG, PNG, atau WebP statis, maksimal 2 MiB per foto.
       </p>
       <FieldError id={`${id}-error`} message={message} />

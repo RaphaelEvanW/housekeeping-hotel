@@ -135,6 +135,7 @@ export function IssueBorrowingDialog({ visit }: { visit: { id: string; primaryGu
         }
         setExpired(response.status === 401);
         setRevision(value => value + 1);
+        if (code === "VISIT_NOT_STAYING" || code === "VISIT_NOT_FOUND") router.refresh();
         setError(response.status === 401 ? "Sesi Anda berakhir. Masuk kembali untuk melanjutkan."
           : response.status === 403 ? "Anda tidak memiliki izin membuat peminjaman."
             : failure.data.message ?? "Periksa kembali pilihan unit dan foto.");
@@ -155,8 +156,8 @@ export function IssueBorrowingDialog({ visit }: { visit: { id: string; primaryGu
       <button type="button" className={primaryClass} onClick={show}><WorkspaceControlIcon name="plus" />Tambah pinjaman</button>
       {success > 0 ? <p role="status" className="mt-2 text-sm text-ws-success">{success} unit berhasil dipinjamkan.</p> : null}
     </div>
-    {open ? <dialog ref={dialog} aria-labelledby="issue-borrowing-heading" className="fixed inset-0 m-auto max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-[720px] overflow-hidden rounded-lg bg-ws-surface p-0 text-ws-text backdrop:bg-black/40" onCancel={event => { event.preventDefault(); if (!locked) setOpen(false); }}>
-      <form noValidate onSubmit={submit} onInput={validation.onInput} className="flex max-h-[calc(100svh-2rem)] flex-col">
+    {open ? <dialog ref={dialog} aria-labelledby="issue-borrowing-heading" className="fixed inset-0 m-auto h-[calc(100svh-2rem)] max-h-[860px] w-[calc(100%-2rem)] max-w-[720px] flex-col overflow-clip rounded-lg bg-ws-surface p-0 text-ws-text backdrop:bg-black/40 open:flex" onCancel={event => { event.preventDefault(); if (!locked) setOpen(false); }}>
+      <form noValidate onSubmit={submit} onInput={validation.onInput} className="flex min-h-0 flex-1 flex-col">
         <header className="shrink-0 border-b border-ws-divider px-5 py-4 sm:px-7">
           <div className="flex items-center justify-between gap-3">
             <h2 id="issue-borrowing-heading" className="text-sm text-ws-text">Tambah pinjaman</h2>
@@ -164,7 +165,7 @@ export function IssueBorrowingDialog({ visit }: { visit: { id: string; primaryGu
           </div>
           <div className="mt-3 border-t border-ws-divider pt-4"><p className="break-words text-lg font-semibold text-ws-strong">{visit.primaryGuestName}</p><p className="mt-1 text-sm">Kamar {visit.roomNumber}</p></div>
         </header>
-        <div className="min-h-0 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-7">
           <fieldset disabled={locked} className="min-w-0 space-y-5 disabled:opacity-70">
             <legend className="sr-only">Pilih unit dan lengkapi foto</legend>
             <div>

@@ -195,9 +195,9 @@ export function RequestItemDeactivationDialog({
                 if (inFlight.current) event.preventDefault();
                 else setOpen(false);
               }}
-              className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-lg overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-5 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-6"
+              className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-lg flex-col overflow-hidden rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]"
             >
-              <header>
+              <header className="shrink-0 border-b border-ws-divider px-6 py-4">
                 <div className="flex items-center justify-between gap-4 border-b border-ws-divider pb-4">
                   <h2
                     id={`${prefix}-heading`}
@@ -223,7 +223,7 @@ export function RequestItemDeactivationDialog({
               </header>
 
               {outcome === "success" ? (
-                <div className="mt-5">
+                <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
                   <p
                     role="status"
                     className="text-sm font-medium leading-6 text-ws-success"
@@ -257,8 +257,9 @@ export function RequestItemDeactivationDialog({
                   onSubmit={submit}
                   onInput={validation.onInput}
                   aria-busy={pending}
-                  className="mt-5"
+                  className="flex min-h-0 flex-col"
                 >
+                  <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
                   <p className="text-sm leading-6">
                     Pengajuan ini berlaku untuk jenis barang. Penonaktifan
                     dilakukan setelah disetujui Supervisor.
@@ -326,7 +327,8 @@ export function RequestItemDeactivationDialog({
                     </a>
                   ) : null}
 
-                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-ws-divider px-6 py-4">
                     <button
                       type="button"
                       disabled={pending}

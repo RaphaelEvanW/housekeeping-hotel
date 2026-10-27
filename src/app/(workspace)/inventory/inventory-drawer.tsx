@@ -9,10 +9,12 @@ import { slidePanel } from "@/lib/panel-motion";
 export function InventoryDrawer({
   closeHref,
   children,
+  heading,
   footer,
 }: {
   closeHref: string;
   children: ReactNode;
+  heading: ReactNode;
   footer?: ReactNode;
 }) {
   const router = useRouter();
@@ -103,7 +105,8 @@ export function InventoryDrawer({
       }}
       className="fixed inset-y-0 right-0 left-auto z-40 m-0 h-svh max-h-none w-full max-w-none overflow-hidden overscroll-contain border-0 border-l border-ws-divider bg-white p-0 font-workspace text-ws-text shadow-xl outline-none backdrop:bg-black/35 backdrop:transition-opacity backdrop:duration-[280ms] data-[closing=true]:backdrop:opacity-0 open:flex open:flex-col sm:w-[440px] min-[1440px]:top-16 min-[1440px]:h-[calc(100svh-64px)] min-[1440px]:shadow-none motion-reduce:backdrop:transition-none"
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-ws-divider px-4 py-3 sm:px-6">
+      <header className="shrink-0 border-b border-ws-divider px-4 pb-4 sm:px-6">
+      <div className="flex items-center justify-between gap-3 border-b border-ws-divider py-3">
         <p className="text-xs font-medium text-ws-text">
           Jenis barang terpilih
         </p>
@@ -116,6 +119,8 @@ export function InventoryDrawer({
           <WorkspaceControlIcon name="close" />
         </button>
       </div>
+      <div className="pt-4">{heading}</div>
+      </header>
       <div data-drawer-body className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6">
         {children}
       </div>

@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:users": "node --conditions=react-server --import tsx scripts/create-dev-user.ts --all-roles",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",

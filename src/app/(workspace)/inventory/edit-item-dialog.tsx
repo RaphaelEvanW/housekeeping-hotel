@@ -174,14 +174,12 @@ export function EditItemDialog({
                 if (inFlight.current) event.preventDefault();
                 else setOpen(false);
               }}
-              className={`fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] ${success ? "max-w-sm p-4" : "max-w-md p-6 sm:p-8"}`}
+              className={`fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] flex-col overflow-hidden rounded-lg border-0 bg-ws-surface font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light] ${success ? "max-w-sm p-4" : "max-w-md p-0"}`}
             >
-              <h2
-                id="edit-item-heading"
-                className={success ? "sr-only" : "font-heading text-xl leading-7 font-semibold text-ws-strong"}
-              >
-                Edit
-              </h2>
+              <header className={success ? "sr-only" : "flex shrink-0 items-center justify-between gap-3 border-b border-ws-divider px-6 py-4"}>
+                <h2 id="edit-item-heading" className="font-heading text-xl leading-7 font-semibold text-ws-strong">Edit jenis barang</h2>
+                {!success ? <button type="button" aria-label="Tutup edit jenis barang" disabled={pending} onClick={() => setOpen(false)} className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-ws-primary"><WorkspaceControlIcon name="close" /></button> : null}
+              </header>
               {success ? (
                 <div className="flex items-center justify-between gap-3">
                   <p
@@ -202,7 +200,8 @@ export function EditItemDialog({
                   </button>
                 </div>
               ) : (
-                <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="mt-5">
+                <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="flex min-h-0 flex-col">
+                  <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
                   <label
                     htmlFor="edit-item-name"
                     className="block text-sm font-medium text-ws-strong"
@@ -263,7 +262,8 @@ export function EditItemDialog({
                       Ke halaman masuk
                     </Link>
                   ) : null}
-                  <div className="mt-6 flex flex-wrap justify-end gap-3">
+                  </div>
+                  <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-ws-divider px-6 py-4">
                     <button
                       type="button"
                       disabled={pending}

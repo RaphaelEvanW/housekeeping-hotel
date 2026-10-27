@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { conditionLabels, custodyLabels, readinessLabels } from "@/lib/unit-state-labels";
 
 export const HISTORY_PAGE_SIZE = 10;
 export const HISTORY_MAX_PAGE = 1000;
@@ -77,6 +78,14 @@ export function historyEventTitle(action: string) {
       return "Unit ditambahkan";
     case "ITEM_UNIT_DETAILS_UPDATED":
       return "Detail unit diperbarui";
+    case "BORROWING_ISSUED":
+      return "Unit dipinjamkan";
+    case "BORROWING_RETURNED":
+      return "Unit dikembalikan";
+    case "ITEM_UNIT_DAMAGE_REPORTED":
+      return "Kerusakan dilaporkan";
+    case "ITEM_UNIT_VERIFIED":
+      return "Unit diverifikasi";
     default:
       return "Aktivitas unit";
   }
@@ -92,23 +101,141 @@ function detailValue(values: unknown, key: string) {
   return value === null || typeof value === "string" ? value : undefined;
 }
 
+const operationalActions = new Set([
+  "BORROWING_ISSUED",
+  "BORROWING_RETURNED",
+  "ITEM_UNIT_DAMAGE_REPORTED",
+  "ITEM_UNIT_VERIFIED",
+]);
+
+const historyValueLabels: Record<string, Readonly<Record<string, string>>> = {
+  condition: conditionLabels,
+  conditionAtIssue: conditionLabels,
+  readiness: readinessLabels,
+  custody: custodyLabels,
+  result: {
+    FIT_FOR_USE: "Layak digunakan",
+    UNFIT_FOR_USE: "Tidak layak digunakan",
+  },
+};
+
+const photoLabels: Record<string, string> = {
+  STOCK_UNIT_CREATED: "Foto awal unit",
+  BORROWING_ISSUED: "Foto peminjaman",
+  BORROWING_RETURNED: "Foto pengembalian",
+  ITEM_UNIT_DAMAGE_REPORTED: "Foto laporan kerusakan",
+  ITEM_UNIT_VERIFIED: "Foto verifikasi",
+};
+
+const historyTime = new Intl.DateTimeFormat("id-ID", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Jakarta",
+});
+
+function formattedHistoryValue(values: unknown, key: string) {
+  const value = detailValue(values, key);
+  if (value === null || value === undefined) return value;
+
+  const labels = historyValueLabels[key];
+  if (!labels) return value;
+
+  return Object.prototype.hasOwnProperty.call(labels, value)
+    ? labels[value]
+    : undefined;
+}
+
+export function historyEventDetails(event: UnitHistoryEvent) {
+  const facts: { key: string; label: string; value: string }[] = [];
+  if (!operationalActions.has(event.action)) {
+    return {
+      facts,
+      visitHref: null,
+      photoLabel: photoLabels[event.action] ?? "Foto aktivitas",
+    };
+  }
+
+  const borrowing =
+    event.action === "BORROWING_ISSUED" ||
+    event.action === "BORROWING_RETURNED";
+  const fields: [string, string][] = borrowing
+    ? [
+        ["primaryGuestNameSnapshot", "Tamu"],
+        ["roomNumberSnapshot", "Kamar"],
+      ]
+    : [];
+
+  fields.push([
+    event.action === "BORROWING_ISSUED" ? "conditionAtIssue" : "condition",
+    event.action === "BORROWING_ISSUED"
+      ? "Kondisi saat dipinjamkan"
+      : event.action === "BORROWING_RETURNED"
+        ? "Kondisi saat dikembalikan"
+        : "Kondisi tercatat",
+  ]);
+  if (event.action !== "BORROWING_ISSUED") {
+    fields.push(["readiness", "Kesiapan setelah kejadian"]);
+  }
+  if (event.action === "ITEM_UNIT_VERIFIED") {
+    fields.unshift(["result", "Hasil verifikasi"]);
+  }
+
+  for (const [key, label] of fields) {
+    const value = formattedHistoryValue(event.newValues, key);
+    if (typeof value === "string" && value.trim()) {
+      facts.push({ key, label, value });
+    }
+  }
+
+  if (event.action === "BORROWING_RETURNED") {
+    const receivedAt = z
+      .iso.datetime({ offset: true })
+      .safeParse(detailValue(event.newValues, "receivedAt"));
+    if (receivedAt.success) {
+      facts.push({
+        key: "receivedAt",
+        label: "Diterima kembali",
+        value: `${historyTime.format(new Date(receivedAt.data))} WIB`,
+      });
+    }
+  }
+
+  const visitId = borrowing
+    ? z.uuid().safeParse(detailValue(event.newValues, "guestVisitId"))
+    : null;
+
+  return {
+    facts,
+    visitHref: visitId?.success ? `/guests/${visitId.data}?status=ALL#riwayat-peminjaman` : null,
+    photoLabel: photoLabels[event.action] ?? "Foto aktivitas",
+  };
+}
+
 export function historyChanges(event: UnitHistoryEvent) {
+  const operational = operationalActions.has(event.action);
   if (
     event.action !== "STOCK_UNIT_CREATED" &&
-    event.action !== "ITEM_UNIT_DETAILS_UPDATED"
+    event.action !== "ITEM_UNIT_DETAILS_UPDATED" &&
+    !operational
   ) {
     return [];
   }
 
-  const fields = [
-    ["name", "Nama unit"],
-    ["serialNumber", "Nomor seri"],
-    ["notes", "Deskripsi"],
-  ] as const;
+  const fields: readonly (readonly [string, string])[] = operational
+    ? [
+        ["condition", "Kondisi"],
+        ["readiness", "Kesiapan"],
+        ["custody", "Pemegang unit"],
+      ]
+    : [
+        ["name", "Nama unit"],
+        ["serialNumber", "Nomor seri"],
+        ["notes", "Deskripsi"],
+      ];
 
   return fields.flatMap(([key, label]) => {
-    const before = detailValue(event.oldValues, key);
-    const after = detailValue(event.newValues, key);
+    const before = formattedHistoryValue(event.oldValues, key);
+    const after = formattedHistoryValue(event.newValues, key);
 
     if (event.action === "STOCK_UNIT_CREATED") {
       return after ? [{ key, label, before: null, after }] : [];

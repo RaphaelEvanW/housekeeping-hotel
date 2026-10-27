@@ -8,7 +8,7 @@ import { FieldError } from "@/components/field-error";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { guestVisitIdSchema, registerGuestVisitInputSchema } from "@/server/guest-visit-input";
 
-const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md border border-ws-primary bg-ws-primary px-4 text-sm leading-5 font-medium text-white transition-colors hover:border-ws-primary-hover hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60";
+const primaryClass = "inline-flex min-h-11 items-center justify-center rounded-md border border-ws-primary bg-ws-primary px-4 text-sm leading-5 font-medium text-white transition-colors hover:border-ws-primary-hover hover:bg-ws-primary-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-not-allowed disabled:opacity-60";
 const inputClass = "mt-2 min-h-11 w-full min-w-0 rounded-md border border-ws-control bg-ws-inset px-3 text-sm text-ws-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:opacity-60";
 const failureSchema = z.object({
   error: z.string().optional(),
@@ -124,7 +124,7 @@ export function RegisterGuestDialog() {
         attempt.current = null;
         setDuplicate(true);
         setMatchingVisitId(data.matchingVisitId ?? "");
-        setError(data.message ?? "Ada kunjungan aktif yang mungkin sama. Periksa data atau isi alasan untuk melanjutkan.");
+        setError("Kunjungan yang sesuai sudah terdaftar. Buka kunjungan tersebut untuk melanjutkan, atau perbaiki data registrasi.");
         return;
       }
       if (response.status === 400 && data.error === "INVALID_INPUT" && data.issues) {
@@ -156,6 +156,7 @@ export function RegisterGuestDialog() {
       await send(attempt.current);
       return;
     }
+    if (duplicate) return;
     const form = event.currentTarget;
     const data = new FormData(form);
     const payload = {
@@ -165,7 +166,6 @@ export function RegisterGuestDialog() {
       bookingNumber: String(data.get("bookingNumber") ?? ""),
       checkInDate: String(data.get("checkInDate") ?? ""),
       plannedCheckoutDate: String(data.get("plannedCheckoutDate") ?? ""),
-      ...(duplicate ? { duplicateOverrideReason: String(data.get("duplicateOverrideReason") ?? "") } : {}),
     };
     const parsed = registerGuestVisitInputSchema.safeParse(payload);
     if (!parsed.success) {
@@ -176,7 +176,6 @@ export function RegisterGuestDialog() {
         bookingNumber: "Nomor booking wajib diisi.",
         checkInDate: "Tanggal check-in wajib diisi.",
         plannedCheckoutDate: "Rencana tanggal checkout wajib diisi.",
-        duplicateOverrideReason: "Alasan wajib diisi untuk melanjutkan registrasi duplikat.",
       };
       for (const issue of parsed.error.issues) {
         const key = String(issue.path[0] ?? "");
@@ -199,17 +198,18 @@ export function RegisterGuestDialog() {
         ref={dialog}
         aria-labelledby="register-guest-title"
         onCancel={(event) => { if (locked) event.preventDefault(); else { document.body.style.overflow = previousOverflow.current; } }}
-        onClick={(event) => { if (event.target === event.currentTarget) closeDialog(); }}
-        className="m-auto max-h-[min(90svh,760px)] w-[min(100%-1rem,560px)] overflow-y-auto rounded-xl bg-ws-surface p-0 text-ws-strong shadow-2xl backdrop:bg-black/40"
+        onClick={(event) => { if (event.target !== event.currentTarget) return; const rect = event.currentTarget.getBoundingClientRect(); if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) closeDialog(); }}
+        className="m-auto max-h-[calc(100svh-2rem)] w-[calc(100%-2rem)] max-w-[560px] flex-col overflow-hidden rounded-lg bg-ws-surface p-0 text-ws-strong shadow-xl backdrop:bg-black/40 open:flex"
       >
-        <div className="flex items-center justify-between gap-4 border-b border-ws-divider px-6 py-4">
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b border-ws-divider px-6 py-4">
           <div>
             <p className="text-xs text-ws-text">Kunjungan baru</p>
             <h2 id="register-guest-title" className="mt-1 font-heading text-xl font-semibold">Daftarkan tamu</h2>
           </div>
           <button type="button" onClick={closeDialog} disabled={locked} aria-label="Tutup" title="Tutup" className="ws-button-secondary size-10 shrink-0 p-0"><WorkspaceControlIcon name="close" /></button>
         </div>
-        <form ref={formRef} noValidate onInput={clearFieldError} onSubmit={submit} className="space-y-4 p-6">
+        <form ref={formRef} noValidate onInput={clearFieldError} onSubmit={submit} className="flex min-h-0 flex-col">
+          <div className="min-h-0 overflow-y-auto overscroll-contain space-y-4 p-6">
           <p className="text-sm leading-6">Gunakan form ini saat tamu akan meminjam barang.</p>
           {([
             ["primaryGuestName", "Nama tamu utama", "text", 200],
@@ -236,20 +236,14 @@ export function RegisterGuestDialog() {
             </label>
           ))}
           {duplicate ? (
-            <div>
-              <label htmlFor="duplicateOverrideReason" className="block text-sm font-medium text-ws-strong">
-                Alasan melanjutkan registrasi duplikat <span aria-hidden="true" className="text-ws-danger">*</span>
-                <textarea id="duplicateOverrideReason" name="duplicateOverrideReason" required maxLength={2000} disabled={locked} aria-invalid={Boolean(fieldErrors.duplicateOverrideReason)} aria-describedby={fieldErrors.duplicateOverrideReason ? "duplicateOverrideReason-error" : undefined} className={`${inputClass} min-h-24 py-3`} />
-                <FieldError id="duplicateOverrideReason-error" message={fieldErrors.duplicateOverrideReason} />
-              </label>
-              {matchingVisitId ? <Link href="/guests?status=STAYING" className="mt-2 inline-flex min-h-11 items-center text-xs text-ws-primary underline underline-offset-4">Lihat daftar kunjungan yang menginap</Link> : null}
-            </div>
+            matchingVisitId ? <Link href={`/guests/${matchingVisitId}`} prefetch={false} onClick={closeDialog} className="ws-button-secondary">Buka kunjungan tamu<WorkspaceControlIcon name="caretRight" /></Link> : null
           ) : null}
           {error ? <p role="alert" className="rounded-md bg-ws-danger/5 p-3 text-sm leading-6 text-ws-danger">{error}</p> : null}
           {uncertain ? <p className="text-xs leading-5 text-ws-text">Data dikunci agar pemeriksaan memakai permintaan yang sama.</p> : null}
-          <div className="flex flex-wrap justify-end gap-2 border-t border-ws-divider pt-4">
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-ws-divider px-6 py-4">
             <button type="button" onClick={closeDialog} disabled={locked} className="ws-button-secondary">Batal</button>
-            <button type="submit" disabled={pending} className={primaryClass}>{pending ? "Menyimpan…" : uncertain ? "Periksa penyimpanan" : duplicate ? "Lanjutkan registrasi" : "Simpan kunjungan"}</button>
+            <button type="submit" disabled={pending || duplicate} className={primaryClass}>{pending ? "Menyimpan…" : uncertain ? "Periksa penyimpanan" : "Simpan kunjungan"}</button>
           </div>
         </form>
       </dialog>

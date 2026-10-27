@@ -21,8 +21,12 @@ export async function prepareStockUpload<T extends { quantity: number; photos: F
   return prepareUnitPhotoUpload(data, photos);
 }
 
-export async function prepareUnitPhotoUpload(data: object, photos: File[][]) {
-  if (photos.length === 0 || photos.some(files => stockPhotoError(files))) {
+export async function prepareUnitPhotoUpload(
+  data: object,
+  photos: File[][],
+  { allowEmptyPhotos = false }: { allowEmptyPhotos?: boolean } = {},
+) {
+  if (photos.length === 0 || photos.some(files => files.length === 0 ? !allowEmptyPhotos : stockPhotoError(files))) {
     throw new Error("Setiap unit wajib memiliki foto JPEG, PNG, atau WebP maksimal 2 MiB.");
   }
   const metadata = JSON.stringify(data);

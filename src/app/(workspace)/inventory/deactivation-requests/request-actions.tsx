@@ -142,9 +142,9 @@ export function DeactivationRequestActions({ request, actorId, canDecide, canCan
           onClick={event => event.stopPropagation()}
           onKeyDown={event => { if (event.key === "Escape") event.stopPropagation(); }}
           onCancel={event => { event.stopPropagation(); event.preventDefault(); close(); }}
-          className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-lg overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-5 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-6"
+          className="fixed inset-0 m-auto max-h-[calc(100svh-24px)] w-[calc(100%-24px)] max-w-lg flex-col overflow-hidden rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]"
         >
-          <header>
+          <header className="shrink-0 border-b border-ws-divider px-6 py-4">
             <div className="flex items-center justify-between gap-4 border-b border-ws-divider pb-4">
               <h2 id={`${prefix}-heading`} className="text-sm font-medium text-ws-strong">{deactivationActions[action].heading}</h2>
               <button type="button" aria-label="Tutup konfirmasi pengajuan" disabled={pending} onClick={close} className="inline-flex size-11 shrink-0 items-center justify-center rounded-md text-ws-strong hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ws-primary disabled:cursor-wait disabled:opacity-60">
@@ -155,12 +155,13 @@ export function DeactivationRequestActions({ request, actorId, canDecide, canCan
           </header>
 
           {outcome === "success" ? (
-            <div className="mt-5">
+            <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
               <p role="status" className="text-sm leading-6 text-ws-success">{deactivationActions[action].success}</p>
               <div className="mt-6 flex justify-end"><button type="button" onClick={close} className="ws-button-secondary">Selesai</button></div>
             </div>
           ) : (
-            <form onSubmit={submit} aria-busy={pending} className="mt-5">
+            <form onSubmit={submit} aria-busy={pending} className="flex min-h-0 flex-col">
+              <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
               <dl className="space-y-4 text-sm leading-6">
                 <div><dt className="text-xs">Pengaju</dt><dd className="text-ws-strong [overflow-wrap:anywhere]">{request.requestedBy}</dd></div>
                 <div><dt className="text-xs">Diajukan</dt><dd><time dateTime={request.createdAt}>{dateFormat.format(new Date(request.createdAt))} WIB</time></dd></div>
@@ -169,7 +170,8 @@ export function DeactivationRequestActions({ request, actorId, canDecide, canCan
               <p className="mt-5 border-t border-ws-divider pt-4 text-sm leading-6">{deactivationActions[action].effect}</p>
               {error ? <p role="alert" className="mt-4 text-sm leading-6 text-ws-danger">{error}</p> : null}
               {expired ? <a href="/login" className="ws-button-secondary mt-3">Ke halaman masuk</a> : null}
-              <div className="mt-6 flex flex-wrap justify-end gap-3">
+              </div>
+              <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-ws-divider px-6 py-4">
                 <button ref={backButton} type="button" disabled={pending} onClick={close} className="ws-button-secondary">{locked ? "Tutup" : "Kembali"}</button>
                 {locked ? (
                   <button type="button" onClick={() => window.location.reload()} className="ws-button-secondary">Muat ulang daftar</button>

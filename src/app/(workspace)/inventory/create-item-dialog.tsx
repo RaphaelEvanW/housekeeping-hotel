@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, type SubmitEvent } from "react";
 import { FieldError } from "@/components/field-error";
+import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { useInventoryForm } from "@/lib/use-inventory-form";
 import { usePhotoSelection } from "@/lib/use-photo-selection";
 import { MAX_UPLOAD_BYTES, stockPhotoError } from "@/lib/stock-upload";
@@ -151,14 +152,14 @@ export function CreateItemDialog() {
         type="button"
         onClick={open}
         aria-haspopup="dialog"
-        className={`${primaryClass} w-full sm:w-auto`}
+        className={`${primaryClass} w-full sm:min-h-9! sm:w-auto sm:px-3! sm:text-xs!`}
       >
         Tambah jenis barang
       </button>
       <p
         role="status"
         className={
-          notice ? "mt-3 max-w-md text-sm leading-5 text-ws-success" : "sr-only"
+          notice ? "mt-2 max-w-md text-xs leading-5 text-ws-success" : "sr-only"
         }
       >
         {notice}
@@ -176,19 +177,25 @@ export function CreateItemDialog() {
         onClose={() => {
           document.body.style.overflow = previousOverflow.current;
         }}
-        className="fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] max-w-lg overflow-y-auto overscroll-contain rounded-lg border-0 bg-ws-surface p-6 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 [color-scheme:light] sm:p-8"
+        className="fixed inset-0 m-auto max-h-[calc(100svh-32px)] w-[calc(100%-32px)] max-w-lg flex-col overflow-hidden rounded-lg border-0 bg-ws-surface p-0 font-workspace text-ws-text shadow-xl backdrop:bg-black/35 open:flex [color-scheme:light]"
       >
+        <header className="shrink-0 border-b border-ws-divider px-6 py-4">
+        <div className="flex items-center justify-between gap-3">
         <h2
           id="create-item-heading"
           className="font-heading text-xl leading-7 font-semibold text-ws-strong"
         >
           Tambah jenis barang
         </h2>
+        <button type="button" disabled={pending} onClick={() => dialog.current?.close()} aria-label="Tutup tambah jenis barang" className="inline-flex size-11 shrink-0 items-center justify-center rounded-md hover:bg-ws-inset focus-visible:outline-2 focus-visible:outline-ws-primary"><WorkspaceControlIcon name="close" /></button>
+        </div>
         <p id="create-item-description" className="mt-2 text-sm leading-6">
           Daftarkan nama jenis barang terlebih dahulu. Langkah ini belum
           menambahkan stok atau unit fisik.
         </p>
-        <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="mt-6">
+        </header>
+        <form onSubmit={submit} noValidate onInput={validation.onInput} aria-busy={pending} className="flex min-h-0 flex-col">
+          <div className="min-h-0 overflow-y-auto overscroll-contain p-6">
           <p className="mb-4 text-xs">* Wajib diisi</p>
           <label
             htmlFor="create-item-name"
@@ -253,6 +260,7 @@ export function CreateItemDialog() {
               multiple
               disabled={pending}
               aria-describedby="create-item-photo-help create-item-photo-error"
+              onCancel={(event) => event.stopPropagation()}
               onChange={(event) =>
                 appendPhotos(Array.from(event.currentTarget.files ?? []))
               }
@@ -333,7 +341,8 @@ export function CreateItemDialog() {
               Ke halaman masuk
             </Link>
           ) : null}
-          <div className="mt-6 flex flex-wrap justify-end gap-3">
+          </div>
+          <div className="flex shrink-0 flex-wrap justify-end gap-3 border-t border-ws-divider px-6 py-4">
             <button
               type="button"
               disabled={pending}
