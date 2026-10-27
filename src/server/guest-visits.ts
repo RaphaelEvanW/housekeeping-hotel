@@ -29,6 +29,33 @@ export const guestVisitSelect = {
   updatedAt: true,
 } satisfies Prisma.GuestVisitSelect;
 
+export async function findOverlappingGuestVisit(
+  tx: Prisma.TransactionClient,
+  input: {
+    normalizedName: string;
+    roomNumber: string;
+    checkInDate: string;
+    plannedCheckoutDate: string;
+    excludeVisitId?: string;
+  },
+) {
+  const excludedId =
+    input.excludeVisitId ?? "00000000-0000-0000-0000-000000000000";
+  const [match] = await tx.$queryRaw<{ id: string; exact: boolean }[]>`
+    SELECT "id", ("checkInDate" = ${input.checkInDate}::date AND "plannedCheckoutDate" = ${input.plannedCheckoutDate}::date) AS "exact"
+    FROM "guest_visit"
+    WHERE "status" = 'STAYING'
+      AND "id" <> ${excludedId}
+      AND "normalizedPrimaryGuestName" = ${input.normalizedName}
+      AND lower("roomNumber") = lower(${input.roomNumber})
+      AND "checkInDate" <= ${input.plannedCheckoutDate}::date
+      AND "plannedCheckoutDate" >= ${input.checkInDate}::date
+    ORDER BY "exact" DESC, "createdAt" ASC, "id" ASC
+    LIMIT 1
+  `;
+  return match ?? null;
+}
+
 export async function registerGuestVisit(rawInput: unknown, actorId: string) {
   const input = registerGuestVisitInputSchema.parse(rawInput);
   const normalizedName = input.primaryGuestName.toLowerCase();
@@ -81,19 +108,12 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
         const plannedCheckoutDate = new Date(
           `${input.plannedCheckoutDate}T00:00:00.000Z`,
         );
-        const [suspected] = await tx.$queryRaw<
-          { id: string; exact: boolean }[]
-        >`
-        SELECT "id", ("checkInDate" = ${input.checkInDate}::date AND "plannedCheckoutDate" = ${input.plannedCheckoutDate}::date) AS "exact"
-        FROM "guest_visit"
-        WHERE "status" = 'STAYING'
-          AND "normalizedPrimaryGuestName" = ${normalizedName}
-          AND lower("roomNumber") = lower(${input.roomNumber})
-          AND "checkInDate" <= ${input.plannedCheckoutDate}::date
-          AND "plannedCheckoutDate" >= ${input.checkInDate}::date
-        ORDER BY "exact" DESC, "createdAt" ASC, "id" ASC
-        LIMIT 1
-      `;
+        const suspected = await findOverlappingGuestVisit(tx, {
+          normalizedName,
+          roomNumber: input.roomNumber,
+          checkInDate: input.checkInDate,
+          plannedCheckoutDate: input.plannedCheckoutDate,
+        });
         if (suspected && !input.duplicateOverrideReason) {
           throw new GuestVisitRegistrationError(
             "POSSIBLE_DUPLICATE",

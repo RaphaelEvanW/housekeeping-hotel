@@ -225,3 +225,114 @@ it("links issue evidence to its own unit and rejects cross-unit photos", async (
     })).rejects.toMatchObject({ code: "P2003" });
   });
 });
+
+async function returnFixture(tx: Prisma.TransactionClient) {
+  const f = await fixture(tx);
+
+  const location = await tx.location.create({
+    data: {
+      code: randomUUID(),
+      name: "Return schema storage",
+    },
+  });
+
+  const receipt = await tx.returnBatch.create({
+    data: {
+      guestVisitId: f.visit.id,
+      requestHash: "b".repeat(64),
+      defaultLocationId: location.id,
+      receivedById: f.user.id,
+    },
+  });
+
+  const returnedLine = await tx.returnLine.create({
+    data: {
+      returnBatchId: receipt.id,
+      borrowingLineId: f.line.id,
+      locationId: location.id,
+    },
+  });
+
+  return { ...f, location, receipt, returnedLine };
+}
+
+it("groups returns from separate borrowing occasions under one receipt", async () => {
+  await withRollback(async tx => {
+    const f = await returnFixture(tx);
+    const secondUnit = await tx.itemUnit.create({
+      data: f.unitData,
+    });
+    const secondBorrowing = await tx.borrowing.create({
+      data: f.borrowingData,
+    });
+    const secondLine = await tx.borrowingLine.create({
+      data: {
+        borrowingId: secondBorrowing.id,
+        unitId: secondUnit.id,
+        conditionAtIssue: "GOOD",
+      },
+    });
+
+    await tx.returnLine.create({
+      data: {
+        returnBatchId: f.receipt.id,
+        borrowingLineId: secondLine.id,
+        condition: "DAMAGED",
+        locationId: f.location.id,
+      },
+    });
+
+    expect(f.returnedLine.condition).toBe("GOOD");
+    expect(await tx.returnLine.count({
+      where: { returnBatchId: f.receipt.id },
+    })).toBe(2);
+  });
+});
+
+it("rejects a second return record for the same borrowing line", async () => {
+  await withRollback(async tx => {
+    const f = await returnFixture(tx);
+
+    await expect(tx.returnLine.create({
+      data: {
+        returnBatchId: f.receipt.id,
+        borrowingLineId: f.line.id,
+        locationId: f.location.id,
+      },
+    })).rejects.toMatchObject({ code: "P2002" });
+  });
+});
+
+it("rejects return photos linked to a different borrowing line", async () => {
+  await withRollback(async tx => {
+    const f = await returnFixture(tx);
+    const otherUnit = await tx.itemUnit.create({
+      data: f.unitData,
+    });
+    const otherLine = await tx.borrowingLine.create({
+      data: {
+        borrowingId: f.borrowing.id,
+        unitId: otherUnit.id,
+        conditionAtIssue: "GOOD",
+      },
+    });
+    const event = await tx.auditEvent.create({
+      data: {
+        actorId: f.user.id,
+        action: "BORROWING_RETURNED",
+        entityType: "ITEM_UNIT",
+        entityId: otherUnit.id,
+      },
+    });
+
+    await expect(tx.itemUnitPhoto.create({
+      data: {
+        unitId: otherUnit.id,
+        auditEventId: event.id,
+        borrowingLineId: otherLine.id,
+        returnLineId: f.returnedLine.id,
+        photoKey: `${randomUUID()}.webp`,
+      },
+    })).rejects.toMatchObject({ code: "P2003" });
+  });
+});

@@ -16,6 +16,27 @@ const text = (max: number) =>
     .transform((value) => value.replace(/\s+/gu, " "));
 
 export const guestVisitIdSchema = z.string().uuid();
+export const checkoutGuestVisitInputSchema = z
+  .object({ acknowledgeOutstanding: z.boolean().default(false) })
+  .strict();
+export const updateGuestVisitInputSchema = z
+  .object({
+    expectedUpdatedAt: z.iso.datetime(),
+    primaryGuestName: text(200).optional(),
+    roomNumber: text(30).optional(),
+    reason: z.string().trim().min(1).max(2000),
+    acknowledgeDuplicate: z.boolean().default(false),
+  })
+  .strict()
+  .refine(
+    (input) =>
+      input.primaryGuestName !== undefined || input.roomNumber !== undefined,
+    {
+      path: ["primaryGuestName"],
+      message: "Isi nama primary guest atau nomor kamar yang ingin diubah.",
+    },
+  );
+
 export const registerGuestVisitInputSchema = z
   .object({
     requestId: guestVisitIdSchema,

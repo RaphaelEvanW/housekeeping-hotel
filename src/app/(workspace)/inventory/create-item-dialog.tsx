@@ -26,7 +26,14 @@ export function CreateItemDialog() {
   const [invalidName, setInvalidName] = useState(false);
   const [sessionExpired, setSessionExpired] = useState(false);
   const [notice, setNotice] = useState("");
-  const photoSelection = usePhotoSelection(MAX_CATALOG_PHOTOS);
+  const {
+    input: photoInput,
+    previews: photoPreviews,
+    error: photoSelectionError,
+    append: appendPhotos,
+    remove: removePhoto,
+    reset: resetPhotos,
+  } = usePhotoSelection(MAX_CATALOG_PHOTOS);
 
   useEffect(() => {
     const element = dialog.current;
@@ -40,7 +47,7 @@ export function CreateItemDialog() {
 
   function open() {
     validation.reset();
-    photoSelection.reset();
+    resetPhotos();
     setError("");
     setInvalidName(false);
     setSessionExpired(false);
@@ -238,7 +245,7 @@ export function CreateItemDialog() {
           </label>
           <div className="mt-2 flex flex-wrap items-center gap-3 rounded-md border border-ws-control p-2">
             <input
-              ref={photoSelection.input}
+              ref={photoInput}
               id="create-item-photo"
               name="photo"
               type="file"
@@ -247,7 +254,7 @@ export function CreateItemDialog() {
               disabled={pending}
               aria-describedby="create-item-photo-help create-item-photo-error"
               onChange={(event) =>
-                photoSelection.append(Array.from(event.currentTarget.files ?? []))
+                appendPhotos(Array.from(event.currentTarget.files ?? []))
               }
               className="peer sr-only"
             />
@@ -256,19 +263,19 @@ export function CreateItemDialog() {
               aria-disabled={pending}
               className="ws-button-secondary shrink-0 cursor-pointer peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-ws-primary peer-disabled:cursor-wait"
             >
-              {photoSelection.previews.length ? "Tambah foto" : "Pilih foto"}
+              {photoPreviews.length ? "Tambah foto" : "Pilih foto"}
             </label>
             <span className="min-w-0 break-all text-xs" aria-live="polite">
-              {photoSelection.previews.length
-                ? `${photoSelection.previews.length}/${MAX_CATALOG_PHOTOS} foto dipilih`
+              {photoPreviews.length
+                ? `${photoPreviews.length}/${MAX_CATALOG_PHOTOS} foto dipilih`
                 : "Belum ada foto dipilih"}
             </span>
-            {photoSelection.previews.length ? (
+            {photoPreviews.length ? (
               <button
                 type="button"
                 disabled={pending}
                 className="ws-button-secondary ml-auto"
-                onClick={photoSelection.reset}
+                onClick={resetPhotos}
               >
                 Hapus semua
               </button>
@@ -276,14 +283,14 @@ export function CreateItemDialog() {
           </div>
           <FieldError
             id="create-item-photo-error"
-            message={photoSelection.error}
+            message={photoSelectionError}
           />
           <p id="create-item-photo-help" className="mt-2 text-xs leading-5">
             JPEG, PNG, atau WebP statis. Maksimal {MAX_CATALOG_PHOTOS} foto, 2 MiB per foto, dan 16 MiB per unggahan. Foto pertama menjadi foto utama.
           </p>
-          {photoSelection.previews.length ? (
+          {photoPreviews.length ? (
             <ul className="mt-3 flex flex-wrap gap-3">
-              {photoSelection.previews.map((photo, index) => (
+              {photoPreviews.map((photo, index) => (
                 <li key={photo.url} className="w-24 min-w-0">
                   <Image
                     src={photo.url}
@@ -301,7 +308,7 @@ export function CreateItemDialog() {
                     disabled={pending}
                     className="ws-button-secondary mt-2 min-h-11 w-full px-2 text-xs"
                     aria-label={`Hapus foto katalog ${index + 1}: ${photo.name}`}
-                    onClick={() => photoSelection.remove(index)}
+                    onClick={() => removePhoto(index)}
                   >
                     Hapus
                   </button>

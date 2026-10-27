@@ -36,8 +36,7 @@ export async function listGuestBorrowings(rawInput: unknown) {
         counts[group.status] = group._count._all;
       }
 
-      const totalLines =
-        counts.OUTSTANDING + counts.RETURNED + counts.SETTLED;
+      const totalLines = counts.OUTSTANDING + counts.RETURNED + counts.SETTLED;
       const total = status === "ALL" ? totalLines : counts[status];
       const totalOccasions = await tx.borrowing.count({
         where: { guestVisitId: visitId },
@@ -68,6 +67,21 @@ export async function listGuestBorrowings(rawInput: unknown) {
               issuedBy: { select: { id: true, name: true } },
             },
           },
+          returnLine: {
+            select: {
+              id: true,
+              condition: true,
+              location: { select: { id: true, code: true, name: true } },
+              returnBatch: {
+                select: {
+                  id: true,
+                  receivedAt: true,
+                  defaultLocationId: true,
+                  receivedBy: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
           unit: {
             select: {
               id: true,
@@ -87,6 +101,7 @@ export async function listGuestBorrowings(rawInput: unknown) {
             orderBy: [{ auditEvent: { createdAt: "asc" } }, { id: "asc" }],
             select: {
               id: true,
+              returnLineId: true,
               auditEvent: {
                 select: { id: true, action: true, createdAt: true },
               },
@@ -113,6 +128,7 @@ export async function listGuestBorrowings(rawInput: unknown) {
           },
           photos: line.photos.map((photo) => ({
             id: photo.id,
+            returnLineId: photo.returnLineId,
             event: photo.auditEvent,
             url: `/api/item-units/${line.unit.id}/photos/${photo.id}`,
           })),

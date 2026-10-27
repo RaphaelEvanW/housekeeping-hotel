@@ -925,3 +925,40 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Menyambungkan picker bersama agar pilihan foto bertahap tetap terkumpul, dapat dihapus per foto, tervalidasi, dan terkirim melalui input multipart yang sudah ada. Berlaku untuk foto awal unit, foto saat peminjaman, dan foto katalog; drawer detail jenis barang menampilkan seluruh foto berurutan dengan foto pertama sebagai utama.
 - Tidak mengubah API, schema, atau bukti foto historis. Lint, typecheck, tests, dan browser check belum dijalankan atas permintaan owner. Skills: Housekeeping Context/Ponytail untuk reuse dan scope; Design Taste/Antislop selama dan React/Next untuk pola interaksi serta batas client; TDD/Verification dibaca, checks tetap milik owner.
+
+## 2026-10-27 — Pisahkan ref dan state picker katalog
+
+- Owner melaporkan sembilan error lint react-hooks/refs di CreateItemDialog. Atas permintaan penerapan langsung, destructure hasil usePhotoSelection dan gunakan ref, state, serta handler secara terpisah seperti UnitPhotoField. Diff ditinjau; lint/typecheck/tests belum dijalankan dan tetap menunggu owner. Perubahan fondasi BE return milik owner tetap belum diverifikasi. Skills: Systematic Debugging/Ponytail/React untuk koreksi pemakaian hook yang terarah.
+
+## 2026-10-27 — Sambungkan BE combined dan partial return
+
+- Memakai schema, migration, dan input schema/test return yang sudah ada di working tree owner. Menambahkan izin Staff/Supervisor, `POST /api/returns`, transaksi atomik dengan lock unit/line, replay request, lokasi aktual per line, foto non-GOOD wajib, audit/evidence, dan data return frozen pada riwayat pinjaman per kunjungan. Menambahkan integration cases untuk partial/combined return, checkout/deactivation, validasi foto/lokasi, cross-visit, race, replay, rollback, lost commit response, dan role/origin.
+- Tidak mengubah migration/schema. Tidak menjalankan lint, typecheck, tests, Prisma generate, maupun migration; semuanya menunggu owner. Skills: Housekeeping Context/Ponytail untuk scope dan pola existing; Prisma7/Postgres untuk transaksi/lock; TDD/Verification untuk regression coverage dan status checks yang belum dijalankan.
+
+## 2026-10-27 — Longgarkan matcher detail return history
+
+- Owner melaporkan satu integration test gagal pada nested `toEqual`: matcher membandingkan `location`, `receivedBy`, dan event sebagai objek persis, padahal response memang menyertakan field tambahan. Ganti nested object menjadi `expect.objectContaining`; tidak mengubah runtime code. Test belum dijalankan ulang dan menunggu owner.
+
+## 2026-10-27 — Review return dan lanjut BE checkout
+
+- Owner melaporkan semua test passed setelah koreksi matcher return history; output/totals baru tidak disuplai. Meninjau service/input/route return, read model, permission, schema/migration dan integration cases di branch feature/backend HEAD d4c4640. Tidak menemukan blocker baru pada review source. Perubahan masih uncommitted; laporan pass ini milik owner, bukan eksekusi agent. Memperbarui status PROJECT.md dan CONTEXT.md yang masih menyebut borrowing/return sebagai pending.
+- Menambahkan `POST /api/guest-visits/[visitId]/checkout` dan izin Staff/Supervisor. Server menghitung OUTSTANDING dalam transaksi dengan lock kunjungan; tanpa acknowledgeOutstanding, pinjaman aktif menghasilkan409 dan jumlah unit. Konfirmasi tetap mempertahankan seluruh pinjaman/custody/loss state. Checkout mencatat waktu server, petugas dan audit secara atomik; retry mempertahankan waktu awal tanpa audit ganda. Lock diselaraskan dengan issuance/return; schema dan migration baru tidak diperlukan.
+- Menulis test cases di fixture existing untuk validasi/role, checkout/retry/concurrency, rollback audit, warning outstanding, penerimaan setelah checkout dan race issuance. Agent hanya meninjau source/diff; lint/typecheck/tests dan browser tidak dijalankan sesuai arahan owner. Skills: Housekeeping Context/Ponytail untuk reuse dan scope; Postgres untuk locking; TDD/Verification untuk test cases dan batas bukti; Humanizer untuk progress/copy. Next16 route-handler docs terpasang dikonsultasikan. Berikutnya setelah checks: koreksi kamar/primary guest BE; FE return/checkout masih belum dibuat.
+
+## 2026-10-27 — Tambah laporan kerusakan unit BE
+
+- Menambahkan input, `POST /api/item-unit-damage-reports`, permission Staff/Supervisor dan transaksi yang mengunci unit, mengubah kondisi + `ON_HOLD`, lalu menyimpan AuditEvent serta beberapa foto privat. Hanya menerima unit yang pengembalian terakhirnya GOOD. Unit GUEST/lost/missing dan borrowing `OUTSTANDING` ditolak; return final, custody, dan lokasi tidak diubah. Retry requestId sama memeriksa fingerprint payload; fingerprint disaring dari respons riwayat.
+- Menambahkan unit/integration cases untuk alur return GOOD lalu laporan kerusakan, foto/history, replay, race issuance, authorization, validasi foto, rollback dan hasil commit yang hilang. Tidak ada perubahan schema/migration. Source direview; tests/lint/typecheck belum dijalankan sesuai permintaan owner dan menunggu hasilnya. Skills: Housekeeping Context/Ponytail untuk reuse; Postgres untuk row locking/transaksi; TDD untuk kasus regresi.
+
+## 2026-10-27 — Koreksi pemakaian helper test kerusakan
+
+- Owner melaporkan TS2488: `prepareDamageReportUnit()` mengembalikan satu objek line, tetapi satu caller memakai destructuring array. Mengganti caller menjadi assignment objek langsung; caller lainnya tidak mengambil return value. Typecheck/tests belum dijalankan ulang, tetap oleh owner. Skills: Systematic Debugging dan Ponytail untuk menelusuri kontrak helper dan koreksi satu baris.
+
+## 2026-10-27 — Selaraskan unit fixture laporan kerusakan
+
+- Owner melaporkan dua test menerima HTTP409 sebelum skenario replay/lost-response tercapai (84 passed, 2 failed). Helper mengambil line pertama dari respons issuance yang diurutkan unitId, sedangkan payload laporan memakai unitIds[0] dari urutan fixture. Helper kini memilih line berdasarkan unitId yang sama sebelum melakukan return GOOD. Semua caller ditinjau; typecheck/tests belum dijalankan ulang oleh agent. Skills: Systematic Debugging/Ponytail untuk koreksi helper bersama; Housekeeping Context/TDD untuk konteks dan kasus regresi existing.
+
+## 2026-10-27 — Tambah verifikasi Supervisor BE
+
+- Menambahkan `POST /api/unit-verifications`: Supervisor menyimpan batch 1–100 hasil FIT_FOR_USE/UNFIT_FOR_USE dengan catatan dan foto wajib per unit. Batch mengunci unit menurut ID, memeriksa `expectedUpdatedAt`, readiness, custody, lifecycle, kehilangan dan pinjaman aktif, lalu menulis readiness, per-unit audit dan bukti foto dalam satu transaksi. Retry memakai requestId dan fingerprint payload; event per unit terlihat di riwayat. FIT mengubah readiness ke CLEAR, UNFIT ke ON_HOLD; condition, custody dan lokasi tidak diubah. Tidak ada perubahan schema/migration.
+- Unit/integration tests ditambahkan untuk validasi, bukti wajib, mixed-result atomicity, stale state, retry/concurrency, custody Engineering, role dan hasil commit tidak diketahui. Tidak menjalankan lint/typecheck/tests sesuai arahan owner. Skills: Housekeeping Context/Ponytail untuk mengikuti pola dan lingkup; Postgres untuk urutan row lock; TDD untuk cakupan regresi. Next16 Route Handler docs diperiksa.

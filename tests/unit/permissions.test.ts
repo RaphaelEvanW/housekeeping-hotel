@@ -19,6 +19,27 @@ describe("hasPermission", () => {
     ).toBe(true);
   });
 
+  it("allows staff and supervisors to process physical returns", () => {
+    expect(hasPermission(["HK_STAFF"], "returns:create")).toBe(true);
+    expect(hasPermission(["HK_SUPERVISOR"], "returns:create")).toBe(true);
+    expect(hasPermission(["MANAGEMENT"], "returns:create")).toBe(false);
+    expect(hasPermission(["SYSTEM_ADMIN"], "returns:create")).toBe(false);
+  });
+
+  it("limits guest checkout to staff and supervisors", () => {
+    expect(hasPermission(["HK_STAFF"], "guests:checkout")).toBe(true);
+    expect(hasPermission(["HK_SUPERVISOR"], "guests:checkout")).toBe(true);
+    expect(hasPermission(["MANAGEMENT"], "guests:checkout")).toBe(false);
+    expect(hasPermission(["SYSTEM_ADMIN"], "guests:checkout")).toBe(false);
+  });
+
+  it("limits guest visit corrections to staff and supervisors", () => {
+    expect(hasPermission(["HK_STAFF"], "guests:update")).toBe(true);
+    expect(hasPermission(["HK_SUPERVISOR"], "guests:update")).toBe(true);
+    expect(hasPermission(["MANAGEMENT"], "guests:update")).toBe(false);
+    expect(hasPermission(["SYSTEM_ADMIN"], "guests:update")).toBe(false);
+  });
+
   it("allows staff and supervisors to create master items", () => {
     expect(
       hasPermission(["HK_STAFF"], "inventory:item:create"),

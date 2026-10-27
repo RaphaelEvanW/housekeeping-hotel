@@ -33,6 +33,7 @@ model User {
   guestVisitsCreated GuestVisit[] @relation("GuestVisitCreatedBy")
   guestVisitsUpdated GuestVisit[] @relation("GuestVisitUpdatedBy")
   borrowingsIssued Borrowing[] @relation("BorrowingIssuedBy")
+  returnBatchesReceived ReturnBatch[] @relation("ReturnBatchReceivedBy")
 
   @@map("user")
 }
@@ -123,6 +124,8 @@ model Location {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(3)
   units     ItemUnit[]
+  returnBatchesDefault ReturnBatch[] @relation("ReturnBatchDefaultLocation")
+  returnLines          ReturnLine[] @relation("ReturnLineLocation")
 
   @@map("location")
 }
@@ -320,6 +323,7 @@ model GuestVisit {
   createdBy User @relation("GuestVisitCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   updatedBy User @relation("GuestVisitUpdatedBy", fields: [updatedById], references: [id], onDelete: Restrict)
   borrowings Borrowing[]
+  returnBatches ReturnBatch[]
 
   @@index([status, roomNumber, checkInDate])
   @@index([normalizedPrimaryGuestName, status, checkInDate])
@@ -333,15 +337,18 @@ model ItemUnitPhoto {
   unitId       String
   auditEventId String
   borrowingLineId String?
+  returnLineId String?
   photoKey     String @unique
 
   unit       ItemUnit   @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   auditEvent AuditEvent @relation(fields: [auditEventId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   borrowingLine BorrowingLine? @relation(fields: [borrowingLineId, unitId], references: [id, unitId], onDelete: Restrict, onUpdate: Restrict)
+  returnLine ReturnLine? @relation(fields: [returnLineId, borrowingLineId], references: [id, borrowingLineId], onDelete: Restrict, onUpdate: Restrict)
 
   @@index([unitId])
   @@index([auditEventId])
   @@index([borrowingLineId])
+  @@index([returnLineId, borrowingLineId])
   @@map("item_unit_photo")
 }
 
@@ -380,9 +387,47 @@ model BorrowingLine {
   borrowing Borrowing @relation(fields: [borrowingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   unit      ItemUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   photos    ItemUnitPhoto[]
+  returnLine ReturnLine?
 
   @@unique([borrowingId, unitId])
   @@unique([id, unitId])
   @@index([unitId])
   @@map("borrowing_line")
+}
+
+model ReturnBatch {
+  id                String   @id @default(uuid())
+  guestVisitId      String
+  requestHash       String   @db.Char(64)
+  defaultLocationId String
+  receivedById      String
+  receivedAt        DateTime @default(now()) @db.Timestamptz(3)
+
+  guestVisit      GuestVisit @relation(fields: [guestVisitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  defaultLocation Location   @relation("ReturnBatchDefaultLocation", fields: [defaultLocationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  receivedBy      User       @relation("ReturnBatchReceivedBy", fields: [receivedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  lines           ReturnLine[]
+
+  @@index([guestVisitId, receivedAt])
+  @@index([defaultLocationId])
+  @@index([receivedById])
+  @@map("return_batch")
+}
+
+model ReturnLine {
+  id              String        @id @default(uuid())
+  returnBatchId   String
+  borrowingLineId String        @unique
+  condition       UnitCondition @default(GOOD)
+  locationId      String
+
+  returnBatch   ReturnBatch   @relation(fields: [returnBatchId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  borrowingLine BorrowingLine @relation(fields: [borrowingLineId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  location      Location      @relation("ReturnLineLocation", fields: [locationId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos        ItemUnitPhoto[]
+
+  @@unique([id, borrowingLineId])
+  @@index([returnBatchId])
+  @@index([locationId])
+  @@map("return_line")
 }

@@ -4,6 +4,24 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { itemUnitHistoryInputSchema } from "@/server/item-unit-input";
 
+function visibleNewValues(
+  action: string,
+  values: Prisma.JsonValue | null,
+) {
+  if (
+    action !== "ITEM_UNIT_DAMAGE_REPORTED" ||
+    !values ||
+    typeof values !== "object" ||
+    Array.isArray(values)
+  ) {
+    return values;
+  }
+
+  return Object.fromEntries(
+    Object.entries(values).filter(([key]) => key !== "requestHash"),
+  ) as Prisma.JsonObject;
+}
+
 export async function getItemUnitHistory(rawInput: unknown) {
   const { unitId, page, pageSize } = itemUnitHistoryInputSchema.parse(rawInput);
 
@@ -72,6 +90,7 @@ export async function getItemUnitHistory(rawInput: unknown) {
         },
         events: events.map((event) => ({
           ...event,
+          newValues: visibleNewValues(event.action, event.newValues),
           photos: event.photos.map((photo) => ({
             id: photo.id,
             url: `/api/item-units/${unitId}/photos/${photo.id}`,

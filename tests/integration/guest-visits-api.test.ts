@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET as LIST_GUEST_VISITS, POST } from "../../src/app/api/guest-visits/route";
-import { GET } from "../../src/app/api/guest-visits/[visitId]/route";
+import { GET, PATCH } from "../../src/app/api/guest-visits/[visitId]/route";
+import { POST as CHECKOUT } from "../../src/app/api/guest-visits/[visitId]/checkout/route";
 import { db } from "../../src/server/db";
 import { getActiveUser } from "../../src/server/get-active-user";
 
@@ -35,6 +36,38 @@ function get(id: string) {
   return GET(new Request(`http://localhost/api/guest-visits/${id}`), {
     params: Promise.resolve({ visitId: id }),
   });
+}
+function checkout(id: string, body: unknown = {}, headers: Record<string, string> = {}) {
+  return CHECKOUT(
+    new Request(`http://localhost/api/guest-visits/${id}/checkout`, {
+      method: "POST",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ visitId: id }) },
+  );
+}
+function patchVisit(
+  id: string,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
+  return PATCH(
+    new Request(`http://localhost/api/guest-visits/${id}`, {
+      method: "PATCH",
+      headers: {
+        Origin: "http://localhost:3000",
+        "Content-Type": "application/json",
+        ...headers,
+      },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ visitId: id }) },
+  );
 }
 function listVisits(query: Record<string, string> = {}) {
   return LIST_GUEST_VISITS(new Request(
@@ -405,4 +438,191 @@ it("validates list parameters and enforces read permissions", async () => {
   expect((await listVisits()).status).toBe(403);
   activeUser.mockResolvedValue(null);
   expect((await listVisits()).status).toBe(401);
+});
+
+it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
+  "checks out a visit with server timestamp and one audit as %s",
+  async (role) => {
+    activeUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect((await post(input)).status).toBe(201);
+    const before = Date.now();
+    const response = await checkout(input.requestId);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    const result = await response.json();
+    expect(result).toMatchObject({
+      visit: { id: input.requestId, status: "CHECKED_OUT" },
+      outstandingLines: 0,
+      alreadyCheckedOut: false,
+    });
+    const timestamp = Date.parse(result.visit.checkedOutAt);
+    expect(timestamp).toBeGreaterThanOrEqual(before);
+    expect(timestamp).toBeLessThanOrEqual(Date.now());
+    expect(result.visit).not.toHaveProperty("registrationRequestHash");
+
+    const retry = await checkout(input.requestId);
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toMatchObject({
+      visit: { checkedOutAt: result.visit.checkedOutAt },
+      alreadyCheckedOut: true,
+    });
+    expect(await db.auditEvent.count({
+      where: { entityId: input.requestId, action: "GUEST_VISIT_CHECKED_OUT" },
+    })).toBe(1);
+    expect(await db.auditEvent.findFirstOrThrow({
+      where: { entityId: input.requestId, action: "GUEST_VISIT_CHECKED_OUT" },
+    })).toMatchObject({
+      actorId: actor.id,
+      oldValues: { status: "STAYING", checkedOutAt: null },
+      newValues: { status: "CHECKED_OUT", outstandingLines: 0 },
+    });
+    expect(await (await get(input.requestId)).json()).toMatchObject({ visit: { status: "CHECKED_OUT" } });
+    expect(await (await post(input)).json()).toMatchObject({ visit: { status: "CHECKED_OUT" }, replayed: true });
+  },
+);
+
+it("serializes concurrent checkout retries without duplicate audit or timestamp", async () => {
+  expect((await post(input)).status).toBe(201);
+  const responses = await Promise.all([checkout(input.requestId), checkout(input.requestId)]);
+  expect(responses.map((response) => response.status)).toEqual([200, 200]);
+  const results = await Promise.all(responses.map((response) => response.json()));
+  expect(results.map((result) => result.alreadyCheckedOut).sort()).toEqual([false, true]);
+  expect(results[0].visit.checkedOutAt).toBe(results[1].visit.checkedOutAt);
+  expect(await db.auditEvent.count({
+    where: { entityId: input.requestId, action: "GUEST_VISIT_CHECKED_OUT" },
+  })).toBe(1);
+});
+
+it("rejects unauthorized checkout, invalid input, untrusted origins and oversized bodies", async () => {
+  expect((await post(input)).status).toBe(201);
+  for (const role of ["MANAGEMENT", "SYSTEM_ADMIN"] as const) {
+    activeUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect((await checkout(input.requestId)).status).toBe(403);
+  }
+  activeUser.mockResolvedValue(null);
+  expect((await checkout(input.requestId)).status).toBe(401);
+  activeUser.mockResolvedValue(actor);
+  expect((await checkout("invalid")).status).toBe(400);
+  expect((await checkout(randomUUID())).status).toBe(404);
+  expect((await checkout(input.requestId, { acknowledgeOutstanding: "true" })).status).toBe(400);
+  expect((await checkout(input.requestId, { checkedOutAt: new Date().toISOString() })).status).toBe(400);
+  expect((await checkout(input.requestId, {}, { Origin: "https://untrusted.test" })).status).toBe(403);
+  expect((await checkout(input.requestId, {}, { "Content-Type": "text/plain" })).status).toBe(415);
+  expect((await checkout(input.requestId, { extra: "x".repeat(256 * 1024) })).status).toBe(413);
+  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } })).toMatchObject({
+    status: "STAYING", checkedOutAt: null,
+  });
+});
+
+it("rolls checkout back when its audit cannot be saved", async () => {
+  expect((await post(input)).status).toBe(201);
+  const failure = new Error("Audit unavailable");
+  const originalTransaction = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    originalTransaction(async (tx) => {
+      const failingTransaction = new Proxy(tx, {
+        get(target, key) {
+          if (key === "auditEvent") {
+            return new Proxy(target.auditEvent, {
+              get(delegate, action) {
+                if (action === "create") return async () => { throw failure; };
+                return Reflect.get(delegate, action);
+              },
+            });
+          }
+          return Reflect.get(target, key);
+        },
+      });
+      return callback(failingTransaction);
+    }, options),
+  );
+  await expect(checkout(input.requestId)).rejects.toBe(failure);
+  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } })).toMatchObject({
+    status: "STAYING", checkedOutAt: null,
+  });
+  expect(await db.auditEvent.count({
+    where: { entityId: input.requestId, action: "GUEST_VISIT_CHECKED_OUT" },
+  })).toBe(0);
+});
+
+it("corrects the primary guest or room with reason, audit, and registration replay intact", async () => {
+  expect((await post(input)).status).toBe(201);
+  const before = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  const response = await patchVisit(input.requestId, {
+    expectedUpdatedAt: before.updatedAt.toISOString(),
+    primaryGuestName: "Corrected Primary Guest",
+    roomNumber: "A-102",
+    reason: "Dikonfirmasi ulang dengan kartu registrasi.",
+  });
+  expect(response.status).toBe(200);
+  expect(await response.json()).toMatchObject({
+    visit: { primaryGuestName: "Corrected Primary Guest", roomNumber: "A-102" },
+    unchanged: false,
+  });
+  expect((await post(input)).status).toBe(200);
+  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } })).toMatchObject({
+    primaryGuestName: "Corrected Primary Guest",
+    roomNumber: "A-102",
+  });
+  expect(await db.auditEvent.count({ where: { entityId: input.requestId, action: "GUEST_VISIT_UPDATED" } })).toBe(1);
+  expect(await db.auditEvent.findFirstOrThrow({ where: { entityId: input.requestId, action: "GUEST_VISIT_UPDATED" } })).toMatchObject({
+    actorId: actor.id,
+    reason: "Dikonfirmasi ulang dengan kartu registrasi.",
+    oldValues: { primaryGuestName: input.primaryGuestName, roomNumber: "A-101" },
+    newValues: { primaryGuestName: "Corrected Primary Guest", roomNumber: "A-102" },
+  });
+});
+
+it("rejects stale guest visit edits and requires acknowledgement for a possible duplicate", async () => {
+  expect((await post(input)).status).toBe(201);
+  const before = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  const secondInput = {
+    ...input,
+    requestId: randomUUID(),
+    primaryGuestName: `Other ${randomUUID()}`,
+  };
+  expect((await post(secondInput)).status).toBe(201);
+  const duplicateBody = {
+    expectedUpdatedAt: before.updatedAt.toISOString(),
+    primaryGuestName: secondInput.primaryGuestName,
+    roomNumber: secondInput.roomNumber,
+    reason: "Koreksi nama berdasarkan konfirmasi tamu.",
+  };
+  const duplicate = await patchVisit(input.requestId, duplicateBody);
+  expect(duplicate.status).toBe(409);
+  expect(await duplicate.json()).toMatchObject({ error: "POSSIBLE_DUPLICATE", matchingVisitId: secondInput.requestId });
+  expect((await patchVisit(input.requestId, { ...duplicateBody, acknowledgeDuplicate: true })).status).toBe(200);
+
+  const updated = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  expect((await patchVisit(input.requestId, {
+    expectedUpdatedAt: updated.updatedAt.toISOString(),
+    primaryGuestName: `Unique ${randomUUID()}`,
+    reason: "Perbaikan nama untuk uji konkurensi.",
+  })).status).toBe(200);
+  const concurrencyBase = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  const concurrent = await Promise.all([
+    patchVisit(input.requestId, { expectedUpdatedAt: concurrencyBase.updatedAt.toISOString(), roomNumber: "A-103", reason: "Koreksi kamar." }),
+    patchVisit(input.requestId, { expectedUpdatedAt: concurrencyBase.updatedAt.toISOString(), roomNumber: "A-104", reason: "Koreksi kamar." }),
+  ]);
+  expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+});
+
+it("rejects unauthorized and malformed guest visit corrections", async () => {
+  expect((await post(input)).status).toBe(201);
+  for (const role of ["MANAGEMENT", "SYSTEM_ADMIN"] as const) {
+    activeUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect((await patchVisit(input.requestId, {})).status).toBe(403);
+  }
+  activeUser.mockResolvedValue(actor);
+  const validCorrection = {
+    expectedUpdatedAt: new Date().toISOString(),
+    roomNumber: "A-102",
+    reason: "Koreksi kamar.",
+  };
+  expect((await patchVisit("invalid", validCorrection)).status).toBe(400);
+  expect((await patchVisit(randomUUID(), validCorrection)).status).toBe(404);
+  expect((await patchVisit(input.requestId, { roomNumber: "A-102" })).status).toBe(400);
+  expect((await patchVisit(input.requestId, { roomNumber: "A-102" }, { Origin: "https://untrusted.test" })).status).toBe(403);
+  expect((await patchVisit(input.requestId, { roomNumber: "A-102" }, { "Content-Type": "text/plain" })).status).toBe(415);
+  expect((await patchVisit(input.requestId, { payload: "x".repeat(256 * 1024) })).status).toBe(413);
 });
