@@ -11,7 +11,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FieldError } from "@/components/field-error";
 import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
-import { inventoryFieldError } from "@/lib/inventory-form-validation";
 import { useInventoryForm } from "@/lib/use-inventory-form";
 import { conditionLabels } from "@/lib/unit-state-labels";
 import { unitDisplayName } from "@/lib/unit-display-name";

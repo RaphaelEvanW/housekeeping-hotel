@@ -25,7 +25,8 @@ export const updateGuestVisitInputSchema = z
     primaryGuestName: text(200).optional(),
     roomNumber: text(30).optional(),
     reason: z.string().trim().min(1).max(2000),
-    acknowledgeDuplicate: z.boolean().default(false),
+    // Existing FE sends false; acknowledgement can no longer bypass a conflict.
+    acknowledgeDuplicate: z.literal(false).default(false),
   })
   .strict()
   .refine(
@@ -45,7 +46,6 @@ export const registerGuestVisitInputSchema = z
     bookingNumber: text(100),
     checkInDate: date,
     plannedCheckoutDate: date,
-    duplicateOverrideReason: z.string().trim().min(1).max(2000).optional(),
   })
   .strict()
   .refine((input) => input.plannedCheckoutDate >= input.checkInDate, {

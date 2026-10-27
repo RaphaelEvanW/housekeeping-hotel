@@ -9,6 +9,7 @@ import {
 import {
   findOverlappingGuestVisit,
   guestVisitSelect,
+  lockGuestVisitRoom,
 } from "@/server/guest-visits";
 
 export class GuestVisitUpdateError extends Error {
@@ -37,7 +38,7 @@ export async function updateGuestVisit(
     async (tx) => {
       const initial = await tx.guestVisit.findUnique({
         where: { id },
-        select: { primaryGuestName: true },
+        select: { roomNumber: true },
       });
       if (!initial) {
         throw new GuestVisitUpdateError(
@@ -46,14 +47,7 @@ export async function updateGuestVisit(
         );
       }
 
-      const normalizedName = (
-        input.primaryGuestName ?? initial.primaryGuestName
-      ).toLowerCase();
-      const lockKey = JSON.stringify([
-        "guest-visit-registration",
-        normalizedName,
-      ]);
-      await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+      await lockGuestVisitRoom(tx, input.roomNumber ?? initial.roomNumber);
 
       const [lockedVisit] = await tx.$queryRaw<{ id: string }[]>`
         SELECT "id" FROM "guest_visit" WHERE "id" = ${id} FOR UPDATE
@@ -71,7 +65,8 @@ export async function updateGuestVisit(
       });
       if (
         current.updatedAt.getTime() !==
-        new Date(input.expectedUpdatedAt).getTime()
+        new Date(input.expectedUpdatedAt).getTime() ||
+        (input.roomNumber === undefined && current.roomNumber !== initial.roomNumber)
       ) {
         throw new GuestVisitUpdateError(
           "VISIT_CHANGED",
@@ -92,7 +87,6 @@ export async function updateGuestVisit(
       const suspected =
         current.status === "STAYING"
           ? await findOverlappingGuestVisit(tx, {
-              normalizedName,
               roomNumber,
               checkInDate: current.checkInDate.toISOString().slice(0, 10),
               plannedCheckoutDate: current.plannedCheckoutDate
@@ -101,10 +95,10 @@ export async function updateGuestVisit(
               excludeVisitId: id,
             })
           : null;
-      if (suspected && !input.acknowledgeDuplicate) {
+      if (suspected) {
         throw new GuestVisitUpdateError(
           "POSSIBLE_DUPLICATE",
-          "Ada kunjungan aktif dengan nama, kamar, dan tanggal yang bertumpang tindih. Periksa sebelum melanjutkan.",
+          "Kamar sudah terdaftar pada kunjungan aktif dengan rentang menginap yang bertumpang tindih.",
           suspected.id,
         );
       }
@@ -137,10 +131,6 @@ export async function updateGuestVisit(
           newValues: {
             primaryGuestName: visit.primaryGuestName,
             roomNumber: visit.roomNumber,
-            possibleDuplicateVisitId: suspected?.id ?? null,
-            acknowledgedDuplicate: Boolean(
-              suspected && input.acknowledgeDuplicate,
-            ),
           },
         },
       });

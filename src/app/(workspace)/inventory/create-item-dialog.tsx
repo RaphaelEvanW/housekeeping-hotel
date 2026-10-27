@@ -260,7 +260,6 @@ export function CreateItemDialog() {
               multiple
               disabled={pending}
               aria-describedby="create-item-photo-help create-item-photo-error"
-              onCancel={(event) => event.stopPropagation()}
               onChange={(event) =>
                 appendPhotos(Array.from(event.currentTarget.files ?? []))
               }

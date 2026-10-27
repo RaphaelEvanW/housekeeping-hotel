@@ -30,7 +30,13 @@ export function usePhotoSelection(maxFiles = Infinity) {
 
   useEffect(() => {
     const allocated = urls.current;
-    return () => allocated.forEach((url) => URL.revokeObjectURL(url));
+    const element = input.current;
+    const stopCancel = (event: Event) => event.stopPropagation();
+    element?.addEventListener("cancel", stopCancel);
+    return () => {
+      element?.removeEventListener("cancel", stopCancel);
+      allocated.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, []);
 
   function syncInput(files: File[]) {

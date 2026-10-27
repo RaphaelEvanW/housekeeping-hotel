@@ -29,28 +29,37 @@ export const guestVisitSelect = {
   updatedAt: true,
 } satisfies Prisma.GuestVisitSelect;
 
+export async function lockGuestVisitRoom(
+  tx: Prisma.TransactionClient,
+  roomNumber: string,
+) {
+  // Use the same database case folding as the room comparison below.
+  await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended('guest-visit-room:' || lower(${roomNumber}), 0))`;
+}
+
 export async function findOverlappingGuestVisit(
   tx: Prisma.TransactionClient,
   input: {
-    normalizedName: string;
     roomNumber: string;
     checkInDate: string;
     plannedCheckoutDate: string;
     excludeVisitId?: string;
   },
 ) {
+  // Checkout is exclusive; a same-day stay has no overnight occupancy interval.
+  if (input.checkInDate === input.plannedCheckoutDate) return null;
   const excludedId =
     input.excludeVisitId ?? "00000000-0000-0000-0000-000000000000";
-  const [match] = await tx.$queryRaw<{ id: string; exact: boolean }[]>`
-    SELECT "id", ("checkInDate" = ${input.checkInDate}::date AND "plannedCheckoutDate" = ${input.plannedCheckoutDate}::date) AS "exact"
+  const [match] = await tx.$queryRaw<{ id: string }[]>`
+    SELECT "id"
     FROM "guest_visit"
     WHERE "status" = 'STAYING'
       AND "id" <> ${excludedId}
-      AND "normalizedPrimaryGuestName" = ${input.normalizedName}
       AND lower("roomNumber") = lower(${input.roomNumber})
-      AND "checkInDate" <= ${input.plannedCheckoutDate}::date
-      AND "plannedCheckoutDate" >= ${input.checkInDate}::date
-    ORDER BY "exact" DESC, "createdAt" ASC, "id" ASC
+      AND "checkInDate" < "plannedCheckoutDate"
+      AND "checkInDate" < ${input.plannedCheckoutDate}::date
+      AND "plannedCheckoutDate" > ${input.checkInDate}::date
+    ORDER BY "createdAt" ASC, "id" ASC
     LIMIT 1
   `;
   return match ?? null;
@@ -67,7 +76,8 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
         bookingNumber: input.bookingNumber,
         checkInDate: input.checkInDate,
         plannedCheckoutDate: input.plannedCheckoutDate,
-        duplicateOverrideReason: input.duplicateOverrideReason ?? null,
+        // Preserve fingerprints of existing registrations without an override.
+        duplicateOverrideReason: null,
       }),
     )
     .digest("hex");
@@ -95,12 +105,7 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
   try {
     return await db.$transaction(
       async (tx) => {
-        const lockKey = JSON.stringify([
-          "guest-visit-registration",
-          normalizedName,
-        ]);
-        // Serialize matching registrations even when no visit row exists yet.
-        await tx.$queryRaw`SELECT 1 AS locked FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`;
+        await lockGuestVisitRoom(tx, input.roomNumber);
         const existing = await replay(tx);
         if (existing) return existing;
 
@@ -109,19 +114,17 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
           `${input.plannedCheckoutDate}T00:00:00.000Z`,
         );
         const suspected = await findOverlappingGuestVisit(tx, {
-          normalizedName,
           roomNumber: input.roomNumber,
           checkInDate: input.checkInDate,
           plannedCheckoutDate: input.plannedCheckoutDate,
         });
-        if (suspected && !input.duplicateOverrideReason) {
+        if (suspected) {
           throw new GuestVisitRegistrationError(
             "POSSIBLE_DUPLICATE",
-            "Ada kunjungan aktif dengan nama, kamar, dan tanggal yang bertumpang tindih. Periksa atau isi alasan untuk melanjutkan.",
+            "Kamar sudah terdaftar pada kunjungan aktif dengan rentang menginap yang bertumpang tindih.",
             suspected.id,
           );
         }
-        const exact = suspected?.exact ? suspected : null;
 
         const visit = await tx.guestVisit.create({
           data: {
@@ -134,7 +137,7 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
             checkInDate,
             plannedCheckoutDate,
             status: "STAYING",
-            isDuplicate: Boolean(exact),
+            isDuplicate: false,
             createdById: actorId,
             updatedById: actorId,
           },
@@ -146,7 +149,6 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
             action: "GUEST_VISIT_REGISTERED",
             entityType: "GUEST_VISIT",
             entityId: visit.id,
-            reason: input.duplicateOverrideReason ?? null,
             newValues: {
               primaryGuestName: visit.primaryGuestName,
               roomNumber: visit.roomNumber,
@@ -155,8 +157,6 @@ export async function registerGuestVisit(rawInput: unknown, actorId: string) {
               plannedCheckoutDate: input.plannedCheckoutDate,
               status: visit.status,
               isDuplicate: visit.isDuplicate,
-              possibleDuplicateVisitId: suspected?.id ?? null,
-              exactDuplicateVisitId: exact?.id ?? null,
             },
           },
         });

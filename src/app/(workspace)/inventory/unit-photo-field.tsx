@@ -55,7 +55,6 @@ export function UnitPhotoField({
           aria-invalid={Boolean(message)}
           aria-describedby={`${id}-help ${id}-error`}
           className="peer sr-only"
-          onCancel={(event) => event.stopPropagation()}
           onChange={(event) =>
             append(Array.from(event.currentTarget.files ?? []))
           }

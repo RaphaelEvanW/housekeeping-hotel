@@ -1,8 +1,8 @@
 # Registrasi kunjungan tamu
 
-26 Oktober 2026, base5725a92, feature/backend. Implementasi BE pada working tree; agent belum menjalankan migrasi, generate, lint, typecheck atau tests. Aturan bisnis mengikuti PROJECT bagian4. FE registrasi dan daftar tamu belum dibuat; API daftar sudah ada, menunggu checks owner.
+27 Oktober 2026, base83a85fe, feature/backend. FE sudah committed; revisi aturan konflik kamar BE ada di working tree. Lint/typecheck/tests revisi belum dijalankan dan tetap milik owner. Aturan bisnis mengikuti PROJECT bagian4.
 
-Flow dikonfirmasi owner26Oktober: registrasi dilakukan saat tamu hendak meminjam, bukan setiap kedatangan hotel. Record kunjungan sendiri belum berarti ada peminjaman. Detail kunjungan nantinya mengelompokkan beberapa issue occasions dan partial/combined returns; setiap waktu peminjaman tetap punya header, unit, foto dan audit tersendiri. Return outstanding tetap bisa dicatat sesudah checkout. GET /api/guest-visits kini tersedia pada working tree: q mencari nama/kamar/booking secara literal, status STAYING(default)/CHECKED_OUT/ALL, page1–1000, pageSize10(default)/maks50, no-store dan guests:view. Daftar belum punya counter borrowing karena modelnya belum ada.
+Registrasi dilakukan saat tamu hendak meminjam, bukan setiap kedatangan hotel. Record kunjungan sendiri belum berarti ada peminjaman. Detail kunjungan mengelompokkan beberapa waktu peminjaman dan partial/combined returns dengan unit, foto dan audit masing-masing. Return outstanding tetap bisa dicatat sesudah checkout. GET /api/guest-visits mencari nama/kamar/booking secara literal, status STAYING(default)/CHECKED_OUT/ALL, page1–1000, pageSize10(default)/maks50, no-store dan guests:view.
 
 ## Kontrak
 
@@ -25,44 +25,35 @@ requestId adalah UUID yang dibuat sekali per percobaan registrasi dan menjadi Gu
 
 Nama wajib/max200, kamar wajib/max30, booking wajib/max100. Whitespace awal/akhir dibuang dan spasi berulang diringkas pada tiga field tersebut. Nomor booking dimasukkan manual dan tidak dibuat unik, karena belum ada aturan uniqueness booking. Tanggal YYYY-MM-DD, kalender valid, checkout >= check-in; same-day stay diizinkan. Tanggal disimpan sebagai SQL DATE. Tanggal planned checkout tidak mengubah status otomatis. Status/aktor/flag tidak boleh dikirim client; input yang tidak dikenal ditolak.
 
-## Peringatan duplikat
+## Konflik kamar dan rentang menginap
 
-Kriteria implementasi yang dapat ditinjau ulang: kunjungan STAYING dengan nama normalized yang sama, kamar sama (case-insensitive, perbandingan literal), dan rentang tanggal overlap, termasuk batas tanggal yang sama. Booking tidak dipakai sebagai identitas tamu atau aturan auto-merge.
+Kunjungan STAYING dengan kamar yang sama dan rentang menginap bertumpang tindih ditolak, termasuk bila nama tamunya berbeda. Kamar dibandingkan case-insensitive secara literal setelah normalisasi whitespace; nama dan nomor booking tidak menentukan konflik. Karakter %/_ tidak menjadi wildcard.
 
-Tanpa `duplicateOverrideReason`, server mengembalikan409 POSSIBLE_DUPLICATE + matchingVisitId, tanpa menyimpan kunjungan/audit. FE berikutnya harus menampilkan peringatan dan meminta alasan. Boleh mengirim ulang ID yang sama dengan `duplicateOverrideReason` nonblank/max2000 setelah penolakan ini; berbeda dari retry hasil simpan yang belum pasti. Validasi duplikat selalu diulang saat penyimpanan.
+Keputusan tanggal final owner27Oktober: interval [check-in, planned checkout), sehingga tanggal checkout tidak ikut dihitung. Kunjungan26–28 dan28–30 di kamar yang sama diperbolehkan;27–29 bertumpang tindih dengan26–28. Kunjungan dengan check-in/checkout pada tanggal yang sama tidak memiliki interval menginap dan tidak memblokir kunjungan lain. CHECKED_OUT tidak menjadi kandidat konflik; planned checkout tetap tidak mengubah status secara otomatis.
 
-Override tetap membuat kunjungan baru. IsDuplicate hanya true jika kandidat aktif juga mempunyai kedua tanggal yang persis sama. Kandidat exact diprioritaskan ketika beberapa kandidat overlap. Perbedaan tanggal tetap diperingatkan, tetapi tidak ditandai exact duplicate. Flag tidak memblokir peminjaman dan tidak memindahkan tanggung jawab. Kunjungan CHECKED_OUT dan rentang yang tidak overlap tidak menjadi kandidat.
+Konflik mengembalikan409 POSSIBLE_DUPLICATE + matchingVisitId, tanpa menyimpan kunjungan/audit. FE membuka kunjungan tersebut atau meminta pengguna memperbaiki data. POST menolak field duplicateOverrideReason; alasan tidak bisa melewati konflik. ID request yang ditolak belum dipakai dan boleh dikirim kembali setelah data diperbaiki. Setelah save berhasil, retry wajib mempertahankan payload aslinya.
 
-Transaksi mengambil advisory lock per normalized primary name sebelum cek requestId/kandidat; tidak memerlukan dummy lock row. READ COMMITTED memberi snapshot baru setelah menunggu lock. Lock berlaku sampai transaksi selesai; hash collision hanya menambah antrean, bukan meloloskan duplikat. Raw query memakai parameter binding dan equality literal untuk kamar; karakter `%`/`_` bukan wildcard. Index nama/status/check-in membatasi pencarian kandidat.
+PATCH nama/kamar memakai pemeriksaan konflik yang sama terhadap tanggal tersimpan pada kunjungan STAYING dan mengecualikan dirinya sendiri. Alasan koreksi tetap wajib untuk audit; itu berbeda dari alasan override yang dihapus. AcknowledgeDuplicate false masih diterima karena FE existing mengirimnya; true ditolak400. Timestamp expectedUpdatedAt mencegah koreksi menimpa versi yang lebih baru. Koreksi kunjungan CHECKED_OUT tetap historis dan tidak memesan kamar.
+
+Registrasi dan koreksi mengambil transaction advisory lock per kamar tujuan memakai lower PostgreSQL yang sama dengan query kandidat. Koreksi mengambil room lock sebelum FOR UPDATE kunjungan. READ COMMITTED membaca keadaan terbaru setelah menunggu lock; dua registrasi bernama berbeda atau registrasi yang bersamaan dengan pindah kamar tetap diserialkan. Query memakai parameter binding. Flag isDuplicate/audit legacy tetap terbaca; registrasi baru selalu isDuplicate false dan tidak menggabungkan kunjungan atau memindahkan tanggung jawab pinjaman.
 
 ## Penyimpanan dan kompatibilitas
 
 Migration20261026030000 menambah bookingNumber nullable dan registrationRequestHash nullable CHAR(64). Record lama tetap null tanpa booking palsu/backfill identitas. Registrasi API baru wajib booking; DB memastikan hash valid dan row dengan hash punya booking nonnull/nonblank. Row legacy tanpa hash tidak bisa dipakai untuk replay registrasi baru.
 
-Visit + event GUEST_VISIT_REGISTERED dibuat dalam satu transaksi. Audit mencatat aktor, waktu, alasan, snapshot registrasi, kandidat suspected/exact dan flag. Fingerprint tidak dikirim melalui read API. Field hash tidak berubah ketika field operasional dikoreksi kelak. Jangan menghapus history atau menggabungkan identitas lintas stay.
+Visit + event GUEST_VISIT_REGISTERED dibuat dalam satu transaksi. Audit mencatat aktor, waktu dan snapshot registrasi. Fingerprint tidak dikirim melalui read API dan tidak berubah saat field operasional dikoreksi. Bentuk fingerprint registrasi lama tanpa override dipertahankan agar replay tetap bekerja. Evidence override lama tidak ditulis ulang. Tidak ada schema/migration baru untuk revisi konflik ini.
 
-Source: server/guest-visit-input.ts, server/guest-visits.ts, server/list-guest-visits-input.ts, server/list-guest-visits.ts, API guest-visits/route.ts dan guest-visits/[visitId]/route.ts, lib/permissions.ts. Daftar dan count memakai snapshot RepeatableRead, urutan createdAt/id descending dan select publik yang sama. Belum ada endpoint koreksi, checkout atau borrowing.
+Source: server/guest-visit-input.ts, guest-visits.ts, update-guest-visit.ts, list-guest-visits-input.ts, list-guest-visits.ts, API guest-visits/route.ts dan guest-visits/[visitId]/route.ts, lib/permissions.ts. Daftar dan count memakai snapshot RepeatableRead, urutan createdAt/id descending dan select publik yang sama. Checkout dan borrowing memakai endpoint terpisah yang sudah tersedia.
 
 ## Checks oleh owner
 
-Tidak ada perintah di bawah yang dijalankan agent. Nyalakan DB test/dev seperti biasa. Jalankan:
+Tidak ada perintah di bawah yang dijalankan agent untuk revisi ini. Nyalakan DB test/dev seperti biasa. Jalankan:
 
 ```bash
-npm.cmd run db:validate
-npm.cmd run db:generate
-npm.cmd run db:migrate:test
 npm.cmd run lint
 npm.cmd run typecheck
-npx.cmd vitest run tests/unit/guest-visit-input.test.ts tests/unit/permissions.test.ts tests/integration/guest-visits-api.test.ts tests/integration/guest-visit-schema.test.ts
+npm.cmd test -- tests/unit/guest-visit-input.test.ts tests/integration/guest-visits-api.test.ts
 npm.cmd test
 ```
 
-Setelah checks test DB passed, terapkan migrasi ke DB development:
-
-```bash
-npm.cmd run db:migrate
-```
-
-Tests mencakup field/tanggal, legacy null booking, DB constraints, hak akses, body/origin, audit, replay/conflict, literal room matching, checkout exclusion, duplikat/override/flag, concurrent request dan rollback saat audit gagal. Hasil aktual belum diketahui. Tidak ada browser/form untuk diuji pada langkah BE ini.
-
-Tes tambahan daftar: tests/unit/list-guest-visits-input.test.ts dan cases list pada tests/integration/guest-visits-api.test.ts. Setelah passed, commit BE sebelum pindah FE registrasi/daftar. Peminjaman tetap tahap terpisah setelah data kunjungan bisa dikelola.
+Regresi mencakup konflik beda nama, batas checkout/check-in, same-day stays, penolakan override, replay fingerprint lama, flag/audit legacy, concurrency registrasi/koreksi, hak akses dan rollback. Fixture search literal memakai kamar berbeda agar pencarian tidak terhalang aturan okupansi baru. Hasil checks revisi belum diketahui. FE sudah tersambung ke error/link existing; E2E penuh belum selesai.

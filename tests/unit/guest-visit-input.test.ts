@@ -36,6 +36,7 @@ it.each([
   { plannedCheckoutDate: "2026-10-25" },
   { requestId: "invalid" },
   { duplicateOverrideReason: " " },
+  { duplicateOverrideReason: "Tetap buat kunjungan baru." },
   { bookingNumber: "x".repeat(101) },
   { status: "CHECKED_OUT" },
   { createdById: "untrusted" },
@@ -61,7 +62,7 @@ it.each([
   expect(checkoutGuestVisitInputSchema.safeParse(body).success).toBe(false);
 });
 
-it("normalizes a guest visit correction and defaults duplicate acknowledgement", () => {
+it("normalizes a correction and accepts the existing FE false acknowledgement", () => {
   expect(updateGuestVisitInputSchema.parse({
     expectedUpdatedAt: "2026-10-27T10:00:00.000Z",
     primaryGuestName: "  Tamu   Utama ",
@@ -85,6 +86,7 @@ it.each([
   { expectedUpdatedAt: "2026-10-27T10:00:00.000Z", primaryGuestName: "Tamu", reason: "Koreksi", status: "CHECKED_OUT" },
   { expectedUpdatedAt: "2026-10-27T10:00:00.000Z", roomNumber: "A-102", reason: "Koreksi", updatedById: "untrusted" },
   { expectedUpdatedAt: "2026-10-27T10:00:00.000Z", roomNumber: "A-102", reason: "Koreksi", acknowledgeDuplicate: "true" },
+  { expectedUpdatedAt: "2026-10-27T10:00:00.000Z", roomNumber: "A-102", reason: "Koreksi", acknowledgeDuplicate: true },
 ])("rejects invalid or server-controlled guest visit correction %j", (body) => {
   expect(updateGuestVisitInputSchema.safeParse(body).success).toBe(false);
 });

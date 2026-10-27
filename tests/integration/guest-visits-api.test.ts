@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { GET as LIST_GUEST_VISITS, POST } from "../../src/app/api/guest-visits/route";
 import { GET, PATCH } from "../../src/app/api/guest-visits/[visitId]/route";
@@ -177,12 +177,12 @@ it("replays without duplicates, rejects changed payload/actor, and preserves reg
   await counts(1);
 });
 
-it("warns about overlap, requires an override reason and flags only exact duplicates", async () => {
+it("rejects room overlap across different guest names and cannot override it", async () => {
   expect((await post(input)).status).toBe(201);
   const second = {
     ...input,
     requestId: randomUUID(),
-    primaryGuestName: `  ${input.primaryGuestName.toUpperCase()}  `,
+    primaryGuestName: `Different guest ${randomUUID()}`,
     roomNumber: "a-101",
   };
   const warning = await post(second);
@@ -200,33 +200,63 @@ it("warns about overlap, requires an override reason and flags only exact duplic
           "Kunjungan dicatat terpisah setelah konfirmasi.",
       })
     ).status,
-  ).toBe(201);
-  expect(
-    (await db.guestVisit.findUniqueOrThrow({ where: { id: second.requestId } }))
-      .isDuplicate,
-  ).toBe(true);
-  const event = await db.auditEvent.findFirstOrThrow({
-    where: { entityId: second.requestId },
+  ).toBe(400);
+  await counts(1);
+  expect((await post({ ...second, roomNumber: "A-102" })).status).toBe(201);
+  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: second.requestId } })).toMatchObject({ isDuplicate: false });
+  await counts(2);
+});
+
+it("replays registrations made with the previous non-override fingerprint", async () => {
+  expect((await post(input)).status).toBe(201);
+  const legacyHash = createHash("sha256").update(JSON.stringify({
+    primaryGuestName: input.primaryGuestName,
+    roomNumber: input.roomNumber,
+    bookingNumber: input.bookingNumber,
+    checkInDate: input.checkInDate,
+    plannedCheckoutDate: input.plannedCheckoutDate,
+    duplicateOverrideReason: null,
+  })).digest("hex");
+  await db.guestVisit.update({ where: { id: input.requestId }, data: { registrationRequestHash: legacyHash } });
+  expect((await post(input)).status).toBe(200);
+  await counts(1);
+});
+
+it.each([
+  { checkInDate: "2026-10-25", plannedCheckoutDate: "2026-10-26", expected: 201 },
+  { checkInDate: "2026-10-28", plannedCheckoutDate: "2026-10-30", expected: 201 },
+  { checkInDate: "2026-10-27", plannedCheckoutDate: "2026-10-27", expected: 201 },
+  { checkInDate: "2026-10-27", plannedCheckoutDate: "2026-10-28", expected: 409 },
+  { checkInDate: "2026-10-25", plannedCheckoutDate: "2026-10-27", expected: 409 },
+  { checkInDate: "2026-10-25", plannedCheckoutDate: "2026-10-29", expected: 409 },
+  { checkInDate: "2026-10-26", plannedCheckoutDate: "2026-10-28", expected: 409 },
+])("uses checkout-exclusive overlap for $checkInDate to $plannedCheckoutDate", async ({ checkInDate, plannedCheckoutDate, expected }) => {
+  expect((await post(input)).status).toBe(201);
+  const response = await post({
+    ...input, requestId: randomUUID(), primaryGuestName: `Other ${randomUUID()}`,
+    checkInDate, plannedCheckoutDate,
   });
-  expect(event).toMatchObject({
-    reason: "Kunjungan dicatat terpisah setelah konfirmasi.",
-    newValues: { isDuplicate: true },
-  });
-  const overlapping = {
-    ...input,
-    requestId: randomUUID(),
-    plannedCheckoutDate: "2026-10-29",
-    duplicateOverrideReason: "Tanggal sudah dikonfirmasi.",
-  };
-  expect((await post(overlapping)).status).toBe(201);
-  expect(
-    (
-      await db.guestVisit.findUniqueOrThrow({
-        where: { id: overlapping.requestId },
-      })
-    ).isDuplicate,
-  ).toBe(false);
-  await counts(3);
+  expect(response.status).toBe(expected);
+  if (expected === 409) {
+    expect(await response.json()).toMatchObject({ error: "POSSIBLE_DUPLICATE", matchingVisitId: input.requestId });
+  }
+  await counts(expected === 201 ? 2 : 1);
+});
+
+it("does not let an existing same-day stay block an overnight visit", async () => {
+  expect((await post({ ...input, plannedCheckoutDate: input.checkInDate })).status).toBe(201);
+  expect((await post({ ...input, requestId: randomUUID(), primaryGuestName: `Other ${randomUUID()}` })).status).toBe(201);
+  await counts(2);
+});
+
+it("preserves historical duplicate flags and audit while rejecting a new overlap", async () => {
+  expect((await post(input)).status).toBe(201);
+  await db.guestVisit.update({ where: { id: input.requestId }, data: { isDuplicate: true } });
+  const event = await db.auditEvent.findFirstOrThrow({ where: { entityId: input.requestId } });
+  expect((await post({ ...input, requestId: randomUUID(), primaryGuestName: `Other ${randomUUID()}` })).status).toBe(409);
+  expect(await (await get(input.requestId)).json()).toMatchObject({ visit: { isDuplicate: true } });
+  expect(await db.auditEvent.findUniqueOrThrow({ where: { id: event.id } })).toEqual(event);
+  await counts(1);
 });
 
 it("allows a separate stay without merging identity or inferring checkout from planned dates", async () => {
@@ -272,10 +302,10 @@ it("serializes concurrent duplicate detection and concurrent retries", async () 
   await counts(1);
 });
 
-it("allows only one simultaneous first registration without an override", async () => {
+it("allows only one simultaneous first registration for the same room with different names", async () => {
   const results = await Promise.all([
     post(input),
-    post({ ...input, requestId: randomUUID() }),
+    post({ ...input, requestId: randomUUID(), roomNumber: "a-101", primaryGuestName: `Other ${randomUUID()}` }),
   ]);
   expect(results.map((response) => response.status).sort()).toEqual([201, 409]);
   await counts(1);
@@ -412,7 +442,7 @@ it("escapes wildcard search characters instead of broadening the guest list", as
   const token = input.requestId;
   const literalId = randomUUID();
   expect((await post({ ...input, requestId: literalId, primaryGuestName: `Literal ${token}%_` })).status).toBe(201);
-  expect((await post({ ...input, requestId: randomUUID(), primaryGuestName: `Literal ${token}XY` })).status).toBe(201);
+  expect((await post({ ...input, requestId: randomUUID(), primaryGuestName: `Literal ${token}XY`, roomNumber: "A-102" })).status).toBe(201);
   const result = await (await listVisits({ q: `${token}%_` })).json();
   expect(result.visits.map((visit: { id: string }) => visit.id)).toEqual([literalId]);
 });
@@ -573,25 +603,28 @@ it("corrects the primary guest or room with reason, audit, and registration repl
   });
 });
 
-it("rejects stale guest visit edits and requires acknowledgement for a possible duplicate", async () => {
+it("rejects room conflicts without an acknowledgement bypass and rejects stale edits", async () => {
   expect((await post(input)).status).toBe(201);
   const before = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
   const secondInput = {
     ...input,
     requestId: randomUUID(),
     primaryGuestName: `Other ${randomUUID()}`,
+    roomNumber: "A-102",
   };
   expect((await post(secondInput)).status).toBe(201);
   const duplicateBody = {
     expectedUpdatedAt: before.updatedAt.toISOString(),
     primaryGuestName: secondInput.primaryGuestName,
     roomNumber: secondInput.roomNumber,
-    reason: "Koreksi nama berdasarkan konfirmasi tamu.",
+    reason: "Koreksi kamar berdasarkan konfirmasi tamu.",
   };
   const duplicate = await patchVisit(input.requestId, duplicateBody);
   expect(duplicate.status).toBe(409);
   expect(await duplicate.json()).toMatchObject({ error: "POSSIBLE_DUPLICATE", matchingVisitId: secondInput.requestId });
-  expect((await patchVisit(input.requestId, { ...duplicateBody, acknowledgeDuplicate: true })).status).toBe(200);
+  expect((await patchVisit(input.requestId, { ...duplicateBody, acknowledgeDuplicate: true })).status).toBe(400);
+  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } })).toMatchObject({ roomNumber: input.roomNumber, updatedAt: before.updatedAt });
+  expect(await db.auditEvent.count({ where: { entityId: input.requestId, action: "GUEST_VISIT_UPDATED" } })).toBe(0);
 
   const updated = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
   expect((await patchVisit(input.requestId, {
@@ -605,6 +638,41 @@ it("rejects stale guest visit edits and requires acknowledgement for a possible 
     patchVisit(input.requestId, { expectedUpdatedAt: concurrencyBase.updatedAt.toISOString(), roomNumber: "A-104", reason: "Koreksi kamar." }),
   ]);
   expect(concurrent.map((response) => response.status).sort()).toEqual([200, 409]);
+});
+
+it("allows a room correction when another stay checks out on the incoming check-in date", async () => {
+  expect((await post(input)).status).toBe(201);
+  const previous = { ...input, requestId: randomUUID(), primaryGuestName: `Earlier ${randomUUID()}`, roomNumber: "A-102", checkInDate: "2026-10-24", plannedCheckoutDate: input.checkInDate };
+  expect((await post(previous)).status).toBe(201);
+  const current = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  expect((await patchVisit(input.requestId, { expectedUpdatedAt: current.updatedAt.toISOString(), roomNumber: "a-102", reason: "Pindah kamar setelah kunjungan sebelumnya." })).status).toBe(200);
+});
+
+it("serializes a room correction against a registration with a different guest name", async () => {
+  expect((await post(input)).status).toBe(201);
+  const current = await db.guestVisit.findUniqueOrThrow({ where: { id: input.requestId } });
+  const second = { ...input, requestId: randomUUID(), primaryGuestName: `Other ${randomUUID()}`, roomNumber: "a-102" };
+  const responses = await Promise.all([
+    patchVisit(input.requestId, { expectedUpdatedAt: current.updatedAt.toISOString(), roomNumber: "A-102", reason: "Pindah kamar." }),
+    post(second),
+  ]);
+  expect(responses.filter((response) => response.ok)).toHaveLength(1);
+  const conflict = responses.find((response) => response.status === 409);
+  if (!conflict) throw new Error("Expected one room conflict response");
+  const winnerId = responses[0].ok ? input.requestId : second.requestId;
+  expect(await conflict.json()).toMatchObject({ error: "POSSIBLE_DUPLICATE", matchingVisitId: winnerId });
+  expect(await db.guestVisit.count({ where: { createdById: actor.id, roomNumber: { equals: "A-102", mode: "insensitive" }, status: "STAYING" } })).toBe(1);
+});
+
+it("allows only one of two concurrent room transfers into an overlapping stay", async () => {
+  expect((await post(input)).status).toBe(201);
+  const second = { ...input, requestId: randomUUID(), primaryGuestName: `Other ${randomUUID()}`, roomNumber: "A-102" };
+  expect((await post(second)).status).toBe(201);
+  const visits = await db.guestVisit.findMany({ where: { id: { in: [input.requestId, second.requestId] } }, select: { id: true, updatedAt: true } });
+  const responses = await Promise.all(visits.map((visit) => patchVisit(visit.id, { expectedUpdatedAt: visit.updatedAt.toISOString(), roomNumber: "A-103", reason: "Pindah kamar." })));
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+  expect(await db.guestVisit.count({ where: { createdById: actor.id, roomNumber: "A-103" } })).toBe(1);
+  expect(await db.auditEvent.count({ where: { actorId: actor.id, action: "GUEST_VISIT_UPDATED" } })).toBe(1);
 });
 
 it("rejects unauthorized and malformed guest visit corrections", async () => {
