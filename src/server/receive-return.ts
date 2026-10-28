@@ -3,6 +3,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { Prisma, type ItemUnit } from "@/generated/prisma/client";
 import { db } from "@/server/db";
+import { cancelPendingBorrowingLossReports } from "@/server/borrowing-loss";
 import { receiveReturnInputSchema } from "@/server/receive-return-input";
 import {
   InvalidUnitPhotoError,
@@ -431,6 +432,14 @@ export async function receiveReturn(
           });
           if (photoRows.length)
             await tx.itemUnitPhoto.createMany({ data: photoRows });
+
+          await cancelPendingBorrowingLossReports(
+            tx,
+            lineIds,
+            actorId,
+            receivedAt,
+            receipt.id,
+          );
 
           await tx.auditEvent.create({
             data: {

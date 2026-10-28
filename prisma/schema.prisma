@@ -34,6 +34,10 @@ model User {
   guestVisitsUpdated GuestVisit[] @relation("GuestVisitUpdatedBy")
   borrowingsIssued Borrowing[] @relation("BorrowingIssuedBy")
   returnBatchesReceived ReturnBatch[] @relation("ReturnBatchReceivedBy")
+  borrowingLossReports BorrowingLossReport[] @relation("BorrowingLossReportedBy")
+  borrowingLossClosures BorrowingLossReport[] @relation("BorrowingLossClosedBy")
+  borrowingLossSettlementsProposed BorrowingLossSettlement[] @relation("LossSettlementProposedBy")
+  borrowingLossSettlementsDecided BorrowingLossSettlement[] @relation("LossSettlementDecidedBy")
 
   @@map("user")
 }
@@ -148,6 +152,7 @@ model Item {
   stockBatches StockBatch[]
   deactivationRequests ItemDeactivationRequest[]
   photos ItemPhoto[]
+  replacementSettlements BorrowingLossSettlement[] @relation("SettlementReplacementItem")
 
   @@index([isActive, name])
   @@map("item")
@@ -226,6 +231,7 @@ model ItemUnit {
   stockBatch StockBatch? @relation(fields: [stockBatchId], references: [id], onDelete: Restrict)
   photos ItemUnitPhoto[]
   borrowingLines BorrowingLine[]
+  replacementSettlement BorrowingLossSettlement? @relation("SettlementReplacementUnit")
   
   @@index([itemId])
   @@index([locationId])
@@ -358,6 +364,20 @@ enum BorrowingLineStatus {
   SETTLED
 }
 
+enum BorrowingResolutionMethod {
+  PHYSICAL_RECOVERY
+  COMPENSATION
+  REPLACEMENT
+  WRITE_OFF
+}
+
+enum BorrowingLossStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
 model Borrowing {
   id                       String   @id @default(uuid())
   guestVisitId             String
@@ -383,16 +403,101 @@ model BorrowingLine {
   conditionAtIssue UnitCondition
   status           BorrowingLineStatus @default(OUTSTANDING)
   resolvedAt       DateTime?           @db.Timestamptz(3)
+  resolutionMethod BorrowingResolutionMethod?
 
   borrowing Borrowing @relation(fields: [borrowingId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   unit      ItemUnit  @relation(fields: [unitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
   photos    ItemUnitPhoto[]
   returnLine ReturnLine?
+  lossReports BorrowingLossReport[]
 
   @@unique([borrowingId, unitId])
   @@unique([id, unitId])
   @@index([unitId])
   @@map("borrowing_line")
+}
+
+model BorrowingLossReport {
+  id            String             @id
+  borrowingLineId String
+  status        BorrowingLossStatus @default(PENDING)
+  notes         String
+  requestHash   String             @db.Char(64)
+  reportedById  String
+  reportedAt    DateTime           @default(now()) @db.Timestamptz(3)
+  closedById    String?
+  closedAt      DateTime?          @db.Timestamptz(3)
+  closureNotes  String?
+
+  borrowingLine BorrowingLine @relation(fields: [borrowingLineId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  reportedBy    User          @relation("BorrowingLossReportedBy", fields: [reportedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  closedBy      User?         @relation("BorrowingLossClosedBy", fields: [closedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  settlements BorrowingLossSettlement[]
+
+  @@index([borrowingLineId, reportedAt])
+  @@index([status, reportedAt])
+  @@index([reportedById])
+  @@index([closedById])
+  @@map("borrowing_loss_report")
+}
+
+enum BorrowingLossSettlementStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum BorrowingLossSettlementMethod {
+  COMPENSATION
+  REPLACEMENT
+  WRITE_OFF
+}
+
+model BorrowingLossSettlement {
+  id            String                        @id
+  lossReportId  String
+  status        BorrowingLossSettlementStatus @default(PENDING)
+  method        BorrowingLossSettlementMethod @default(COMPENSATION)
+  amount        Decimal?                      @db.Decimal(19, 4)
+  currencyCode  String?                       @db.Char(3)
+  replacementItemId String?
+  replacementName String?
+  replacementSerialNumber String?
+  replacementCondition UnitCondition?
+  receivedAt DateTime? @db.Timestamptz(3)
+  replacementUnitId String? @unique
+  notes         String
+  requestHash   String                        @db.Char(64)
+  proposedById  String
+  proposedAt    DateTime                      @default(now()) @db.Timestamptz(3)
+  decidedById   String?
+  decidedAt     DateTime?                     @db.Timestamptz(3)
+  decisionNotes String?
+
+  lossReport BorrowingLossReport @relation(fields: [lossReportId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  proposedBy User @relation("LossSettlementProposedBy", fields: [proposedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  decidedBy User? @relation("LossSettlementDecidedBy", fields: [decidedById], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replacementItem Item? @relation("SettlementReplacementItem", fields: [replacementItemId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  replacementUnit ItemUnit? @relation("SettlementReplacementUnit", fields: [replacementUnitId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  photos BorrowingLossSettlementPhoto[]
+
+  @@index([lossReportId, proposedAt])
+  @@index([status, proposedAt])
+  @@index([proposedById])
+  @@index([decidedById])
+  @@index([replacementItemId])
+  @@map("borrowing_loss_settlement")
+}
+
+model BorrowingLossSettlementPhoto {
+  id String @id @default(uuid())
+  settlementId String
+  photoKey String @unique
+
+  settlement BorrowingLossSettlement @relation(fields: [settlementId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+
+  @@index([settlementId])
+  @@map("borrowing_loss_settlement_photo")
 }
 
 model ReturnBatch {

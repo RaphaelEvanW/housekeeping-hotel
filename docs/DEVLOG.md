@@ -1109,3 +1109,63 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Typecheck menunjukkan helper maintenance meminta `UnitHistoryEvent` lengkap meski payload serah/terima hanya punya bentuk event yang lebih sempit. Parameter helper kini struktural sesuai properti yang dibaca; validasi runtime tidak berubah. Typecheck belum dijalankan ulang sesuai pembagian testing owner.
 - Skills Systematic Debugging/Ponytail membatasi perbaikan pada kontrak tipe; TDD memakai error pemanggil yang sudah dilaporkan sebagai reproduksi, dan Verification mencegah klaim typecheck lolos tanpa menjalankannya.
+
+## 2026-10-28 — Wajibkan foto untuk pembaruan kondisi di BE
+
+- Endpoint pembaruan kondisi dan laporan kerusakan setelah pengembalian menolak pencatatan baru tanpa foto (`PHOTOS_REQUIRED`, HTTP400). Service memeriksa keberadaan foto setelah pencarian replay agar retry identik atas laporan lama yang sudah tersimpan tetap aman; validasi byte foto tetap berlaku.
+- Tes integrasi mencakup kedua endpoint dan service, foto kosong, tidak ada perubahan unit/audit/evidence pada penolakan, serta replay laporan lama tanpa foto. Owner melaporkan lint, typecheck, dan full suite lulus.
+
+## 2026-10-28 — Dasar laporan kehilangan unit pinjaman
+
+- Menambahkan model dan migrasi laporan kehilangan berbasis catatan, izin Staff untuk melaporkan dan Supervisor untuk memutuskan, pembaruan unit menjadi LOST/ON_HOLD saat disetujui, serta endpoint baca dan audit.
+- Return fisik membatalkan laporan yang masih pending dalam transaksi yang sama; laporan yang disetujui tetap menjaga pinjaman outstanding. Riwayat pinjaman menampilkan laporan terakhir tanpa membuka request hash.
+- Migration, Prisma client generation, lint, typecheck, dan test belum dijalankan; menunggu owner. Cakupan belum termasuk pemulihan unit atau penyelesaian kewajiban tamu.
+- Skills Housekeeping Context/Ponytail menjaga perubahan sesuai peta proyek dan tetap fokus; Prisma CLI/Postgres memandu skema, indeks parsial dan urutan lock; TDD menentukan assertion regresi; dokumentasi Next Route Handler mengarahkan params async.
+
+## 2026-10-28 — Antrean laporan kehilangan dan diagnosis query pinjaman
+
+- GET `/api/borrowing-loss-reports` kini dirancang untuk status, pencarian literal, pagination, detail unit, authorization `loss:view`, dan count/page pada snapshot yang sama. Menambahkan coverage integrasi untuk pagination, filter, izin, pencarian wildcard, dan input tidak valid; owner belum menjalankan checks untuk patch ini.
+- Screenshot query `listGuestBorrowings` menunjukkan error saat membaca relasi pinjaman. Source dan Prisma Client hasil generate memuat `returnLine` serta `lossReports`; migrasi return dan loss ada di repo, tetapi penerapannya ke database dev belum terkonfirmasi. Minta owner menerapkan migrasi ke database lokal, generate ulang client, lalu restart `next dev`; isi lengkap error belum terlihat pada screenshot.
+- Skills Housekeeping Context/Ponytail menjaga scope dan handoff; Systematic Debugging menelusuri query, schema, client, dan migrasi sebelum menyimpulkan mismatch; Prisma CLI/Postgres memandu pembacaan schema; TDD membentuk skenario regresi tanpa menjalankan suite; Humanizer merapikan catatan; dokumentasi Next Route Handler dipakai untuk penambahan GET.
+
+## 2026-10-28 — Muat ulang Prisma Client runtime
+
+- Stack lengkap dari owner memastikan validasi gagal pada `Unknown field lossReports` di `BorrowingLine` select. Prisma schema dan client generated di disk sudah memuat relasi; proses Next lama masih memakai client runtime lama.
+- `npm.cmd run db:generate` selesai dengan Prisma 7.10.0. Proses Next lama pada port 3000 dihentikan setelah dipastikan milik project ini, lalu `npm.cmd run dev` menyatakan siap di port 3000. Browser belum terverifikasi setelah restart karena kontrol jendela terputus saat owner mengambil alih. Jika refresh mengganti error menjadi tabel `return_line` atau `borrowing_loss_report` tidak ada, baru terapkan migrasi dev terkait.
+
+## 2026-10-28 — Penerimaan fisik unit hilang dari pinjaman
+
+- Menambahkan resolusi pinjaman `PHYSICAL_RECOVERY` terpisah dari retur dan penyelesaian lain. Endpoint penerimaan untuk laporan kehilangan yang sudah disetujui mencatat foto bukti baru, kondisi, catatan, waktu penerimaan, lokasi Housekeeping aktif, perubahan status unit, penyelesaian satu baris pinjaman, dan audit dalam satu transaksi. Status kesiapan sebelum unit dinyatakan hilang dipulihkan bila tidak ada pembatasan; kondisi rusak tidak dapat dijadikan Baik melalui pemulihan.
+- GET pemulihan menampilkan bukti dan snapshot; foto pemulihan tidak lagi ikut dibaca sebagai foto peminjaman/retur. Coverage integrasi ditambahkan untuk pemulihan, hold sebelumnya, kondisi rusak, foto wajib, dan replay idempoten. Schema/migrasi, lint, typecheck, serta test belum dijalankan oleh agent sesuai pembagian owner.
+- Keputusan owner 28 Oktober: satu foto penerimaan wajib; unit berkondisi Baik dapat langsung siap jika aturan kesiapan lain mengizinkan.
+- Skills Housekeeping Context, Ponytail, Prisma/Postgres dan TDD mengarahkan scope model/lock/evidence serta coverage; dokumentasi Next Route Handler dan Verification membatasi klaim pada source review, bukan hasil test.
+
+## 2026-10-28 — Pengajuan dan keputusan kompensasi kehilangan
+
+- Owner melaporkan seluruh test langkah laporan kehilangan/pemulihan fisik sebelumnya passed. Inspeksi source memastikan kompensasi belum ada; menambahkan model/migrasi settlement, nominal Decimal19,4 dan mata uang tiga huruf, endpoint pengajuan Staff/Supervisor serta keputusan khusus Supervisor. Approval menyelesaikan satu borrowing line sebagai COMPENSATION tanpa menambah unit atau mengubah unit LOST. Rejection mempertahankan kewajiban dan proposal lama tetap terbaca.
+- Riwayat laporan dan pinjaman memuat settlement tanpa request hash. Request/replay, proposal pending tunggal, keputusan tunggal, dan audit memakai transaksi serta urutan lock yang sama dengan pemulihan fisik. Penerimaan unit yang ditemukan setelah kompensasi tetap mencatat bukti fisik tanpa mengubah metode/waktu penyelesaian sebelumnya.
+- Menambahkan tes integrasi untuk delapan kasus owner: validasi nominal/mata uang, RBAC, kelayakan laporan/line, efek pending/rejected, satu line pada approval, rejection, replay/konflik ID, dan rollback audit. Cakupan tambahan meliputi presisi nominal, concurrency, akses tanpa login/ID laporan berbeda, serta recovery setelah/bersamaan dengan kompensasi. Tes ditulis sebelum service; siklus red/green tidak dijalankan karena owner menjalankan checks.
+- Schema/migrasi baru belum diterapkan dan Prisma Client belum digenerate. Lint, typecheck, test dan browser tidak dijalankan oleh agent. FE, replacement dan WRITE_OFF belum termasuk patch ini. Skills: Housekeeping Context/Ponytail untuk batas/reuse; Prisma/Postgres untuk schema/lock; TDD untuk cakupan perilaku; Humanizer untuk catatan; Verification untuk membatasi klaim. Dokumentasi Route Handler Next terpasang diperiksa.
+
+## 2026-10-28 — Penyelesaian kehilangan dengan barang pengganti
+
+- Owner melaporkan seluruh test kompensasi passed dan mengonfirmasi replacement boleh memilih jenis terdaftar yang berbeda dari unit hilang. Memperluas settlement existing dengan metode REPLACEMENT; proposal memerlukan konfirmasi penerimaan fisik, waktu, catatan dan foto, kondisi default GOOD. Satu laporan hanya memiliki satu proposal pending lintas metode. Proposal pending/rejected tidak membuat unit atau menyelesaikan kewajiban.
+- Approval Supervisor membuat tepat satu ItemUnit baru pada HK Main Storage, menautkannya ke settlement/laporan/unit asli, membuat audit/foto awal dan menyelesaikan satu borrowing line sebagai REPLACEMENT secara atomik. GOOD dapat CLEAR; non-GOOD tetap PENDING_INSPECTION, tanpa menciptakan hasil verifikasi. Jenis barang aktif dan storage diperiksa lagi saat approval. Unit asli tetap LOST hingga diterima secara fisik; penerimaan setelah replacement mempertahankan keputusan/metode/waktu penyelesaian sebelumnya.
+- Bukti proposal disimpan pada BorrowingLossSettlementPhoto karena unit baru belum ada sebelum approval. Setelah approval metadata foto awal unit memakai file bukti immutable yang sama. Endpoint baca foto memeriksa izin dan seluruh parent ID, tanpa membuka storage key. Riwayat laporan/pinjaman memakai serializer settlement bersama; kontrak request hash kompensasi terdahulu dipertahankan.
+- Menambahkan tests untuk jenis pengganti berbeda, multiple photo/akses privat, pending/reject tanpa stok, approval/replay/concurrency tepat satu unit, kondisi rusak, input/receipt/foto wajib, RBAC, cross-method pending/endpoint, jenis nonaktif, rollback audit/unit/foto, respons commit hilang dan recovery unit asli setelah replacement. Tes ditulis sebelum service; eksekusi tetap owner. Migrasi400/generate, lint, typecheck, automated test dan browser belum dijalankan agent. Source serta whitespace diff diperiksa; hasil eksekusi patch belum diketahui. WRITE_OFF dan FE settlement menjadi langkah berikutnya.
+- Skills Housekeeping Context/Ponytail menjaga scope/reuse, Prisma/Postgres mengarahkan schema/lock, TDD mengarahkan test perilaku, Humanizer untuk catatan dan Verification untuk batas klaim; dokumentasi Route Handler Next terpasang dikonsultasikan.
+
+## 2026-10-28 — WRITE_OFF dengan keputusan Management
+
+- Owner melaporkan semua test replacement passed. Menambahkan WRITE_OFF pada settlement dan resolusi borrowing existing; hanya Supervisor mengajukan dan hanya Management memutuskan. Proposal memerlukan alasan, approval/rejection Management juga memerlukan alasan. System Admin tidak memperoleh izin operasional ini secara otomatis.
+- Memakai engine proposal sederhana bersama kompensasi serta keputusan/lock/replay/audit bersama semua metode. Approval menyelesaikan tepat satu line, mempertahankan unit LOST dan tidak menciptakan unit atau pengembalian fisik. Pending/rejected tidak mengubah kewajiban; satu proposal pending tetap berlaku lintas tiga metode. Recovery setelah WRITE_OFF mencatat penerimaan fisik sambil mempertahankan metode/waktu/keputusan penyelesaian.
+- Migration500 memperluas kedua enum dan constraint data/alasan keputusan. Perbandingan text untuk nilai enum baru menjaga penambahan enum dan constraint dalam satu transaksi. Request hash kompensasi lama dipertahankan. Riwayat laporan/pinjaman otomatis mencakup metode baru; request hash keputusan disembunyikan dari riwayat unit.
+- Tests ditambahkan sebelum implementasi untuk RBAC, alasan wajib, satu line pada approval, rejection, checkout, replay/ID konflik, satu pending lintas tiga metode, larangan memakai endpoint metode lain, rollback audit, keputusan concurrent, laporan belum disetujui dan recovery sesudah/sebelum keputusan. Red/green, migration/generate, lint, typecheck, automated test dan browser tidak dijalankan agent sesuai pembagian owner; source serta whitespace diff diperiksa. FE settlement dan MISSING/lifecycle belum termasuk langkah ini.
+- Skills Housekeeping Context/Ponytail membatasi perubahan dan reuse; TDD membentuk test perilaku; Prisma/Postgres memandu enum/constraint/urutan lock; Humanizer untuk catatan dan Verification membatasi klaim. Dokumentasi Route Handler Next terpasang diperiksa.
+
+## 2026-10-28 — Handoff BE kehilangan dan settlement untuk commit
+
+- Owner melaporkan seluruh test setelah langkah WRITE_OFF passed. Tidak ada output per command atau totals baru; hasil ini dicatat sebagai laporan owner, bukan eksekusi ulang agent. Penerapan migrasi ke DB dev dan uji browser autentikasi nyata belum dikonfirmasi terpisah.
+- Working tree feature/backend masih berada di HEAD6979527 dan belum di-commit. Cakupan yang terkumpul: enforcement foto kondisi, laporan kehilangan/keputusan/daftar, pembatalan laporan pending saat return, penerimaan fisik, kompensasi, replacement dengan tepat satu unit baru, WRITE_OFF dengan Management, RBAC/riwayat/foto privat serta regresi transaksi/replay/concurrency. Lima migrasi baru tersedia dari20261028010000 hingga20261028050000.
+- PROJECT.md dan CONTEXT.md diselaraskan ke checkpoint ini; catatan implementasi terdahulu tetap menjadi sejarah keadaan saat patch ditulis. Langkah setelah owner commit: sambungkan FE kehilangan/settlement/recovery dengan role dan endpoint existing. MISSING stok tanpa pinjaman, lifecycle, dashboard nyata dan E2E tetap terpisah dan belum selesai.
+- Perubahan turn ini hanya dokumentasi. Skills Housekeeping Context/Humanizer dipakai untuk handoff ringkas dan bahasa; Verification menjaga pemisahan laporan owner dengan hasil agent. Agent memeriksa status/diff dokumentasi tanpa menjalankan tests atau membuat commit.

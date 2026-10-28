@@ -108,7 +108,12 @@ export function createUnitConditionPost(options: {
         return Response.json(
           { error: error.code, message: error.message },
           {
-            status: error.code === "UNIT_NOT_FOUND" ? 404 : 409,
+            status:
+              error.code === "PHOTOS_REQUIRED"
+                ? 400
+                : error.code === "UNIT_NOT_FOUND"
+                  ? 404
+                  : 409,
             headers,
           },
         );

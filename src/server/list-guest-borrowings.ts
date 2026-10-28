@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { guestVisitSelect } from "@/server/guest-visits";
 import { listGuestBorrowingsInputSchema } from "@/server/list-guest-borrowings-input";
+import { borrowingLossReportSelect, borrowingLossReportView } from "@/server/borrowing-loss";
 
 export async function listGuestBorrowings(rawInput: unknown) {
   const { visitId, status, page, pageSize } =
@@ -58,6 +59,7 @@ export async function listGuestBorrowings(rawInput: unknown) {
           status: true,
           conditionAtIssue: true,
           resolvedAt: true,
+          resolutionMethod: true,
           borrowing: {
             select: {
               id: true,
@@ -98,6 +100,11 @@ export async function listGuestBorrowings(rawInput: unknown) {
             },
           },
           photos: {
+            where: {
+              auditEvent: {
+                action: { in: ["BORROWING_ISSUED", "BORROWING_RETURNED"] },
+              },
+            },
             orderBy: [{ auditEvent: { createdAt: "asc" } }, { id: "asc" }],
             select: {
               id: true,
@@ -106,6 +113,11 @@ export async function listGuestBorrowings(rawInput: unknown) {
                 select: { id: true, action: true, createdAt: true },
               },
             },
+          },
+          lossReports: {
+            orderBy: [{ reportedAt: "desc" }, { id: "desc" }],
+            take: 1,
+            select: borrowingLossReportSelect,
           },
         },
       });
@@ -122,6 +134,7 @@ export async function listGuestBorrowings(rawInput: unknown) {
         },
         lines: lines.map((line) => ({
           ...line,
+          lossReports: line.lossReports.map((report) => borrowingLossReportView(report)),
           unit: {
             ...line.unit,
             unitCode: `HK-${String(line.unit.unitNumber).padStart(6, "0")}`,

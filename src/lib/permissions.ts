@@ -19,6 +19,11 @@ export const permissionRoles = {
   "guests:update": ["HK_STAFF", "HK_SUPERVISOR"],
   "guests:checkout": ["HK_STAFF", "HK_SUPERVISOR"],
   "borrowing:create": ["HK_STAFF", "HK_SUPERVISOR"],
+  "loss:report": ["HK_STAFF", "HK_SUPERVISOR"],
+  "loss:decide": ["HK_SUPERVISOR"],
+  "loss:recover": ["HK_STAFF", "HK_SUPERVISOR"],
+  "loss:settle:propose": ["HK_STAFF", "HK_SUPERVISOR"],
+  "loss:settle:decide": ["HK_SUPERVISOR"],
   "returns:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inventory:item:create": ["HK_STAFF", "HK_SUPERVISOR"],
   "inventory:item:update": ["HK_STAFF", "HK_SUPERVISOR"],
@@ -32,6 +37,7 @@ export const permissionRoles = {
   "maintenance:receive": ["HK_STAFF", "HK_SUPERVISOR"],
   "inventory:stock:add": ["HK_STAFF", "HK_SUPERVISOR"],
   "inspection:verify": ["HK_SUPERVISOR"],
+  "write-off:propose": ["HK_SUPERVISOR"],
   "write-off:approve": ["MANAGEMENT"],
 } as const satisfies Record<string, readonly RoleCode[]>;
 

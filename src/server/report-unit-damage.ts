@@ -18,6 +18,7 @@ const DAMAGE_ACTION = "ITEM_UNIT_DAMAGE_REPORTED";
 const UPDATE_ACTION = "ITEM_UNIT_CONDITION_UPDATED";
 
 type ErrorCode =
+  | "PHOTOS_REQUIRED"
   | "REQUEST_CONFLICT"
   | "UNIT_NOT_FOUND"
   | "UNIT_STATE_CONFLICT"
@@ -178,6 +179,13 @@ async function recordUnitCondition(
     action,
   );
   if (existing) return existing;
+
+  if (photos.length === 0) {
+    throw new UnitDamageReportError(
+      "PHOTOS_REQUIRED",
+      "Lampirkan minimal satu foto kondisi unit.",
+    );
+  }
 
   const storedKeys: string[] = [];
   let transactionStarted = false;

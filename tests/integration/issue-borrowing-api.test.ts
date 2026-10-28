@@ -1,10 +1,27 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import sharp from "sharp";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import type { Prisma } from "../../src/generated/prisma/client";
 import { POST } from "../../src/app/api/borrowings/route";
 import { POST as POST_RETURN } from "../../src/app/api/returns/route";
+import {
+  GET as GET_LOSS_REPORTS,
+  POST as POST_LOSS_REPORT,
+} from "../../src/app/api/borrowing-loss-reports/route";
+import { POST as POST_LOSS_DECISION } from "../../src/app/api/borrowing-loss-reports/[reportId]/decision/route";
+import { GET as GET_LOSS_REPORT } from "../../src/app/api/borrowing-loss-reports/[reportId]/route";
+import { POST as POST_COMPENSATION } from "../../src/app/api/borrowing-loss-reports/[reportId]/compensations/route";
+import { POST as POST_COMPENSATION_DECISION } from "../../src/app/api/borrowing-loss-reports/[reportId]/compensations/[settlementId]/decision/route";
+import { POST as POST_REPLACEMENT } from "../../src/app/api/borrowing-loss-reports/[reportId]/replacements/route";
+import { POST as POST_REPLACEMENT_DECISION } from "../../src/app/api/borrowing-loss-reports/[reportId]/replacements/[settlementId]/decision/route";
+import { POST as POST_WRITE_OFF } from "../../src/app/api/borrowing-loss-reports/[reportId]/write-offs/route";
+import { POST as POST_WRITE_OFF_DECISION } from "../../src/app/api/borrowing-loss-reports/[reportId]/write-offs/[settlementId]/decision/route";
+import { GET as GET_SETTLEMENT_PHOTO } from "../../src/app/api/borrowing-loss-reports/[reportId]/settlements/[settlementId]/photos/[photoId]/route";
+import {
+  GET as GET_LOSS_RECOVERY,
+  POST as POST_LOSS_RECOVERY,
+} from "../../src/app/api/borrowing-loss-reports/[reportId]/recovery/route";
 import { POST as POST_CHECKOUT } from "../../src/app/api/guest-visits/[visitId]/checkout/route";
 import { PATCH as PATCH_VISIT } from "../../src/app/api/guest-visits/[visitId]/route";
 import { GET as GET_BORROWINGS } from "../../src/app/api/guest-visits/[visitId]/borrowings/route";
@@ -18,6 +35,10 @@ import { GET as GET_UNIT_HISTORY } from "../../src/app/api/item-units/[unitId]/h
 import { db } from "../../src/server/db";
 import { getActiveUser } from "../../src/server/get-active-user";
 import { getItemUnits } from "../../src/server/item-units";
+import {
+  reportUnitDamage,
+  updateUnitCondition,
+} from "../../src/server/report-unit-damage";
 import * as unitPhotos from "../../src/server/unit-photo";
 
 vi.mock("../../src/server/get-active-user", () => ({
@@ -100,7 +121,8 @@ async function prepareDamageReportUnit() {
   const line = lines.find((entry) => entry.unitId === unitIds[0]);
   if (!line)
     throw new Error("Expected borrowing line for the damage-report unit");
-  const returned = await postReturn(returnInput([line.id]));
+  const returnBody = returnInput([line.id]);
+  const returned = await postReturn(returnBody);
   expect(returned.status).toBe(201);
   return line;
 }
@@ -119,9 +141,257 @@ function postCheckout(body: unknown = {}) {
   );
 }
 
+function lossReportInput(borrowingLineId: string) {
+  return {
+    requestId: randomUUID(),
+    guestVisitId: visitId,
+    borrowingLineId,
+    notes: "Unit tidak ditemukan saat pemeriksaan kamar.",
+  };
+}
+
+function postLossReport(body: unknown, origin = "http://localhost:3000") {
+  return POST_LOSS_REPORT(
+    new Request("http://localhost/api/borrowing-loss-reports", {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+  );
+}
+
+function postLossDecision(reportId: string, body: unknown) {
+  return POST_LOSS_DECISION(
+    new Request(
+      `http://localhost/api/borrowing-loss-reports/${reportId}/decision`,
+      {
+        method: "POST",
+        headers: {
+          Origin: "http://localhost:3000",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      },
+    ),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function getLossReport(reportId: string) {
+  return GET_LOSS_REPORT(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}`),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function compensationInput() {
+  return {
+    requestId: randomUUID(),
+    amount: "250000.1250",
+    currencyCode: "IDR",
+    notes: "Kompensasi kehilangan telah dicatat untuk ditinjau Supervisor.",
+  };
+}
+
+function postCompensation(reportId: string, body: unknown) {
+  return POST_COMPENSATION(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/compensations`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function postCompensationDecision(reportId: string, settlementId: string, body: unknown) {
+  return POST_COMPENSATION_DECISION(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/compensations/${settlementId}/decision`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ reportId, settlementId }) },
+  );
+}
+
+function replacementInput() {
+  return {
+    requestId: randomUUID(),
+    replacementItemId: itemId,
+    name: "Unit pengganti",
+    serialNumber: "REPLACEMENT-01",
+    receivedAt: new Date().toISOString(),
+    receiptConfirmed: true,
+    notes: "Barang pengganti telah diterima oleh Housekeeping.",
+  };
+}
+
+function postReplacement(reportId: string, body: unknown, photos: File[] = files[0]) {
+  const form = new FormData();
+  form.set("data", JSON.stringify(body));
+  for (const photo of photos) form.append("photo-0", photo);
+  return POST_REPLACEMENT(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/replacements`, {
+      method: "POST", headers: { Origin: "http://localhost:3000" }, body: form,
+    }),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function postReplacementDecision(reportId: string, settlementId: string, body: unknown) {
+  return POST_REPLACEMENT_DECISION(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/replacements/${settlementId}/decision`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ reportId, settlementId }) },
+  );
+}
+
+function getSettlementPhoto(reportId: string, settlementId: string, photoId: string) {
+  return GET_SETTLEMENT_PHOTO(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/settlements/${settlementId}/photos/${photoId}`),
+    { params: Promise.resolve({ reportId, settlementId, photoId }) },
+  );
+}
+
+function writeOffInput() {
+  return { requestId: randomUUID(), notes: "Diajukan penghapusan kewajiban atas kehilangan yang telah dikonfirmasi." };
+}
+
+function postWriteOff(reportId: string, body: unknown) {
+  return POST_WRITE_OFF(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/write-offs`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function postWriteOffDecision(reportId: string, settlementId: string, body: unknown) {
+  return POST_WRITE_OFF_DECISION(
+    new Request(`http://localhost/api/borrowing-loss-reports/${reportId}/write-offs/${settlementId}/decision`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }),
+    { params: Promise.resolve({ reportId, settlementId }) },
+  );
+}
+
+function postLossRecovery(
+  reportId: string,
+  body: unknown,
+  photos: File[] = files[0],
+) {
+  const form = new FormData();
+  form.set("data", JSON.stringify(body));
+  for (const photo of photos) form.append("photo-0", photo);
+
+  return POST_LOSS_RECOVERY(
+    new Request(
+      `http://localhost/api/borrowing-loss-reports/${reportId}/recovery`,
+      { method: "POST", headers: { Origin: "http://localhost:3000" }, body: form },
+    ),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+function getLossRecovery(reportId: string) {
+  return GET_LOSS_RECOVERY(
+    new Request(
+      `http://localhost/api/borrowing-loss-reports/${reportId}/recovery`,
+    ),
+    { params: Promise.resolve({ reportId }) },
+  );
+}
+
+async function prepareApprovedLossRecovery(
+  options: { readiness?: "CLEAR" | "PENDING_INSPECTION"; condition?: "GOOD" | "DAMAGED" } = {},
+) {
+  const lines = await issueForReturn();
+  const line = lines.find((entry) => entry.unitId === unitIds[0]);
+  if (!line) throw new Error("Expected borrowing line for loss recovery");
+  await db.itemUnit.update({
+    where: { id: line.unitId },
+    data: {
+      condition: options.condition ?? "GOOD",
+      readiness: options.readiness ?? "CLEAR",
+    },
+  });
+
+  const request = lossReportInput(line.id);
+  const created = await postLossReport(request);
+  expect(created.status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect(
+    (
+      await postLossDecision(request.requestId, {
+        requestId: randomUUID(),
+        decision: "APPROVE",
+      })
+    ).status,
+  ).toBe(200);
+  mockUser.mockResolvedValue(actor);
+
+  const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  return {
+    line,
+    reportId: request.requestId,
+    body: {
+      requestId: randomUUID(),
+      expectedUpdatedAt: unit.updatedAt.toISOString(),
+      occurredAt: new Date().toISOString(),
+      locationId,
+      condition: options.condition ?? "GOOD",
+      notes: "Unit ditemukan dan diterima kembali oleh Housekeeping.",
+    },
+  };
+}
+
+function getLossReports(query: Record<string, string> = {}) {
+  const url = new URL("http://localhost/api/borrowing-loss-reports");
+  url.search = new URLSearchParams(query).toString();
+  return GET_LOSS_REPORTS(new Request(url));
+}
+
+async function prepareLossList() {
+  const lines = await issueForReturn();
+  const token = randomUUID();
+
+  await Promise.all(
+    lines.map((line, index) =>
+      db.itemUnit.update({
+        where: { id: line.unitId },
+        data: { name: `Unit ${token} ${index}` },
+      }),
+    ),
+  );
+
+  const requests = lines.map((line) => lossReportInput(line.id));
+  for (const request of requests) {
+    expect((await postLossReport(request)).status).toBe(201);
+  }
+
+  await Promise.all(
+    requests.map((request, index) =>
+      db.borrowingLossReport.update({
+        where: { id: request.requestId },
+        data: { reportedAt: new Date(`2026-10-28T0${index + 1}:00:00.000Z`) },
+      }),
+    ),
+  );
+
+  return { lines, requests, token };
+}
+
 function postDamage(
   body: unknown,
-  photos: File[] = [],
+  photos: File[] = [files[0][0]],
   origin = "http://localhost:3000",
 ) {
   const form = new FormData();
@@ -157,7 +427,7 @@ async function conditionInput(condition = "DAMAGED") {
 
 function postConditionUpdate(
   body: unknown,
-  photos: File[] = [],
+  photos: File[] = [files[0][0]],
   origin = "http://localhost:3000",
 ) {
   const form = new FormData();
@@ -433,6 +703,10 @@ afterEach(async () => {
     where: { unit: { createdById: actor.id } },
     select: { photoKey: true },
   });
+  const settlementPhotos = await db.borrowingLossSettlementPhoto.findMany({
+    where: { settlement: { proposedById: actor.id } },
+    select: { photoKey: true },
+  });
 
   await db.$transaction(async (tx) => {
     await tx.itemUnitPhoto.deleteMany({
@@ -444,6 +718,15 @@ afterEach(async () => {
     });
     await tx.returnBatch.deleteMany({
       where: { guestVisit: { createdById: actor.id } },
+    });
+    await tx.borrowingLossSettlementPhoto.deleteMany({
+      where: { settlement: { proposedById: actor.id } },
+    });
+    await tx.borrowingLossSettlement.deleteMany({
+      where: { lossReport: { borrowingLine: { borrowing: { issuedById: actor.id } } } },
+    });
+    await tx.borrowingLossReport.deleteMany({
+      where: { borrowingLine: { borrowing: { issuedById: actor.id } } },
     });
     await tx.borrowingLine.deleteMany({
       where: { borrowing: { issuedById: actor.id } },
@@ -461,7 +744,8 @@ afterEach(async () => {
   });
 
   await Promise.all(
-    photos.map((photo) => unitPhotos.removeUnitPhoto(photo.photoKey)),
+    [...new Set([...photos, ...settlementPhotos].map((photo) => photo.photoKey))]
+      .map((key) => unitPhotos.removeUnitPhoto(key)),
   );
   vi.unstubAllEnvs();
 });
@@ -1862,6 +2146,158 @@ it.each(["CLEAR", "ON_HOLD", "PENDING_INSPECTION", "PENDING_VERIFICATION"] as co
   },
 );
 
+it.each(["CONDITION", "DAMAGE"] as const)(
+  "rejects new %s observations without photos through the API and service",
+  async (operation) => {
+    const body =
+      operation === "CONDITION"
+        ? await conditionInput()
+        : damageInput();
+    const send =
+      operation === "CONDITION" ? postConditionUpdate : postDamage;
+    const save =
+      operation === "CONDITION" ? updateUnitCondition : reportUnitDamage;
+    const before = await db.itemUnit.findUniqueOrThrow({
+      where: { id: body.unitId },
+    });
+
+    const response = await send(body, []);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(await response.json()).toMatchObject({
+      error: "PHOTOS_REQUIRED",
+    });
+    await expect(save(body, actor.id, [])).rejects.toMatchObject({
+      code: "PHOTOS_REQUIRED",
+    });
+
+    expect(
+      await db.itemUnit.findUniqueOrThrow({
+        where: { id: body.unitId },
+      }),
+    ).toEqual(before);
+    expect(
+      await db.auditEvent.count({ where: { id: body.requestId } }),
+    ).toBe(0);
+    expect(
+      await db.itemUnitPhoto.count({
+        where: { auditEventId: body.requestId },
+      }),
+    ).toBe(0);
+  },
+);
+
+it.each(["CONDITION", "DAMAGE"] as const)(
+  "rejects an empty photo for a new %s observation",
+  async (operation) => {
+    const body =
+      operation === "CONDITION"
+        ? await conditionInput()
+        : damageInput();
+    const send =
+      operation === "CONDITION" ? postConditionUpdate : postDamage;
+    const before = await db.itemUnit.findUniqueOrThrow({
+      where: { id: body.unitId },
+    });
+
+    const response = await send(body, [
+      new File([], "empty.png", { type: "image/png" }),
+    ]);
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ error: "INVALID_PHOTO" });
+    expect(
+      await db.itemUnit.findUniqueOrThrow({
+        where: { id: body.unitId },
+      }),
+    ).toEqual(before);
+    expect(
+      await db.auditEvent.count({ where: { id: body.requestId } }),
+    ).toBe(0);
+    expect(
+      await db.itemUnitPhoto.count({
+        where: { auditEventId: body.requestId },
+      }),
+    ).toBe(0);
+  },
+);
+
+it.each(["CONDITION", "DAMAGE"] as const)(
+  "replays a finalized legacy %s observation without photos or state changes",
+  async (operation) => {
+    if (operation === "DAMAGE") await prepareDamageReportUnit();
+
+    const body =
+      operation === "CONDITION"
+        ? await conditionInput()
+        : damageInput();
+    const send =
+      operation === "CONDITION" ? postConditionUpdate : postDamage;
+    const action =
+      operation === "CONDITION"
+        ? "ITEM_UNIT_CONDITION_UPDATED"
+        : "ITEM_UNIT_DAMAGE_REPORTED";
+    const requestHash = createHash("sha256")
+      .update(
+        JSON.stringify({
+          unitId: body.unitId,
+          condition: body.condition,
+          notes: body.notes,
+          photoHashes: [],
+          ...("expectedUpdatedAt" in body
+            ? { expectedUpdatedAt: body.expectedUpdatedAt }
+            : {}),
+        }),
+      )
+      .digest("hex");
+
+    await db.auditEvent.create({
+      data: {
+        id: body.requestId,
+        actorId: actor.id,
+        action,
+        entityType: "ITEM_UNIT",
+        entityId: body.unitId,
+        reason: body.notes,
+        oldValues: { condition: "GOOD", readiness: "CLEAR" },
+        newValues: {
+          condition: body.condition,
+          readiness: "ON_HOLD",
+          requestHash,
+        },
+      },
+    });
+    await db.itemUnit.update({
+      where: { id: body.unitId },
+      data: { condition: "DAMAGED", readiness: "PENDING_VERIFICATION" },
+    });
+    const before = await db.itemUnit.findUniqueOrThrow({
+      where: { id: body.unitId },
+    });
+
+    const response = await send(body, []);
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      replayed: true,
+      report: { id: body.requestId, unitId: body.unitId, photos: [] },
+    });
+    expect(
+      await db.itemUnit.findUniqueOrThrow({
+        where: { id: body.unitId },
+      }),
+    ).toEqual(before);
+    expect(
+      await db.auditEvent.count({ where: { id: body.requestId } }),
+    ).toBe(1);
+    expect(
+      await db.itemUnitPhoto.count({
+        where: { auditEventId: body.requestId },
+      }),
+    ).toBe(0);
+  },
+);
+
 it.each(["GOOD", "MINOR_DAMAGE", "MISSING_PART"] as const)(
   "rejects reclassification from DAMAGED to %s through the general update",
   async (condition) => {
@@ -2736,3 +3172,1271 @@ it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)(
     expect((await postMaintenance("RECEIPT", receive)).status).toBe(403);
   },
 );
+
+it("records a guest loss report with notes and keeps the borrowing unresolved", async () => {
+  const [line] = await issueForReturn();
+  const reportInput = lossReportInput(line.id);
+  const response = await postLossReport(reportInput);
+  expect(response.status).toBe(201);
+  const { report } = await response.json();
+  expect(report).toMatchObject({
+    id: reportInput.requestId,
+    status: "PENDING",
+    notes: reportInput.notes,
+    borrowingLine: { id: line.id, status: "OUTSTANDING", resolvedAt: null },
+  });
+  expect(report).not.toHaveProperty("requestHash");
+  const replay = await postLossReport(reportInput);
+  expect(replay.status).toBe(200);
+  const borrowingHistory = await getBorrowings().then((result) => result.json());
+  expect(
+    borrowingHistory.lines.find(
+      (entry: { id: string }) => entry.id === line.id,
+    ).lossReports,
+  ).toMatchObject([{ id: report.id, status: "PENDING" }]);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({ custody: "GUEST", lossState: "NONE" });
+
+  const duplicate = await postLossReport({
+    ...lossReportInput(line.id),
+    requestId: randomUUID(),
+  });
+  expect(duplicate.status).toBe(409);
+  expect(
+    await db.borrowingLossReport.count({
+      where: { borrowingLine: { borrowing: { guestVisitId: visitId } } },
+    }),
+  ).toBe(1);
+});
+
+it("allows a supervisor to confirm a loss without resolving the guest obligation", async () => {
+  const [line] = await issueForReturn();
+  const created = await postLossReport(lossReportInput(line.id));
+  const { report } = await created.json();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+
+  const decision = {
+    requestId: randomUUID(),
+    decision: "APPROVE",
+    notes: "Kehilangan telah dikonfirmasi.",
+  };
+  const response = await postLossDecision(report.id, decision);
+  expect(response.status).toBe(200);
+  expect((await response.json()).report.status).toBe("APPROVED");
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({ custody: "GUEST", lossState: "LOST", readiness: "ON_HOLD" });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+
+  const retry = await postLossDecision(report.id, decision);
+  expect(retry.status).toBe(200);
+  expect(await db.auditEvent.count({ where: { id: decision.requestId } })).toBe(1);
+  expect(await getLossReport(report.id).then((result) => result.json())).toMatchObject({
+    report: { status: "APPROVED", closedBy: { id: actor.id } },
+  });
+});
+
+it("allows a supervisor to reject a loss report without changing unit state", async () => {
+  const [line] = await issueForReturn();
+  const created = await postLossReport(lossReportInput(line.id));
+  const { report } = await created.json();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+
+  const decision = { requestId: randomUUID(), decision: "REJECT" };
+  const response = await postLossDecision(report.id, decision);
+  expect(response.status).toBe(200);
+  expect((await response.json()).report.status).toBe("REJECTED");
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({ custody: "GUEST", lossState: "NONE", readiness: "CLEAR" });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+  expect((await postLossReport(lossReportInput(line.id))).status).toBe(201);
+});
+
+it("cancels a pending loss report atomically when the unit is returned", async () => {
+  const [line, otherLine] = await issueForReturn();
+  const created = await Promise.all([
+    postLossReport(lossReportInput(line.id)),
+    postLossReport(lossReportInput(otherLine.id)),
+  ]);
+  expect(created.map((response) => response.status)).toEqual([201, 201]);
+  const [{ report }, { report: otherReport }] = await Promise.all(
+    created.map((response) => response.json()),
+  );
+
+  const returnBody = returnInput([line.id]);
+  const returned = await postReturn(returnBody);
+  expect(returned.status).toBe(201);
+  expect(
+    await db.borrowingLossReport.findUniqueOrThrow({ where: { id: report.id } }),
+  ).toMatchObject({
+    status: "CANCELLED",
+    closedById: actor.id,
+    closureNotes: "Unit diterima melalui pengembalian.",
+  });
+  expect(
+    await db.borrowingLossReport.findUniqueOrThrow({
+      where: { id: otherReport.id },
+    }),
+  ).toMatchObject({ status: "PENDING", closedAt: null, closedById: null });
+  expect(
+    await db.auditEvent.count({
+      where: {
+        action: "BORROWING_LOSS_CANCELLED",
+        entityId: line.unitId,
+      },
+    }),
+  ).toBe(1);
+
+  const replay = await postReturn(returnBody);
+  expect(replay.status).toBe(200);
+  expect(
+    await db.auditEvent.count({
+      where: {
+        action: "BORROWING_LOSS_CANCELLED",
+        entityId: line.unitId,
+      },
+    }),
+  ).toBe(1);
+});
+
+it("does not allow a new loss report after the borrowing line was returned", async () => {
+  const [line] = await issueForReturn();
+  expect((await postReturn(returnInput([line.id]))).status).toBe(201);
+
+  const response = await postLossReport(lossReportInput(line.id));
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "LINE_NOT_OUTSTANDING" });
+  expect(
+    await db.borrowingLossReport.count({
+      where: { borrowingLine: { borrowing: { guestVisitId: visitId } } },
+    }),
+  ).toBe(0);
+});
+
+it("serializes loss reporting with physical return", async () => {
+  const [line] = await issueForReturn();
+  const reportInput = lossReportInput(line.id);
+  const returnBody = returnInput([line.id]);
+  const [reportResponse, returnResponse] = await Promise.all([
+    postLossReport(reportInput),
+    postReturn(returnBody),
+  ]);
+
+  expect(returnResponse.status).toBe(201);
+  expect([201, 409]).toContain(reportResponse.status);
+  const savedReport = await db.borrowingLossReport.findFirst({
+    where: { borrowingLineId: line.id },
+  });
+  if (savedReport) expect(savedReport.status).toBe("CANCELLED");
+  else expect(reportResponse.status).toBe(409);
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "RETURNED" });
+});
+
+it("keeps a pending loss report when the return transaction rolls back", async () => {
+  const [line] = await issueForReturn();
+  const created = await postLossReport(lossReportInput(line.id));
+  const { report } = await created.json();
+  const returnBody = returnInput([line.id]);
+  const failure = new Error("Simulated return audit failure");
+  const originalTransaction = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    originalTransaction(
+      async (tx) => {
+        const failingTransaction = new Proxy(tx, {
+          get(target, key) {
+            if (key === "auditEvent") {
+              return new Proxy(target.auditEvent, {
+                get(delegate, action) {
+                  if (action === "create") {
+                    return async (
+                      args: Parameters<typeof target.auditEvent.create>[0],
+                    ) => {
+                      if (args.data.action === "RETURN_CREATED") throw failure;
+                      return target.auditEvent.create(args);
+                    };
+                  }
+                  return Reflect.get(delegate, action);
+                },
+              });
+            }
+            return Reflect.get(target, key);
+          },
+        });
+        return callback(failingTransaction);
+      },
+      options,
+    ),
+  );
+
+  await expect(postReturn(returnBody)).rejects.toBe(failure);
+  expect(
+    await db.borrowingLossReport.findUniqueOrThrow({ where: { id: report.id } }),
+  ).toMatchObject({ status: "PENDING", closedAt: null, closedById: null });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+  expect(
+    await db.returnBatch.count({ where: { guestVisitId: visitId } }),
+  ).toBe(0);
+  expect(
+    await db.auditEvent.count({ where: { action: "BORROWING_LOSS_CANCELLED" } }),
+  ).toBe(0);
+});
+
+it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)(
+  "does not allow %s to report a borrowed unit as lost",
+  async (role) => {
+    const [line] = await issueForReturn();
+    mockUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect((await postLossReport(lossReportInput(line.id))).status).toBe(403);
+    expect(
+      await db.borrowingLossReport.count({
+        where: { borrowingLine: { borrowing: { guestVisitId: visitId } } },
+      }),
+    ).toBe(0);
+  },
+);
+
+it("allows a loss report after guest checkout while its borrowing remains outstanding", async () => {
+  const [line] = await issueForReturn();
+  expect((await postCheckout({ acknowledgeOutstanding: true })).status).toBe(200);
+
+  const response = await postLossReport(lossReportInput(line.id));
+  expect(response.status).toBe(201);
+  expect((await response.json()).report.status).toBe("PENDING");
+});
+
+it("paginates loss reports with unit details without exposing request hashes", async () => {
+  const { requests, token } = await prepareLossList();
+
+  const firstPage = await getLossReports({ q: token, pageSize: "1" });
+  expect(firstPage.status).toBe(200);
+  expect(firstPage.headers.get("Cache-Control")).toBe("no-store");
+  const first = await firstPage.json();
+  expect(first.lossReports.map((report: { id: string }) => report.id)).toEqual([
+    requests[1].requestId,
+  ]);
+  expect(first.lossReports[0]).not.toHaveProperty("requestHash");
+  expect(first.lossReports[0].borrowingLine.unit).toMatchObject({
+    name: `Unit ${token} 1`,
+    item: { id: itemId },
+  });
+  expect(first.lossReports[0].borrowingLine.unit.unitCode).toMatch(
+    /^HK-\d{6,}$/u,
+  );
+  expect(first.pagination).toMatchObject({
+    page: 1,
+    pageSize: 1,
+    total: 2,
+    totalPages: 2,
+    hasNextPage: true,
+  });
+
+  const secondPage = await getLossReports({
+    q: token,
+    page: "2",
+    pageSize: "1",
+  });
+  expect((await secondPage.json()).lossReports[0].id).toBe(
+    requests[0].requestId,
+  );
+
+  const emptyPage = await getLossReports({
+    q: token,
+    page: "3",
+    pageSize: "1",
+  });
+  expect(await emptyPage.json()).toMatchObject({
+    lossReports: [],
+    pagination: { total: 2, hasNextPage: false },
+  });
+});
+
+it("defaults to pending loss reports and supports explicit status filters", async () => {
+  const { requests, token } = await prepareLossList();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decision = { requestId: randomUUID(), decision: "REJECT" };
+  expect(
+    (await postLossDecision(requests[0].requestId, decision)).status,
+  ).toBe(200);
+
+  const pending = await getLossReports({ q: token });
+  expect(await pending.json()).toMatchObject({
+    lossReports: [{ id: requests[1].requestId, status: "PENDING" }],
+    pagination: { total: 1 },
+  });
+
+  const rejected = await getLossReports({ q: token, status: "REJECTED" });
+  expect(await rejected.json()).toMatchObject({
+    lossReports: [{ id: requests[0].requestId, status: "REJECTED" }],
+    pagination: { total: 1 },
+  });
+
+  const all = await getLossReports({ q: token, status: "ALL" });
+  expect((await all.json()).pagination.total).toBe(2);
+});
+
+it("treats wildcard characters in loss report search as literal text", async () => {
+  const { lines, requests, token } = await prepareLossList();
+  await Promise.all([
+    db.itemUnit.update({
+      where: { id: lines[0].unitId },
+      data: { name: `Unit ${token}%_` },
+    }),
+    db.itemUnit.update({
+      where: { id: lines[1].unitId },
+      data: { name: `Unit ${token}ab` },
+    }),
+  ]);
+
+  const response = await getLossReports({ q: `unit ${token}%_` });
+  expect(await response.json()).toMatchObject({
+    lossReports: [{ id: requests[0].requestId }],
+    pagination: { total: 1 },
+  });
+});
+
+it.each(["HK_STAFF", "HK_SUPERVISOR", "MANAGEMENT"] as const)(
+  "allows %s to view loss reports",
+  async (role) => {
+    mockUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect((await getLossReports()).status).toBe(200);
+  },
+);
+
+it("denies system administrators and unauthenticated users access to loss reports", async () => {
+  mockUser.mockResolvedValue({ ...actor, roles: ["SYSTEM_ADMIN"] });
+  expect((await getLossReports()).status).toBe(403);
+
+  mockUser.mockResolvedValue(null);
+  expect((await getLossReports()).status).toBe(401);
+});
+
+it.each([
+  { page: "0" },
+  { page: "1.5" },
+  { page: "1001" },
+  { pageSize: "0" },
+  { pageSize: "51" },
+  { status: "LOST" },
+  { q: "x".repeat(101) },
+] as Record<string, string>[])(
+  "rejects invalid loss report query input: %o",
+  async (query) => {
+    expect((await getLossReports(query)).status).toBe(400);
+  },
+);
+
+it("physically recovers an approved lost borrowing without recording a return", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery();
+
+  const response = await postLossRecovery(reportId, body);
+  expect(response.status).toBe(201);
+  const { recovery } = await response.json();
+  expect(recovery).toMatchObject({
+    id: body.requestId,
+    unitId: line.unitId,
+    after: {
+      custody: "HOUSEKEEPING",
+      locationId,
+      condition: "GOOD",
+      readiness: "CLEAR",
+      lossState: "NONE",
+      borrowingStatus: "SETTLED",
+      resolutionMethod: "PHYSICAL_RECOVERY",
+      occurredAt: body.occurredAt,
+    },
+  });
+  expect(recovery).not.toHaveProperty("after.requestHash");
+  expect(recovery.photos).toHaveLength(1);
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({
+    status: "SETTLED",
+    resolutionMethod: "PHYSICAL_RECOVERY",
+    resolvedAt: new Date(body.occurredAt),
+  });
+  expect(
+    await db.returnLine.count({ where: { borrowingLineId: line.id } }),
+  ).toBe(0);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({
+    custody: "HOUSEKEEPING",
+    locationId,
+    condition: "GOOD",
+    readiness: "CLEAR",
+    lossState: "NONE",
+  });
+
+  const history = await getBorrowings({ status: "ALL" }).then((result) =>
+    result.json(),
+  );
+  const savedLine = history.lines.find((entry: { id: string }) => entry.id === line.id);
+  expect(savedLine).toMatchObject({ status: "SETTLED", resolutionMethod: "PHYSICAL_RECOVERY" });
+  expect(savedLine.photos).toHaveLength(1);
+  expect(
+    await db.itemUnitPhoto.count({
+      where: { borrowingLineId: line.id, auditEventId: body.requestId },
+    }),
+  ).toBe(1);
+
+  const details = await getLossRecovery(reportId);
+  expect(details.status).toBe(200);
+  expect(await details.json()).toMatchObject({
+    report: { id: reportId, status: "APPROVED" },
+    recovery: { id: body.requestId, photos: [{ id: recovery.photos[0].id }] },
+  });
+  const unitHistory = await getUnitHistory(line.unitId).then((result) =>
+    result.json(),
+  );
+  const recoveryEvent = unitHistory.events.find(
+    (event: { id: string }) => event.id === body.requestId,
+  );
+  expect(recoveryEvent).toBeDefined();
+  expect(recoveryEvent.newValues).not.toHaveProperty("requestHash");
+});
+
+it.each([
+  { amount: "0" },
+  { amount: "0.0000" },
+  { amount: "-1" },
+  { amount: "1.12345" },
+  { amount: "1000000000000000" },
+  { amount: 100 },
+  { currencyCode: "US" },
+  { currencyCode: "US12" },
+] as Record<string, unknown>[])("rejects invalid compensation input: %o", async (invalid) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const response = await postCompensation(reportId, { ...compensationInput(), ...invalid });
+  expect(response.status).toBe(400);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it.each(["250000", "12.3456", "999999999999999.9999"])(
+  "preserves the exact compensation amount %s without floating-point conversion",
+  async (amount) => {
+    const { reportId, line } = await prepareApprovedLossRecovery();
+    const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+    const response = await postCompensation(reportId, { ...compensationInput(), amount, currencyCode: "usd" });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ settlement: { amount, currencyCode: "USD", status: "PENDING" } });
+    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(unit);
+    expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+    const history = await getLossReport(reportId).then((result) => result.json());
+    expect(history.report.settlements).toMatchObject([{ amount, currencyCode: "USD" }]);
+    expect(history.report.settlements[0]).not.toHaveProperty("requestHash");
+  },
+);
+
+it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies %s compensation proposals", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(403);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it.each(["HK_STAFF", "MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies %s compensation decisions", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(403);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING" });
+});
+
+it("rejects compensation before loss approval and after physical recovery", async () => {
+  const [line] = await issueForReturn();
+  const report = lossReportInput(line.id);
+  expect((await postLossReport(report)).status).toBe(201);
+  expect((await postCompensation(report.requestId, compensationInput())).status).toBe(409);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postLossDecision(report.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(200);
+  const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue(actor);
+  expect((await postLossRecovery(report.requestId, {
+    requestId: randomUUID(), expectedUpdatedAt: unit.updatedAt.toISOString(),
+    occurredAt: new Date().toISOString(), locationId, condition: "GOOD", notes: "Ditemukan kembali.",
+  })).status).toBe(201);
+  expect((await postCompensation(report.requestId, compensationInput())).status).toBe(409);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: report.requestId } })).toBe(0);
+});
+
+it("rejects a second pending proposal without changing the unit or borrowing", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(409);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolutionMethod: null });
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(1);
+});
+
+it("approves compensation for exactly one borrowing line while preserving the lost unit", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const unitsBefore = await db.itemUnit.count({ where: { itemId } });
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const response = await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Kompensasi disetujui." });
+  expect(response.status).toBe(200);
+  const { settlement } = await response.json();
+  expect(settlement).toMatchObject({ status: "APPROVED", amount: "250000.125", currencyCode: "IDR", decidedBy: { id: actor.id } });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "SETTLED", resolutionMethod: "COMPENSATION", resolvedAt: new Date(settlement.decidedAt) });
+  expect(await db.borrowingLine.count({ where: { borrowingId: (await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).borrowingId, status: "OUTSTANDING" } })).toBe(1);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.itemUnit.count({ where: { itemId } })).toBe(unitsBefore);
+  expect(await db.returnLine.count({ where: { borrowingLineId: line.id } })).toBe(0);
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(409);
+  const history = await getBorrowings({ status: "ALL" }).then((result) => result.json());
+  expect(history.lines.find((entry: { id: string }) => entry.id === line.id)).toMatchObject({ resolutionMethod: "COMPENSATION", lossReports: [{ settlements: [{ status: "APPROVED" }] }] });
+});
+
+it("rejects compensation without resolving the line and permits a new proposal", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "REJECT", notes: "Nominal perlu dikoreksi." })).status).toBe(200);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolvedAt: null, resolutionMethod: null });
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(201);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(2);
+});
+
+it("replays compensation requests and decisions without duplicating audits or rewinding later state", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  expect((await postCompensation(reportId, proposal)).status).toBe(200);
+  expect((await postCompensation(reportId, { ...proposal, amount: "1" })).status).toBe(409);
+  expect((await postCompensation(reportId, { ...proposal, currencyCode: "USD" })).status).toBe(409);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE", notes: "Disetujui." };
+  expect((await postCompensationDecision(reportId, proposal.requestId, decision)).status).toBe(200);
+  const settled = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  const replay = await postCompensationDecision(reportId, proposal.requestId, decision);
+  expect(await replay.json()).toMatchObject({ replayed: true, settlement: { status: "APPROVED" } });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { ...decision, decision: "REJECT" })).status).toBe(409);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toEqual(settled);
+  expect(await db.auditEvent.count({ where: { id: { in: [proposal.requestId, decision.requestId] } } })).toBe(2);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(1);
+  const history = await getUnitHistory(line.unitId).then((result) => result.json());
+  for (const event of history.events.filter((entry: { action: string }) => entry.action.startsWith("BORROWING_COMPENSATION_"))) {
+    expect(event.newValues).not.toHaveProperty("requestHash");
+  }
+});
+
+it("serializes concurrent compensation proposals and decisions", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposals = [compensationInput(), compensationInput()];
+  const responses = await Promise.all(proposals.map((body) => postCompensation(reportId, body)));
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  const proposal = await db.borrowingLossSettlement.findFirstOrThrow({ where: { lossReportId: reportId } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decisions = await Promise.all(["APPROVE", "REJECT"].map((decision) => postCompensationDecision(reportId, proposal.id, { requestId: randomUUID(), decision })));
+  expect(decisions.map((response) => response.status).sort()).toEqual([200, 409]);
+  expect(await db.auditEvent.count({ where: { action: { in: ["BORROWING_COMPENSATION_APPROVED", "BORROWING_COMPENSATION_REJECTED"] }, newValues: { path: ["settlementId"], equals: proposal.id } } })).toBe(1);
+});
+
+it("rolls back compensation approval and its borrowing resolution when audit persistence fails", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  const unitBefore = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const failure = new Error("Simulated compensation audit failure");
+  const originalTransaction = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    originalTransaction(async (tx) => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key === "auditEvent") return new Proxy(target.auditEvent, {
+          get(delegate, action) {
+            if (action === "create") return async (args: Parameters<typeof target.auditEvent.create>[0]) => {
+              if (args.data.action === "BORROWING_COMPENSATION_APPROVED") throw failure;
+              return target.auditEvent.create(args);
+            };
+            return Reflect.get(delegate, action);
+          },
+        });
+        return Reflect.get(target, key);
+      },
+    })), options),
+  );
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE" };
+  await expect(postCompensationDecision(reportId, proposal.requestId, decision)).rejects.toBe(failure);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", decidedAt: null, decidedById: null });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolutionMethod: null, resolvedAt: null });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(unitBefore);
+  expect(await db.auditEvent.count({ where: { id: decision.requestId } })).toBe(0);
+});
+
+it("rejects approving a pending compensation after physical recovery", async () => {
+  const { reportId, body } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  expect((await postLossRecovery(reportId, body)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(409);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING" });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "REJECT", notes: "Unit telah ditemukan dan diterima." })).status).toBe(200);
+});
+
+it("does not expose compensation mutations to unauthenticated requests or mismatched reports", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue(null);
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(401);
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(401);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postCompensationDecision(randomUUID(), proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(404);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING" });
+});
+
+it("serializes physical recovery with compensation approval without replacing a finalized resolution", async () => {
+  const { reportId, line, body } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const [decision, recovery] = await Promise.all([
+    postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" }),
+    postLossRecovery(reportId, body),
+  ]);
+  expect(recovery.status).toBe(201);
+  expect([200, 409]).toContain(decision.status);
+  const settlement = await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } });
+  const savedLine = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  expect(savedLine.status).toBe("SETTLED");
+  if (decision.status === 200) {
+    expect(settlement.status).toBe("APPROVED");
+    expect(savedLine.resolutionMethod).toBe("COMPENSATION");
+    expect(savedLine.resolvedAt).toEqual(settlement.decidedAt);
+  } else {
+    expect(settlement.status).toBe("PENDING");
+    expect(savedLine.resolutionMethod).toBe("PHYSICAL_RECOVERY");
+    expect(savedLine.resolvedAt).toEqual(new Date(body.occurredAt));
+  }
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toMatchObject({ custody: "HOUSEKEEPING", lossState: "NONE" });
+  expect(await db.returnLine.count({ where: { borrowingLineId: line.id } })).toBe(0);
+});
+
+it("receives a later-found unit without undoing its approved compensation", async () => {
+  const { reportId, line, body } = await prepareApprovedLossRecovery();
+  const proposal = compensationInput();
+  expect((await postCompensation(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(200);
+  const settled = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  mockUser.mockResolvedValue(actor);
+  const response = await postLossRecovery(reportId, { ...body, occurredAt: new Date().toISOString() });
+  expect(response.status).toBe(201);
+  expect((await response.json()).recovery.after).toMatchObject({ resolutionMethod: "COMPENSATION", custody: "HOUSEKEEPING", lossState: "NONE" });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toEqual(settled);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "APPROVED" });
+});
+
+it("preserves an earlier readiness hold when a recovered unit is in good condition", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery({
+    readiness: "PENDING_INSPECTION",
+  });
+
+  expect((await postLossRecovery(reportId, body)).status).toBe(201);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({
+    custody: "HOUSEKEEPING",
+    readiness: "PENDING_INSPECTION",
+    lossState: "NONE",
+  });
+});
+
+it("holds a recovered unit for inspection when its received condition is not good", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery();
+
+  const response = await postLossRecovery(reportId, {
+    ...body,
+    condition: "DAMAGED",
+  });
+  expect(response.status).toBe(201);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({
+    custody: "HOUSEKEEPING",
+    condition: "DAMAGED",
+    readiness: "PENDING_INSPECTION",
+    lossState: "NONE",
+  });
+});
+
+it("does not let physical recovery clear a previously recorded damaged condition", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery({
+    condition: "DAMAGED",
+  });
+
+  const response = await postLossRecovery(reportId, { ...body, condition: "GOOD" });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "CONDITION_CONFLICT" });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "OUTSTANDING", resolutionMethod: null });
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({ custody: "GUEST", condition: "DAMAGED", lossState: "LOST" });
+  expect(
+    await db.auditEvent.count({ where: { id: body.requestId } }),
+  ).toBe(0);
+});
+
+it("requires receipt photos and replays the same physical recovery without changing later state", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery();
+  const missingPhoto = await postLossRecovery(reportId, body, []);
+  expect(missingPhoto.status).toBe(400);
+  expect(await missingPhoto.json()).toMatchObject({ error: "PHOTOS_REQUIRED" });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "OUTSTANDING" });
+
+  const first = await postLossRecovery(reportId, body);
+  expect(first.status).toBe(201);
+  await db.itemUnit.update({
+    where: { id: line.unitId },
+    data: { readiness: "PENDING_VERIFICATION" },
+  });
+  const replay = await postLossRecovery(reportId, body);
+  expect(replay.status).toBe(200);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+  ).toMatchObject({ custody: "HOUSEKEEPING", readiness: "PENDING_VERIFICATION" });
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(1);
+  expect(await db.itemUnitPhoto.count({ where: { auditEventId: body.requestId } })).toBe(1);
+});
+
+it("settles a guest-loss report only once when recovery requests race", async () => {
+  const { line, reportId, body } = await prepareApprovedLossRecovery();
+  const requests = [
+    postLossRecovery(reportId, body),
+    postLossRecovery(reportId, { ...body, requestId: randomUUID() }),
+  ];
+  const responses = await Promise.all(requests);
+
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+  ).toMatchObject({ status: "SETTLED", resolutionMethod: "PHYSICAL_RECOVERY" });
+  expect(
+    await db.auditEvent.count({
+      where: { action: "BORROWING_PHYSICALLY_RECOVERED", entityId: line.unitId },
+    }),
+  ).toBe(1);
+  expect(await db.itemUnitPhoto.count({ where: { borrowingLineId: line.id } })).toBe(2);
+});
+
+it("keeps a physically received replacement pending without creating inventory", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const proposal = replacementInput();
+  const response = await postReplacement(reportId, proposal, [files[0][0], files[1][0]]);
+  expect(response.status).toBe(201);
+  const { settlement } = await response.json();
+  expect(settlement).toMatchObject({
+    id: proposal.requestId, method: "REPLACEMENT", status: "PENDING", amount: null,
+    currencyCode: null, replacementItemId: itemId, replacementCondition: "GOOD",
+    replacementUnitId: null, receivedAt: proposal.receivedAt,
+  });
+  expect(settlement.photos).toHaveLength(2);
+  expect(settlement).not.toHaveProperty("requestHash");
+  expect(settlement.photos[0]).not.toHaveProperty("photoKey");
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+  const report = await getLossReport(reportId).then((result) => result.json());
+  expect(report.report.settlements[0].photos[0].url).toBe(settlement.photos[0].url);
+  const photo = await getSettlementPhoto(reportId, settlement.id, settlement.photos[0].id);
+  expect(photo.status).toBe(200);
+  expect(photo.headers.get("Cache-Control")).toBe("private, no-store");
+  expect(photo.headers.get("Content-Type")).toBe("image/webp");
+  expect((await photo.arrayBuffer()).byteLength).toBeGreaterThan(0);
+  expect((await getSettlementPhoto(randomUUID(), settlement.id, settlement.photos[0].id)).status).toBe(404);
+  mockUser.mockResolvedValue({ ...actor, roles: ["SYSTEM_ADMIN"] });
+  expect((await getSettlementPhoto(reportId, settlement.id, settlement.photos[0].id)).status).toBe(403);
+});
+
+it("approves a replacement under a different registered item type and creates exactly one unit", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const itemName = `Replacement ${randomUUID()}`;
+  const replacementItem = await db.item.create({ data: { name: itemName, normalizedName: itemName.toLowerCase(), createdById: actor.id, updatedById: actor.id } });
+  const proposal = { ...replacementInput(), replacementItemId: replacementItem.id };
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  const original = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE", notes: "Barang pengganti diterima." };
+  const response = await postReplacementDecision(reportId, proposal.requestId, decision);
+  expect(response.status).toBe(200);
+  const { settlement } = await response.json();
+  const storage = await db.location.findUniqueOrThrow({ where: { code: "HK_MAIN_STORAGE" } });
+  expect(settlement).toMatchObject({ method: "REPLACEMENT", status: "APPROVED", replacementUnit: { itemId: replacementItem.id, condition: "GOOD", readiness: "CLEAR", custody: "HOUSEKEEPING", locationId: storage.id } });
+  const newUnit = await db.itemUnit.findUniqueOrThrow({ where: { id: settlement.replacementUnitId } });
+  expect(newUnit.id).not.toBe(line.unitId);
+  expect(newUnit.unitNumber).not.toBe(original.unitNumber);
+  expect(newUnit).toMatchObject({ name: proposal.name, serialNumber: proposal.serialNumber, itemId: replacementItem.id });
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(3);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(original);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "SETTLED", resolutionMethod: "REPLACEMENT", resolvedAt: new Date(settlement.decidedAt) });
+  expect(await db.borrowingLine.count({ where: { borrowing: { guestVisitId: visitId }, status: "OUTSTANDING" } })).toBe(1);
+  expect(await db.returnLine.count({ where: { borrowingLineId: line.id } })).toBe(0);
+  const evidence = await db.itemUnitPhoto.findMany({ where: { unitId: newUnit.id }, include: { auditEvent: true } });
+  expect(evidence).toHaveLength(1);
+  expect(evidence[0].auditEvent).toMatchObject({ action: "STOCK_UNIT_CREATED", newValues: { settlementId: proposal.requestId, originalUnitId: line.unitId, borrowingLineId: line.id } });
+  expect(await unitPhotos.readUnitPhoto(evidence[0].photoKey)).toBeInstanceOf(Buffer);
+  expect((await postReplacementDecision(reportId, proposal.requestId, decision)).status).toBe(200);
+  expect((await postReplacementDecision(reportId, proposal.requestId, { ...decision, requestId: randomUUID() })).status).toBe(409);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(3);
+  expect(await db.auditEvent.count({ where: { id: decision.requestId } })).toBe(1);
+});
+
+it.each(["MINOR_DAMAGE", "DAMAGED", "MISSING_PART"] as const)("accepts a %s replacement pending inspection without treating approval as verification", async (condition) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = { ...replacementInput(), condition };
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const response = await postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" });
+  expect(response.status).toBe(200);
+  expect((await response.json()).settlement.replacementUnit).toMatchObject({ condition, readiness: "PENDING_INSPECTION" });
+});
+
+it("rejects a replacement without creating a unit and permits a fresh settlement proposal", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "REJECT" })).status).toBe(200);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolutionMethod: null });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toMatchObject({ lossState: "LOST" });
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(1);
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(201);
+});
+
+it.each([
+  { receiptConfirmed: false },
+  { receivedAt: "not-a-date" },
+  { condition: "LOST" },
+  { replacementItemId: "invalid" },
+  { amount: "1" },
+] as Record<string, unknown>[])("rejects invalid replacement input: %o", async (invalid) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  expect((await postReplacement(reportId, { ...replacementInput(), ...invalid })).status).toBe(400);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it("requires new replacement photos and validates item availability and receipt time", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal, [])).status).toBe(400);
+  expect((await postReplacement(reportId, { ...proposal, receivedAt: new Date(Date.now() + 60_000).toISOString() })).status).toBe(400);
+  await db.item.update({ where: { id: itemId }, data: { isActive: false } });
+  expect((await postReplacement(reportId, proposal)).status).toBe(409);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it("keeps one pending settlement across compensation and replacement methods", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const responses = await Promise.all([
+    postReplacement(reportId, replacementInput()),
+    postCompensation(reportId, compensationInput()),
+  ]);
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId, status: "PENDING" } })).toBe(1);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+});
+
+it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies %s replacement proposals", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postReplacement(reportId, replacementInput())).status).toBe(403);
+});
+
+it.each(["HK_STAFF", "MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies %s replacement decisions", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(403);
+});
+
+it("replays replacement proposals with immutable photos and rejects changed evidence or wrong decision endpoints", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  expect((await postReplacement(reportId, proposal)).status).toBe(200);
+  expect((await postReplacement(reportId, proposal, files[1])).status).toBe(409);
+  expect((await postReplacement(reportId, { ...proposal, serialNumber: "OTHER" })).status).toBe(409);
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(1);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(404);
+});
+
+it("rechecks a replacement item before approval without creating partial inventory", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  await db.item.update({ where: { id: itemId }, data: { isActive: false } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(409);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", replacementUnitId: null });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING" });
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+});
+
+it("serializes replacement approvals and rolls back new inventory when the decision audit fails", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  const failure = new Error("Simulated replacement audit failure");
+  const originalTransaction = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    originalTransaction(async (tx) => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key === "auditEvent") return new Proxy(target.auditEvent, {
+          get(delegate, action) {
+            if (action === "create") return async (args: Parameters<typeof target.auditEvent.create>[0]) => {
+              if (args.data.action === "BORROWING_REPLACEMENT_APPROVED") throw failure;
+              return target.auditEvent.create(args);
+            };
+            return Reflect.get(delegate, action);
+          },
+        });
+        return Reflect.get(target, key);
+      },
+    })), options),
+  );
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  await expect(postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).rejects.toBe(failure);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING" });
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", replacementUnitId: null });
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(1);
+  const responses = await Promise.all([0, 1].map(() => postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })));
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(3);
+});
+
+it("receives the original unit after replacement without undoing settlement or removing the new unit", async () => {
+  const { reportId, line, body } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  expect((await postReplacement(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const decision = await postReplacementDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" });
+  expect(decision.status).toBe(200);
+  const { settlement } = await decision.json();
+  const originalLine = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  mockUser.mockResolvedValue(actor);
+  expect((await postLossRecovery(reportId, body)).status).toBe(201);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toEqual(originalLine);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toMatchObject({ custody: "HOUSEKEEPING", lossState: "NONE" });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: settlement.replacementUnitId } })).toMatchObject({ custody: "HOUSEKEEPING", lossState: "NONE" });
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(3);
+});
+
+it("retains replacement photos after a committed response is lost and replays without creating another proposal", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  const transact = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce(async (callback: unknown) => {
+    if (typeof callback !== "function") throw new Error("Expected interactive transaction");
+    await transact(callback as (tx: Prisma.TransactionClient) => Promise<unknown>);
+    throw new Error("Simulated lost replacement response");
+  });
+  await expect(postReplacement(reportId, proposal)).rejects.toThrow("Simulated lost replacement response");
+  const photo = await db.borrowingLossSettlementPhoto.findFirstOrThrow({ where: { settlementId: proposal.requestId } });
+  expect((await unitPhotos.readUnitPhoto(photo.photoKey)).length).toBeGreaterThan(0);
+  const replay = await postReplacement(reportId, proposal);
+  expect(replay.status).toBe(200);
+  expect(await replay.json()).toMatchObject({ replayed: true, settlement: { id: proposal.requestId, status: "PENDING" } });
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(1);
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(1);
+});
+
+it("rolls back replacement receipt records and removes staged photos when its audit fails", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = replacementInput();
+  const stored = vi.spyOn(unitPhotos, "storeUnitPhoto");
+  const failure = new Error("Simulated replacement receipt audit failure");
+  const transact = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    transact(async (tx) => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key === "auditEvent") return new Proxy(target.auditEvent, {
+          get(delegate, action) {
+            if (action === "create") return async () => { throw failure; };
+            return Reflect.get(delegate, action);
+          },
+        });
+        return Reflect.get(target, key);
+      },
+    })), options),
+  );
+  await expect(postReplacement(reportId, proposal)).rejects.toBe(failure);
+  expect(await db.borrowingLossSettlement.count({ where: { id: proposal.requestId } })).toBe(0);
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(0);
+  expect(await db.auditEvent.count({ where: { id: proposal.requestId } })).toBe(0);
+  const key = await stored.mock.results[0].value;
+  await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("refuses replacement proposals before loss approval or after its borrowing is resolved", async () => {
+  const [line] = await issueForReturn();
+  const report = lossReportInput(line.id);
+  expect((await postLossReport(report)).status).toBe(201);
+  expect((await postReplacement(report.requestId, replacementInput())).status).toBe(409);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postLossDecision(report.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(200);
+  const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const receipt = {
+    requestId: randomUUID(), expectedUpdatedAt: unit.updatedAt.toISOString(),
+    occurredAt: new Date().toISOString(), locationId, condition: "GOOD", notes: "Unit ditemukan.",
+  };
+  expect((await postLossRecovery(report.requestId, receipt)).status).toBe(201);
+  expect((await postReplacement(report.requestId, replacementInput())).status).toBe(409);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: report.requestId } })).toBe(0);
+});
+
+it("records a supervisor write-off proposal without changing inventory or the guest obligation", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  const response = await postWriteOff(reportId, proposal);
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ settlement: {
+    id: proposal.requestId, method: "WRITE_OFF", status: "PENDING",
+    amount: null, currencyCode: null, replacementUnitId: null, notes: proposal.notes,
+  } });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolvedAt: null, resolutionMethod: null });
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  expect(await db.borrowingLossSettlementPhoto.count({ where: { settlementId: proposal.requestId } })).toBe(0);
+});
+
+it.each(["HK_STAFF", "MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies %s write-off proposals", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postWriteOff(reportId, writeOffInput())).status).toBe(403);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it.each(["HK_STAFF", "HK_SUPERVISOR", "SYSTEM_ADMIN"] as const)("denies %s write-off decisions", async (role) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Disetujui." })).status).toBe(403);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", decidedAt: null });
+});
+
+it("allows Management to approve exactly one obligation after checkout while preserving the lost unit", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  expect((await postCheckout({ acknowledgeOutstanding: true })).status).toBe(200);
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE", notes: "Penghapusan kewajiban disetujui berdasarkan hasil peninjauan." };
+  const response = await postWriteOffDecision(reportId, proposal.requestId, decision);
+  expect(response.status).toBe(200);
+  const { settlement } = await response.json();
+  expect(settlement).toMatchObject({ status: "APPROVED", method: "WRITE_OFF", decisionNotes: decision.notes, decidedBy: { id: actor.id } });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "SETTLED", resolutionMethod: "WRITE_OFF", resolvedAt: new Date(settlement.decidedAt) });
+  expect(await db.borrowingLine.count({ where: { borrowing: { guestVisitId: visitId }, status: "OUTSTANDING" } })).toBe(1);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  expect(await db.returnLine.count({ where: { borrowingLineId: line.id } })).toBe(0);
+  expect(await db.auditEvent.findUniqueOrThrow({ where: { id: decision.requestId } })).toMatchObject({ reason: decision.notes, action: "BORROWING_WRITE_OFF_APPROVED" });
+  const history = await getBorrowings({ status: "ALL" }).then((result) => result.json());
+  expect(history.lines.find((entry: { id: string }) => entry.id === line.id)).toMatchObject({ resolutionMethod: "WRITE_OFF", lossReports: [{ settlements: [{ method: "WRITE_OFF", status: "APPROVED" }] }] });
+});
+
+it("keeps a rejected write-off in history and permits another settlement proposal", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "REJECT", notes: "Dasar pengajuan belum memadai." })).status).toBe(200);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(before);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolvedAt: null });
+  mockUser.mockResolvedValue(actor);
+  expect((await postCompensation(reportId, compensationInput())).status).toBe(201);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(2);
+});
+
+it.each([{}, { notes: " " }, { amount: "1", notes: "Alasan." }])("requires a write-off reason and rejects unrelated proposal fields: %o", async (invalid) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postWriteOff(reportId, { requestId: randomUUID(), ...invalid })).status).toBe(400);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(0);
+});
+
+it.each(["APPROVE", "REJECT"] as const)("requires a Management reason for %s", async (decision) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  for (const notes of [undefined, "   "]) {
+    expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision, notes })).status).toBe(400);
+  }
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", decidedAt: null });
+});
+
+it("replays write-off requests and decisions without duplicating or altering finalized records", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  expect((await postWriteOff(reportId, proposal)).status).toBe(200);
+  expect((await postWriteOff(reportId, { ...proposal, notes: "Alasan berubah." })).status).toBe(409);
+  expect((await postCompensation(reportId, { ...compensationInput(), requestId: proposal.requestId })).status).toBe(409);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE", notes: "Disetujui setelah peninjauan." };
+  expect((await postWriteOffDecision(reportId, proposal.requestId, decision)).status).toBe(200);
+  const settled = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  const replay = await postWriteOffDecision(reportId, proposal.requestId, decision);
+  expect(await replay.json()).toMatchObject({ replayed: true });
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { ...decision, decision: "REJECT" })).status).toBe(409);
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { ...decision, requestId: randomUUID() })).status).toBe(409);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toEqual(settled);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(1);
+  expect(await db.auditEvent.count({ where: { id: { in: [proposal.requestId, decision.requestId] } } })).toBe(2);
+  const history = await getUnitHistory(line.unitId).then((result) => result.json());
+  const event = history.events.find((entry: { id: string }) => entry.id === decision.requestId);
+  expect(event.newValues).not.toHaveProperty("requestHash");
+});
+
+it("keeps one pending settlement across all three methods", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const responses = await Promise.all([
+    postWriteOff(reportId, writeOffInput()),
+    postReplacement(reportId, replacementInput()),
+    postCompensation(reportId, compensationInput()),
+  ]);
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 409, 409]);
+  expect(await db.borrowingLossSettlement.count({ where: { lossReportId: reportId } })).toBe(1);
+});
+
+it.each(["COMPENSATION", "REPLACEMENT"] as const)("does not let Management decide %s through the write-off endpoint", async (method) => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  const proposal = method === "COMPENSATION" ? compensationInput() : replacementInput();
+  const response = method === "COMPENSATION"
+    ? await postCompensation(reportId, proposal)
+    : await postReplacement(reportId, proposal);
+  expect(response.status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Ditinjau." })).status).toBe(404);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING" });
+});
+
+it("blocks unauthenticated write-off requests and prevents Supervisor approval through compensation routes", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue(null);
+  expect((await postWriteOff(reportId, writeOffInput())).status).toBe(401);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  expect((await postCompensationDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(404);
+  mockUser.mockResolvedValue(null);
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Ditinjau." })).status).toBe(401);
+});
+
+it("does not approve a pending write-off after physical recovery resolves the obligation", async () => {
+  const { reportId, body } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  expect((await postLossRecovery(reportId, body)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Ditinjau." })).status).toBe(409);
+  expect((await postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision: "REJECT", notes: "Unit telah ditemukan dan diterima." })).status).toBe(200);
+});
+
+it("rolls back a write-off decision and line resolution when its audit fails", async () => {
+  const { reportId, line } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  const unitBefore = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  const failure = new Error("Simulated write-off audit failure");
+  const transact = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    transact(async (tx) => callback(new Proxy(tx, {
+      get(target, key) {
+        if (key === "auditEvent") return new Proxy(target.auditEvent, {
+          get(delegate, action) {
+            if (action === "create") return async () => { throw failure; };
+            return Reflect.get(delegate, action);
+          },
+        });
+        return Reflect.get(target, key);
+      },
+    })), options),
+  );
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  const decision = { requestId: randomUUID(), decision: "APPROVE", notes: "Disetujui." };
+  await expect(postWriteOffDecision(reportId, proposal.requestId, decision)).rejects.toBe(failure);
+  expect(await db.borrowingLossSettlement.findUniqueOrThrow({ where: { id: proposal.requestId } })).toMatchObject({ status: "PENDING", decidedAt: null, decidedById: null });
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING", resolutionMethod: null });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toEqual(unitBefore);
+  expect(await db.auditEvent.count({ where: { id: decision.requestId } })).toBe(0);
+});
+
+it("serializes Management write-off decisions", async () => {
+  const { reportId } = await prepareApprovedLossRecovery();
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const proposal = writeOffInput();
+  expect((await postWriteOff(reportId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  const responses = await Promise.all(["APPROVE", "REJECT"].map((decision) => postWriteOffDecision(reportId, proposal.requestId, { requestId: randomUUID(), decision, notes: "Hasil peninjauan Management." })));
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 409]);
+  expect(await db.auditEvent.count({ where: { action: { in: ["BORROWING_WRITE_OFF_APPROVED", "BORROWING_WRITE_OFF_REJECTED"] }, newValues: { path: ["settlementId"], equals: proposal.requestId } } })).toBe(1);
+});
+
+it("refuses an unapproved loss report and preserves an approved write-off during later recovery", async () => {
+  const [line] = await issueForReturn();
+  const report = lossReportInput(line.id);
+  expect((await postLossReport(report)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postWriteOff(report.requestId, writeOffInput())).status).toBe(409);
+  expect((await postLossDecision(report.requestId, { requestId: randomUUID(), decision: "APPROVE" })).status).toBe(200);
+  const proposal = writeOffInput();
+  expect((await postWriteOff(report.requestId, proposal)).status).toBe(201);
+  mockUser.mockResolvedValue({ ...actor, roles: ["MANAGEMENT"] });
+  expect((await postWriteOffDecision(report.requestId, proposal.requestId, { requestId: randomUUID(), decision: "APPROVE", notes: "Penghapusan disetujui." })).status).toBe(200);
+  const settled = await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } });
+  const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } });
+  mockUser.mockResolvedValue(actor);
+  expect((await postLossRecovery(report.requestId, {
+    requestId: randomUUID(), expectedUpdatedAt: unit.updatedAt.toISOString(),
+    occurredAt: new Date().toISOString(), locationId, condition: "GOOD", notes: "Unit asli ditemukan dan diterima.",
+  })).status).toBe(201);
+  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toEqual(settled);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toMatchObject({ custody: "HOUSEKEEPING", lossState: "NONE" });
+  expect(await db.itemUnit.count({ where: { createdById: actor.id } })).toBe(2);
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  expect((await postWriteOff(report.requestId, writeOffInput())).status).toBe(409);
+});
