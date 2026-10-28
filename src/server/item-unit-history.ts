@@ -9,7 +9,12 @@ function visibleNewValues(
   values: Prisma.JsonValue | null,
 ) {
   if (
-    action !== "ITEM_UNIT_DAMAGE_REPORTED" ||
+    ![
+      "ITEM_UNIT_DAMAGE_REPORTED",
+      "ITEM_UNIT_CONDITION_UPDATED",
+      "ITEM_UNIT_SENT_TO_ENGINEERING",
+      "ITEM_UNIT_RECEIVED_FROM_ENGINEERING",
+    ].includes(action) ||
     !values ||
     typeof values !== "object" ||
     Array.isArray(values)

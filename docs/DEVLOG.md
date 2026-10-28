@@ -1055,3 +1055,27 @@ Retrospective entry based on the implementation and verification recorded when S
 
 - Owner melaporkan empat error TypeScript karena onCancel tidak tersedia pada props input di React types terpasang. Menghapus kedua props input tersebut dan memasang listener native cancel pada shared hook usePhotoSelection, beserta cleanup. Cancel file picker tetap dihentikan sebelum mencapai dialog; seluruh pemakai foto catalog/unit memakai penanganan yang sama.
 - Source/caller ditinjau; typecheck/lint dan uji Cancel native belum dijalankan ulang oleh agent. Skills: Systematic Debugging/Ponytail untuk koreksi bersama tanpa type suppression; React untuk lifecycle listener. Docs Server/Client Components Next terpasang dikonsultasikan.
+
+## 2026-10-28 — Tolak pemulihan kondisi lewat pengembalian
+
+- `receiveReturn` kini memvalidasi kondisi unit yang sudah dikunci. Unit selain `GOOD` tidak dapat dicatat kembali sebagai `GOOD`; error memakai `UNIT_STATE_CONFLICT`, dan transaksi membatalkan seluruh batch. Tes regresi mencakup tiga kondisi non-GOOD, bukti foto yang dibersihkan saat rollback, pengembalian dengan kondisi tetap rusak, dan replay yang tidak menimpa perubahan kondisi berikutnya.
+- Source dan diff diperiksa; `git diff --check` bersih. Lint, typecheck, dan tests belum dijalankan sesuai arahan owner. Skills: Ponytail untuk perubahan terkecil, TDD untuk cakupan regresi, Humanizer untuk pesan error yang langsung dan jelas.
+
+## 2026-10-28 — Perbarui kondisi umum dan keputusan serah/terima Engineering
+
+- Owner melaporkan semua tests perubahan guard return sebelumnya passed, setelah sempat mengirim kegagalan setup akibat tabel user DB test belum ada. Tidak ada output/totals baru; hasil owner dipisahkan dari patch saat ini.
+- Menambahkan POST /api/item-unit-condition-updates bagi Staff/Supervisor, memakai kembali engine foto/audit/replay laporan kerusakan dan handler multipart bersama. Versi unit wajib cocok; unit harus aktif, di Housekeeping, tidak hilang dan tidak punya pinjaman outstanding. Temuan kerusakan awal memasang ON_HOLD; tambahan foto/catatan dengan kondisi sama mempertahankan readiness. Bukti baru menambah riwayat dan tidak mengganti foto lama. Endpoint laporan sesudah return Baik mempertahankan kontrak/hash replay lama.
+- Klarifikasi owner: jenis kerusakan awal tidak diubah melalui pembaruan rutin atau return. Guard ini juga diterapkan ke endpoint laporan lama agar tidak menjadi jalur pintas. Pemulihan dicatat saat penerimaan hasil perbaikan. Owner menyetujui alur tanpa akun Engineering: staff mencatat serah/terima dan hasil perbaikan, penerimaan menjadi PENDING_VERIFICATION, lalu Supervisor memverifikasi. Implementasi serah/terima ini menjadi langkah BE berikutnya.
+- Tes ditambahkan untuk versi/input/izin, pembaruan unit yang belum pernah dipinjam, evidence tambahan tanpa mengubah readiness, larangan klasifikasi, state tidak layak, concurrency, replay, rollback/cleanup dan respons commit yang hilang. Lint/typecheck/tests tidak dijalankan sesuai arahan owner; source/caller ditinjau dan git diff --check bersih. Tidak ada dependency/schema/migrasi baru. FE general update dan label aktivitas baru belum dihubungkan. Skills: Housekeeping Context/Ponytail untuk scope/reuse, Postgres untuk lock/version, TDD untuk cakupan regresi, Humanizer untuk copy/progres; docs Route Handler Next terpasang dikonsultasikan.
+
+## 2026-10-28 — Koreksi simulasi kegagalan audit pembaruan kondisi
+
+- Owner melaporkan tes rollback menerima HTTP201. Mock sebelumnya dipasang pada delegate client utama, sedangkan service menulis audit melalui client transaksi. Tes kini memakai transaksi nyata dengan proxy yang hanya menggagalkan tx.auditEvent.create, mengikuti pola tes registrasi/checkout existing. Assertion tetap memeriksa rollback unit, ketiadaan audit/foto, dan penghapusan file staged; service tidak diubah.
+- Source dan diff ditinjau; lint/typecheck/tests tetap dijalankan owner. Skills: Systematic Debugging untuk menelusuri batas client, Ponytail untuk koreksi terbatas, TDD untuk menjaga assertion perilaku rollback.
+
+## 2026-10-28 — Catat serah dan penerimaan unit dari Engineering
+
+- Menambahkan endpoint multipart serah-terima dan penerimaan perbaikan. Kedua tahap mewajibkan foto baru dan membuat event audit/evidence terpisah yang dipasangkan lewat ID serah; histori GET menyajikan kondisi sebelum/sesudah, pelaku, waktu, dan URL foto tanpa membuka request hash.
+- Serah hanya untuk unit aktif dalam custody Housekeeping, tanpa pinjaman outstanding/loss, dan mengubah custody ke Engineering serta readiness ON_HOLD. Penerimaan memeriksa event serah, versi unit, urutan waktu, lokasi aktif Housekeeping, serta foto; kondisi dikembalikan ke custody Housekeeping pada PENDING_VERIFICATION. Kondisi rusak dapat tetap sama tanpa mengarang perbaikan; perubahan kondisi membutuhkan identitas pelaksana dan waktu selesai. Supervisor tetap memakai verifikasi existing sebelum kelayakan pinjam.
+- Memakai multipart, storage foto privat, AuditEvent/ItemUnitPhoto, autentikasi dan verifikasi existing; tidak menambah schema/migrasi/tiket/role Engineering. Menambah coverage integrasi untuk bukti dua tahap, verifikasi pasca-terima, foto wajib, larangan pemulihan tanpa bukti kerja dan replay/concurrency.
+- Source/caller diperiksa; lint/typecheck/tests tidak dijalankan sesuai arahan owner. FE belum tersambung. Skill Housekeeping Context/Ponytail mengarahkan reuse dan catatan handoff; TDD menentukan cakupan regresi; Next Route Handler docs terpasang dipakai untuk parameter route.

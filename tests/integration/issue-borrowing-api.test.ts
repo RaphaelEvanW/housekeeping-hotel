@@ -9,7 +9,11 @@ import { POST as POST_CHECKOUT } from "../../src/app/api/guest-visits/[visitId]/
 import { PATCH as PATCH_VISIT } from "../../src/app/api/guest-visits/[visitId]/route";
 import { GET as GET_BORROWINGS } from "../../src/app/api/guest-visits/[visitId]/borrowings/route";
 import { POST as POST_DAMAGE_REPORT } from "../../src/app/api/item-unit-damage-reports/route";
+import { POST as POST_CONDITION_UPDATE } from "../../src/app/api/item-unit-condition-updates/route";
 import { POST as POST_VERIFICATION } from "../../src/app/api/unit-verifications/route";
+import { POST as POST_MAINTENANCE_HANDOVER } from "../../src/app/api/unit-maintenance/handover/route";
+import { POST as POST_MAINTENANCE_RECEIVE } from "../../src/app/api/unit-maintenance/receive/route";
+import { GET as GET_MAINTENANCE } from "../../src/app/api/unit-maintenance/[handoverId]/route";
 import { GET as GET_UNIT_HISTORY } from "../../src/app/api/item-units/[unitId]/history/route";
 import { db } from "../../src/server/db";
 import { getActiveUser } from "../../src/server/get-active-user";
@@ -94,7 +98,8 @@ async function issueForReturn() {
 async function prepareDamageReportUnit() {
   const lines = await issueForReturn();
   const line = lines.find((entry) => entry.unitId === unitIds[0]);
-  if (!line) throw new Error("Expected borrowing line for the damage-report unit");
+  if (!line)
+    throw new Error("Expected borrowing line for the damage-report unit");
   const returned = await postReturn(returnInput([line.id]));
   expect(returned.status).toBe(201);
   return line;
@@ -104,7 +109,10 @@ function postCheckout(body: unknown = {}) {
   return POST_CHECKOUT(
     new Request(`http://localhost/api/guest-visits/${visitId}/checkout`, {
       method: "POST",
-      headers: { Origin: "http://localhost:3000", "Content-Type": "application/json" },
+      headers: {
+        Origin: "http://localhost:3000",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ visitId }) },
@@ -138,6 +146,31 @@ function damageInput() {
   };
 }
 
+async function conditionInput(condition = "DAMAGED") {
+  const unit = await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[0] } });
+  return {
+    ...damageInput(),
+    condition,
+    expectedUpdatedAt: unit.updatedAt.toISOString(),
+  };
+}
+
+function postConditionUpdate(
+  body: unknown,
+  photos: File[] = [],
+  origin = "http://localhost:3000",
+) {
+  const form = new FormData();
+  form.set("data", JSON.stringify(body));
+  for (const file of photos) form.append("photo-0", file);
+
+  return POST_CONDITION_UPDATE(new Request("http://localhost/api/item-unit-condition-updates", {
+    method: "POST",
+    headers: { Origin: origin },
+    body: form,
+  }));
+}
+
 function postVerification(
   body: unknown,
   photos: File[][] = files,
@@ -156,6 +189,69 @@ function postVerification(
       headers: { Origin: origin },
       body: form,
     }),
+  );
+}
+
+async function maintenanceHandoverInput() {
+  const unit = await db.itemUnit.findUniqueOrThrow({
+    where: { id: unitIds[0] },
+  });
+  return {
+    requestId: randomUUID(),
+    unitId: unit.id,
+    expectedUpdatedAt: unit.updatedAt.toISOString(),
+    occurredAt: new Date(Date.now() - 60_000).toISOString(),
+    condition: "DAMAGED" as const,
+    handedOverTo: "Tim Engineering",
+    notes: "Unit tidak menyala saat diperiksa.",
+  };
+}
+
+async function maintenanceReceiveInput(handoverId: string) {
+  const unit = await db.itemUnit.findUniqueOrThrow({
+    where: { id: unitIds[0] },
+  });
+  return {
+    requestId: randomUUID(),
+    handoverId,
+    expectedUpdatedAt: unit.updatedAt.toISOString(),
+    occurredAt: new Date().toISOString(),
+    locationId,
+    condition: "GOOD" as const,
+    receivedFrom: "Tim Engineering",
+    performedBy: "Teknisi uji",
+    workCompletedAt: new Date(Date.now() - 30_000).toISOString(),
+    workPerformed: "Kabel diganti dan fungsi unit diuji.",
+  };
+}
+
+function postMaintenance(
+  operation: "HANDOVER" | "RECEIPT",
+  body: unknown,
+  photos: File[] = [files[0][0]],
+) {
+  const form = new FormData();
+  form.set("data", JSON.stringify(body));
+  for (const file of photos) form.append("photo-0", file);
+
+  const handler =
+    operation === "HANDOVER"
+      ? POST_MAINTENANCE_HANDOVER
+      : POST_MAINTENANCE_RECEIVE;
+  const route = operation === "HANDOVER" ? "handover" : "receive";
+  return handler(
+    new Request(`http://localhost/api/unit-maintenance/${route}`, {
+      method: "POST",
+      headers: { Origin: "http://localhost:3000" },
+      body: form,
+    }),
+  );
+}
+
+function getMaintenance(handoverId: string) {
+  return GET_MAINTENANCE(
+    new Request(`http://localhost/api/unit-maintenance/${handoverId}`),
+    { params: Promise.resolve({ handoverId }) },
   );
 }
 
@@ -212,7 +308,9 @@ function getBorrowings(
   query: Record<string, string> = {},
   targetVisitId = visitId,
 ) {
-  const url = new URL(`http://localhost/api/guest-visits/${targetVisitId}/borrowings`);
+  const url = new URL(
+    `http://localhost/api/guest-visits/${targetVisitId}/borrowings`,
+  );
   url.search = new URLSearchParams(query).toString();
 
   return GET_BORROWINGS(new Request(url), {
@@ -356,10 +454,7 @@ afterEach(async () => {
     await tx.guestVisit.deleteMany({ where: { createdById: actor.id } });
     await tx.location.deleteMany({
       where: {
-        OR: [
-          { id: locationId },
-          { code: `RETURN-${actor.id}` },
-        ],
+        OR: [{ id: locationId }, { code: `RETURN-${actor.id}` }],
       },
     });
     await tx.user.delete({ where: { id: actor.id } });
@@ -375,10 +470,9 @@ afterAll(() => db.$disconnect());
 
 it("keeps issued guest snapshots after primary guest and room are corrected", async () => {
   const firstInput = input();
-  const firstResponse = await post(
-    { ...firstInput, unitIds: [unitIds[0]] },
-    [files[0]],
-  );
+  const firstResponse = await post({ ...firstInput, unitIds: [unitIds[0]] }, [
+    files[0],
+  ]);
   expect(firstResponse.status).toBe(201);
   const first = await firstResponse.json();
 
@@ -400,10 +494,9 @@ it("keeps issued guest snapshots after primary guest and room are corrected", as
   });
 
   const secondInput = input();
-  const secondResponse = await post(
-    { ...secondInput, unitIds: [unitIds[1]] },
-    [files[1]],
-  );
+  const secondResponse = await post({ ...secondInput, unitIds: [unitIds[1]] }, [
+    files[1],
+  ]);
   expect(secondResponse.status).toBe(201);
   const second = await secondResponse.json();
   expect(second.borrowing).toMatchObject({
@@ -564,10 +657,9 @@ it("returns an empty borrowing history with visit wide summary", async () => {
 });
 
 it("lists paginated line history and current outstanding lines after checkout", async () => {
-  const firstIssue = await post(
-    { ...input(), unitIds: [unitIds[0]] },
-    [files[0]],
-  );
+  const firstIssue = await post({ ...input(), unitIds: [unitIds[0]] }, [
+    files[0],
+  ]);
   expect(firstIssue.status).toBe(201);
   const first = await firstIssue.json();
   await db.borrowing.update({
@@ -576,7 +668,10 @@ it("lists paginated line history and current outstanding lines after checkout", 
   });
   await db.borrowingLine.updateMany({
     where: { borrowingId: first.borrowing.id },
-    data: { status: "RETURNED", resolvedAt: new Date("2026-10-26T03:00:00.000Z") },
+    data: {
+      status: "RETURNED",
+      resolvedAt: new Date("2026-10-26T03:00:00.000Z"),
+    },
   });
   await db.itemUnit.update({
     where: { id: unitIds[0] },
@@ -588,10 +683,9 @@ it("lists paginated line history and current outstanding lines after checkout", 
     },
   });
 
-  const secondIssue = await post(
-    { ...input(), unitIds: [unitIds[1]] },
-    [files[1]],
-  );
+  const secondIssue = await post({ ...input(), unitIds: [unitIds[1]] }, [
+    files[1],
+  ]);
   expect(secondIssue.status).toBe(201);
   const second = await secondIssue.json();
   await db.borrowing.update({
@@ -628,7 +722,13 @@ it("lists paginated line history and current outstanding lines after checkout", 
       settledLines: 0,
       hasOutstanding: true,
     },
-    pagination: { page: 1, pageSize: 1, total: 2, totalPages: 2, hasNextPage: true },
+    pagination: {
+      page: 1,
+      pageSize: 1,
+      total: 2,
+      totalPages: 2,
+      hasNextPage: true,
+    },
   });
   expect(current.lines).toHaveLength(1);
   expect(current.lines[0]).toMatchObject({
@@ -658,7 +758,11 @@ it("lists paginated line history and current outstanding lines after checkout", 
   expect(returned.lines[0]).toMatchObject({
     status: "RETURNED",
     conditionAtIssue: "GOOD",
-    unit: { id: unitIds[0], condition: "DAMAGED", readiness: "PENDING_INSPECTION" },
+    unit: {
+      id: unitIds[0],
+      condition: "DAMAGED",
+      readiness: "PENDING_INSPECTION",
+    },
   });
   expect(returned.pagination).toMatchObject({ hasNextPage: false, total: 2 });
 
@@ -718,10 +822,9 @@ it("keeps borrowing history scoped to one stay, even for the same guest and room
       updatedById: actor.id,
     },
   });
-  const originalIssue = await post(
-    { ...input(), unitIds: [unitIds[0]] },
-    [files[0]],
-  );
+  const originalIssue = await post({ ...input(), unitIds: [unitIds[0]] }, [
+    files[0],
+  ]);
   const otherIssue = await post(
     {
       requestId: randomUUID(),
@@ -761,11 +864,14 @@ it.each([
   [{ pageSize: "51" }],
   [{ status: "STAYING" }],
   [{}, "not-a-uuid"],
-] as const)("rejects invalid borrowing history query input", async (query, id: string = visitId) => {
-  const response = await getBorrowings(query, id);
-  expect(response.status).toBe(400);
-  expect(response.headers.get("Cache-Control")).toBe("no-store");
-});
+] as const)(
+  "rejects invalid borrowing history query input",
+  async (query, id: string = visitId) => {
+    const response = await getBorrowings(query, id);
+    expect(response.status).toBe(400);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+  },
+);
 
 it("returns not found for a valid but unknown visit id", async () => {
   const response = await getBorrowings({}, randomUUID());
@@ -985,6 +1091,73 @@ it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)(
   },
 );
 
+it("allows a Supervisor to hand over and receive a unit", async () => {
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const handover = await maintenanceHandoverInput();
+  expect((await postMaintenance("HANDOVER", handover)).status).toBe(201);
+
+  const receive = await maintenanceReceiveInput(handover.requestId);
+  expect((await postMaintenance("RECEIPT", receive)).status).toBe(201);
+});
+
+it("rolls back a maintenance event and deletes staged photos when evidence persistence fails", async () => {
+  const handover = await maintenanceHandoverInput();
+  const before = await db.itemUnit.findUniqueOrThrow({
+    where: { id: handover.unitId },
+  });
+  const key = await unitPhotos.storeUnitPhoto(
+    await unitPhotos.prepareUnitPhoto(files[0][0]),
+  );
+  vi.spyOn(unitPhotos, "storeUnitPhoto").mockResolvedValue(key);
+
+  await expect(
+    postMaintenance("HANDOVER", handover, [files[0][0], files[1][0]]),
+  ).rejects.toThrow();
+
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: handover.unitId } }),
+  ).toEqual(before);
+  expect(await db.auditEvent.count({ where: { id: handover.requestId } })).toBe(
+    0,
+  );
+  await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({
+    code: "ENOENT",
+  });
+});
+
+it("preserves committed handover evidence after a lost transaction response", async () => {
+  const body = await maintenanceHandoverInput();
+  const transact = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce(
+    async (callback: unknown) => {
+      if (typeof callback !== "function") {
+        throw new Error("Expected interactive transaction");
+      }
+
+      await transact(
+        callback as (tx: Prisma.TransactionClient) => Promise<unknown>,
+      );
+      throw new Error("Simulated lost handover response");
+    },
+  );
+
+  await expect(postMaintenance("HANDOVER", body)).rejects.toThrow(
+    "Simulated lost handover response",
+  );
+  const evidence = await db.itemUnitPhoto.findFirstOrThrow({
+    where: { auditEventId: body.requestId },
+  });
+  expect(
+    (await unitPhotos.readUnitPhoto(evidence.photoKey)).length,
+  ).toBeGreaterThan(0);
+
+  const retry = await postMaintenance("HANDOVER", body);
+  expect(retry.status).toBe(200);
+  expect(
+    await db.itemUnitPhoto.count({ where: { auditEventId: body.requestId } }),
+  ).toBe(1);
+});
+
 it("rejects unauthenticated requests", async () => {
   mockUser.mockResolvedValue(null);
   expect((await post(input())).status).toBe(401);
@@ -1029,14 +1202,26 @@ it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
         id: expect.any(String),
         guestVisitId: visitId,
         receivedBy: { id: actor.id },
-        lines: [{ borrowingLineId: issued[0].id, condition: "GOOD", locationId }],
+        lines: [
+          { borrowingLineId: issued[0].id, condition: "GOOD", locationId },
+        ],
       },
     });
     expect(firstResult.receipt).not.toHaveProperty("requestHash");
 
-    expect(await db.borrowingLine.count({ where: { id: issued[0].id, status: "RETURNED" } })).toBe(1);
-    expect(await db.borrowingLine.count({ where: { id: issued[1].id, status: "OUTSTANDING" } })).toBe(1);
-    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } })).toMatchObject({
+    expect(
+      await db.borrowingLine.count({
+        where: { id: issued[0].id, status: "RETURNED" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.borrowingLine.count({
+        where: { id: issued[1].id, status: "OUTSTANDING" },
+      }),
+    ).toBe(1);
+    expect(
+      await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } }),
+    ).toMatchObject({
       custody: "HOUSEKEEPING",
       condition: "GOOD",
       readiness: "CLEAR",
@@ -1050,12 +1235,18 @@ it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
 
     const second = await postReturn(returnInput([issued[1].id]));
     expect(second.status).toBe(201);
-    expect(await db.borrowingLine.count({ where: { status: "OUTSTANDING", borrowing: { guestVisitId: visitId } } })).toBe(0);
+    expect(
+      await db.borrowingLine.count({
+        where: { status: "OUTSTANDING", borrowing: { guestVisitId: visitId } },
+      }),
+    ).toBe(0);
   },
 );
 
 it("combines borrowing occasions after checkout, saves per-line location and damage evidence", async () => {
-  const firstIssue = await post({ ...input(), unitIds: [unitIds[0]] }, [files[0]]);
+  const firstIssue = await post({ ...input(), unitIds: [unitIds[0]] }, [
+    files[0],
+  ]);
   const secondIssue = await post(
     { requestId: randomUUID(), guestVisitId: visitId, unitIds: [unitIds[1]] },
     [files[1]],
@@ -1077,13 +1268,19 @@ it("combines borrowing occasions after checkout, saves per-line location and dam
     ...returnInput([firstLine.id, secondLine.id]),
     lines: [
       { borrowingLineId: firstLine.id },
-      { borrowingLineId: secondLine.id, condition: "DAMAGED" as const, locationId: override.id },
+      {
+        borrowingLineId: secondLine.id,
+        condition: "DAMAGED" as const,
+        locationId: override.id,
+      },
     ],
   };
   const response = await postReturn(body, [[], [files[1][0], files[0][0]]]);
   expect(response.status).toBe(201);
 
-  const damaged = await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[1] } });
+  const damaged = await db.itemUnit.findUniqueOrThrow({
+    where: { id: unitIds[1] },
+  });
   expect(damaged).toMatchObject({
     custody: "HOUSEKEEPING",
     condition: "DAMAGED",
@@ -1093,49 +1290,211 @@ it("combines borrowing occasions after checkout, saves per-line location and dam
 
   const historyResponse = await getBorrowings();
   const history = await historyResponse.json();
-  expect(history.summary).toMatchObject({ totalOccasions: 2, returnedLines: 2, outstandingLines: 0 });
-  expect(history.lines).toEqual(expect.arrayContaining([
-    expect.objectContaining({
-      returnLine: expect.objectContaining({
-        condition: "GOOD",
-        location: expect.objectContaining({ id: locationId }),
-      }),
-    }),
-    expect.objectContaining({
-      returnLine: expect.objectContaining({
-        condition: "DAMAGED",
-        location: expect.objectContaining({ id: override.id, code: override.code }),
-        returnBatch: expect.objectContaining({
-          receivedBy: expect.objectContaining({ id: actor.id }),
+  expect(history.summary).toMatchObject({
+    totalOccasions: 2,
+    returnedLines: 2,
+    outstandingLines: 0,
+  });
+  expect(history.lines).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        returnLine: expect.objectContaining({
+          condition: "GOOD",
+          location: expect.objectContaining({ id: locationId }),
         }),
       }),
-      photos: expect.arrayContaining([
-        expect.objectContaining({
-          returnLineId: expect.any(String),
-          event: expect.objectContaining({
-            action: "BORROWING_RETURNED",
-            createdAt: expect.any(String),
-            id: expect.any(String),
+      expect.objectContaining({
+        returnLine: expect.objectContaining({
+          condition: "DAMAGED",
+          location: expect.objectContaining({
+            id: override.id,
+            code: override.code,
+          }),
+          returnBatch: expect.objectContaining({
+            receivedBy: expect.objectContaining({ id: actor.id }),
           }),
         }),
-      ]),
+        photos: expect.arrayContaining([
+          expect.objectContaining({
+            returnLineId: expect.any(String),
+            event: expect.objectContaining({
+              action: "BORROWING_RETURNED",
+              createdAt: expect.any(String),
+              id: expect.any(String),
+            }),
+          }),
+        ]),
+      }),
+    ]),
+  );
+  expect(
+    await db.itemUnitPhoto.count({
+      where: { unitId: unitIds[1], returnLineId: { not: null } },
     }),
-  ]));
-  expect(await db.itemUnitPhoto.count({ where: { unitId: unitIds[1], returnLineId: { not: null } } })).toBe(2);
-  expect(await db.itemUnitPhoto.count({ where: { unitId: unitIds[1], returnLineId: null } })).toBe(1);
+  ).toBe(2);
+  expect(
+    await db.itemUnitPhoto.count({
+      where: { unitId: unitIds[1], returnLineId: null },
+    }),
+  ).toBe(1);
 });
 
 it("preserves an existing hold when a returned unit is in good condition", async () => {
   const issued = await issueForReturn();
-  await db.itemUnit.update({ where: { id: issued[0].unitId }, data: { readiness: "ON_HOLD" } });
+  await db.itemUnit.update({
+    where: { id: issued[0].unitId },
+    data: { readiness: "ON_HOLD" },
+  });
 
   const response = await postReturn(returnInput([issued[0].id]));
   expect(response.status).toBe(201);
-  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } })).toMatchObject({
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } }),
+  ).toMatchObject({
     custody: "HOUSEKEEPING",
     readiness: "ON_HOLD",
   });
 });
+
+it.each(["MINOR_DAMAGE", "DAMAGED", "MISSING_PART"] as const)(
+  "rejects %s to GOOD during return and rolls back the whole batch",
+  async (condition) => {
+    const issued = await issueForReturn();
+
+    await db.itemUnit.update({
+      where: { id: issued[1].unitId },
+      data: { condition, readiness: "ON_HOLD" },
+    });
+
+    const before = await db.itemUnit.findMany({
+      where: { id: { in: unitIds } },
+      orderBy: { id: "asc" },
+    });
+
+    const storedKeys: string[] = [];
+    const originalStore = unitPhotos.storeUnitPhoto;
+    vi.spyOn(unitPhotos, "storeUnitPhoto").mockImplementation(
+      async (prepared) => {
+        const key = await originalStore(prepared);
+        storedKeys.push(key);
+        return key;
+      },
+    );
+
+    const response = await postReturn(
+      returnInput(issued.map((line) => line.id)),
+      files,
+    );
+
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({
+      error: "UNIT_STATE_CONFLICT",
+    });
+    expect(
+      await db.returnBatch.count({ where: { guestVisitId: visitId } }),
+    ).toBe(0);
+    expect(
+      await db.returnLine.count({
+        where: { borrowingLineId: { in: issued.map((line) => line.id) } },
+      }),
+    ).toBe(0);
+    expect(
+      await db.borrowingLine.count({
+        where: {
+          id: { in: issued.map((line) => line.id) },
+          status: "OUTSTANDING",
+          resolvedAt: null,
+        },
+      }),
+    ).toBe(issued.length);
+    expect(
+      await db.itemUnit.findMany({
+        where: { id: { in: unitIds } },
+        orderBy: { id: "asc" },
+      }),
+    ).toEqual(before);
+    expect(
+      await db.auditEvent.count({
+        where: {
+          entityId: { in: unitIds },
+          action: "BORROWING_RETURNED",
+        },
+      }),
+    ).toBe(0);
+    expect(
+      await db.itemUnitPhoto.count({
+        where: {
+          unitId: { in: unitIds },
+          returnLineId: { not: null },
+        },
+      }),
+    ).toBe(0);
+
+    expect(storedKeys).toHaveLength(2);
+    for (const key of storedKeys) {
+      await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    }
+  },
+);
+
+it.each(["MINOR_DAMAGE", "DAMAGED", "MISSING_PART"] as const)(
+  "accepts a return retaining the recorded %s condition with evidence",
+  async (condition) => {
+    const issued = await issueForReturn();
+    const line = issued[0];
+
+    await db.itemUnit.update({
+      where: { id: line.unitId },
+      data: { condition, readiness: "ON_HOLD" },
+    });
+
+    const response = await postReturn(
+      {
+        ...returnInput([line.id]),
+        lines: [{ borrowingLineId: line.id, condition }],
+      },
+      [[files[0][0]]],
+    );
+
+    expect(response.status).toBe(201);
+    expect(
+      await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } }),
+    ).toMatchObject({
+      condition,
+      custody: "HOUSEKEEPING",
+      readiness: "PENDING_INSPECTION",
+      locationId,
+    });
+    expect(
+      await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } }),
+    ).toMatchObject({
+      status: "RETURNED",
+    });
+    expect(
+      await db.borrowingLine.findUniqueOrThrow({ where: { id: issued[1].id } }),
+    ).toMatchObject({
+      status: "OUTSTANDING",
+    });
+  },
+);
+
+it.each(["MINOR_DAMAGE", "MISSING_PART"] as const)(
+  "does not reclassify a DAMAGED unit to %s during physical return",
+  async (condition) => {
+    const issued = await issueForReturn();
+    const line = issued[0];
+    await db.itemUnit.update({ where: { id: line.unitId }, data: { condition: "DAMAGED", readiness: "ON_HOLD" } });
+    const body = { ...returnInput([line.id]), lines: [{ borrowingLineId: line.id, condition }] };
+    const response = await postReturn(body, [[files[0][0]]]);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "UNIT_STATE_CONFLICT" });
+    expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: line.id } })).toMatchObject({ status: "OUTSTANDING" });
+    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: line.unitId } })).toMatchObject({ condition: "DAMAGED", custody: "GUEST" });
+    expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
+  },
+);
 
 it("rejects non-good returns without photos and invalid photo bytes atomically", async () => {
   const issued = await issueForReturn();
@@ -1151,8 +1510,17 @@ it("rejects non-good returns without photos and invalid photo bytes atomically",
   const invalid = await postReturn(noPhoto, [[fake]]);
   expect(invalid.status).toBe(400);
   expect(await invalid.json()).toMatchObject({ error: "INVALID_PHOTO" });
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
-  expect(await db.borrowingLine.count({ where: { id: { in: issued.map((line) => line.id) }, status: "OUTSTANDING" } })).toBe(2);
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    0,
+  );
+  expect(
+    await db.borrowingLine.count({
+      where: {
+        id: { in: issued.map((line) => line.id) },
+        status: "OUTSTANDING",
+      },
+    }),
+  ).toBe(2);
 });
 
 it("rejects the whole return when any line is not outstanding for this visit", async () => {
@@ -1160,8 +1528,14 @@ it("rejects the whole return when any line is not outstanding for this visit", a
   const response = await postReturn(returnInput([issued[0].id, randomUUID()]));
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: "LINES_UNAVAILABLE" });
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
-  expect(await db.itemUnit.count({ where: { id: { in: unitIds }, custody: "GUEST" } })).toBe(2);
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    0,
+  );
+  expect(
+    await db.itemUnit.count({
+      where: { id: { in: unitIds }, custody: "GUEST" },
+    }),
+  ).toBe(2);
 });
 
 it("does not allow a return line from another guest visit", async () => {
@@ -1178,7 +1552,11 @@ it("does not allow a return line from another guest visit", async () => {
     },
   });
   const otherIssue = await post(
-    { requestId: randomUUID(), guestVisitId: otherVisit.id, unitIds: [unitIds[1]] },
+    {
+      requestId: randomUUID(),
+      guestVisitId: otherVisit.id,
+      unitIds: [unitIds[1]],
+    },
     [files[1]],
   );
   expect(otherIssue.status).toBe(201);
@@ -1187,24 +1565,39 @@ it("does not allow a return line from another guest visit", async () => {
   const response = await postReturn(returnInput([otherLine.id]));
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: "LINES_UNAVAILABLE" });
-  expect(await db.borrowingLine.findUniqueOrThrow({ where: { id: otherLine.id } })).toMatchObject({ status: "OUTSTANDING" });
-  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[1] } })).toMatchObject({ custody: "GUEST" });
+  expect(
+    await db.borrowingLine.findUniqueOrThrow({ where: { id: otherLine.id } }),
+  ).toMatchObject({ status: "OUTSTANDING" });
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[1] } }),
+  ).toMatchObject({ custody: "GUEST" });
 });
 
 it("rejects inactive and WITH_GUEST receiving locations", async () => {
   const issued = await issueForReturn();
-  await db.location.update({ where: { id: locationId }, data: { isActive: false } });
+  await db.location.update({
+    where: { id: locationId },
+    data: { isActive: false },
+  });
   const inactive = await postReturn(returnInput([issued[0].id]));
   expect(inactive.status).toBe(409);
-  expect(await inactive.json()).toMatchObject({ error: "LOCATION_UNAVAILABLE" });
+  expect(await inactive.json()).toMatchObject({
+    error: "LOCATION_UNAVAILABLE",
+  });
 
-  const withGuest = await db.location.findUniqueOrThrow({ where: { code: "WITH_GUEST" } });
+  const withGuest = await db.location.findUniqueOrThrow({
+    where: { code: "WITH_GUEST" },
+  });
   const invalidDestination = returnInput([issued[0].id]);
   invalidDestination.defaultLocationId = withGuest.id;
   const rejected = await postReturn(invalidDestination);
   expect(rejected.status).toBe(409);
-  expect(await rejected.json()).toMatchObject({ error: "LOCATION_UNAVAILABLE" });
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
+  expect(await rejected.json()).toMatchObject({
+    error: "LOCATION_UNAVAILABLE",
+  });
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    0,
+  );
 });
 
 it("allows only one concurrent return for the same outstanding units", async () => {
@@ -1213,9 +1606,17 @@ it("allows only one concurrent return for the same outstanding units", async () 
     postReturn(returnInput([issued[0].id])),
     postReturn(returnInput([issued[0].id])),
   ]);
-  expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(1);
-  expect(await db.borrowingLine.count({ where: { id: issued[0].id, status: "RETURNED" } })).toBe(1);
+  expect(responses.map((response) => response.status).sort()).toEqual([
+    201, 409,
+  ]);
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    1,
+  );
+  expect(
+    await db.borrowingLine.count({
+      where: { id: issued[0].id, status: "RETURNED" },
+    }),
+  ).toBe(1);
 });
 
 it("replays the same return without overwriting later unit state and rejects request reuse", async () => {
@@ -1224,14 +1625,25 @@ it("replays the same return without overwriting later unit state and rejects req
   const first = await postReturn(body);
   expect(first.status).toBe(201);
   const saved = await first.json();
-  await db.itemUnit.update({ where: { id: issued[0].unitId }, data: { readiness: "ON_HOLD" } });
+  await db.itemUnit.update({
+    where: { id: issued[0].unitId },
+    data: { condition: "DAMAGED", readiness: "ON_HOLD" },
+  });
 
   const retry = await postReturn(body);
   expect(retry.status).toBe(200);
   expect(await retry.json()).toEqual({ ...saved, replayed: true });
-  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } })).toMatchObject({ readiness: "ON_HOLD" });
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: issued[0].unitId } }),
+  ).toMatchObject({
+    condition: "DAMAGED",
+    readiness: "ON_HOLD",
+  });
 
-  const conflict = await postReturn({ ...body, defaultLocationId: randomUUID() });
+  const conflict = await postReturn({
+    ...body,
+    defaultLocationId: randomUUID(),
+  });
   expect(conflict.status).toBe(409);
   expect(await conflict.json()).toMatchObject({ error: "REQUEST_CONFLICT" });
 });
@@ -1251,34 +1663,60 @@ it("rolls back all return changes and removes staged photos when evidence persis
   };
 
   await expect(postReturn(body, files)).rejects.toThrow();
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
-  expect(await db.borrowingLine.count({ where: { id: { in: issued.map((line) => line.id) }, status: "OUTSTANDING" } })).toBe(2);
-  expect(await db.itemUnit.count({ where: { id: { in: unitIds }, custody: "GUEST" } })).toBe(2);
-  await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({ code: "ENOENT" });
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    0,
+  );
+  expect(
+    await db.borrowingLine.count({
+      where: {
+        id: { in: issued.map((line) => line.id) },
+        status: "OUTSTANDING",
+      },
+    }),
+  ).toBe(2);
+  expect(
+    await db.itemUnit.count({
+      where: { id: { in: unitIds }, custody: "GUEST" },
+    }),
+  ).toBe(2);
+  await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({
+    code: "ENOENT",
+  });
 });
 
 it("preserves return evidence when the transaction committed but its response was lost", async () => {
   const issued = await issueForReturn();
   const transact = db.$transaction.bind(db);
-  vi.spyOn(db, "$transaction").mockImplementationOnce(async (callback: unknown) => {
-    if (typeof callback !== "function") throw new Error("Expected interactive transaction");
-    await transact(callback as (tx: Prisma.TransactionClient) => Promise<unknown>);
-    throw new Error("Simulated lost transaction response");
-  });
+  vi.spyOn(db, "$transaction").mockImplementationOnce(
+    async (callback: unknown) => {
+      if (typeof callback !== "function")
+        throw new Error("Expected interactive transaction");
+      await transact(
+        callback as (tx: Prisma.TransactionClient) => Promise<unknown>,
+      );
+      throw new Error("Simulated lost transaction response");
+    },
+  );
   const body = returnInput([issued[0].id]);
   const returnPhoto = [[files[0][0]]];
 
-  await expect(postReturn(body, returnPhoto)).rejects.toThrow("Simulated lost transaction response");
+  await expect(postReturn(body, returnPhoto)).rejects.toThrow(
+    "Simulated lost transaction response",
+  );
   const savedLine = await db.returnLine.findUniqueOrThrow({
     where: { borrowingLineId: issued[0].id },
     include: { photos: true },
   });
   expect(savedLine.photos).toHaveLength(1);
-  expect((await unitPhotos.readUnitPhoto(savedLine.photos[0].photoKey)).length).toBeGreaterThan(0);
+  expect(
+    (await unitPhotos.readUnitPhoto(savedLine.photos[0].photoKey)).length,
+  ).toBeGreaterThan(0);
 
   const retry = await postReturn(body, returnPhoto);
   expect(retry.status).toBe(200);
-  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(1);
+  expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(
+    1,
+  );
 });
 
 it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)(
@@ -1294,43 +1732,70 @@ it("rejects unauthenticated and untrusted-origin return requests", async () => {
   mockUser.mockResolvedValue(null);
   expect((await postReturn(returnInput([randomUUID()]))).status).toBe(401);
   mockUser.mockResolvedValue(actor);
-  expect((await postReturn(returnInput([randomUUID()]), [], "https://untrusted.example")).status).toBe(403);
+  expect(
+    (
+      await postReturn(
+        returnInput([randomUUID()]),
+        [],
+        "https://untrusted.example",
+      )
+    ).status,
+  ).toBe(403);
 });
 
 it("requires checkout acknowledgement for outstanding units and preserves their obligations", async () => {
   const issued = await issueForReturn();
   const unitsBefore = await db.itemUnit.findMany({
-    where: { id: { in: unitIds } }, orderBy: { id: "asc" },
+    where: { id: { in: unitIds } },
+    orderBy: { id: "asc" },
   });
   const linesBefore = await db.borrowingLine.findMany({
-    where: { unitId: { in: unitIds } }, orderBy: { id: "asc" },
+    where: { unitId: { in: unitIds } },
+    orderBy: { id: "asc" },
   });
   const warning = await postCheckout();
   expect(warning.status).toBe(409);
-  expect(await warning.json()).toMatchObject({ error: "OUTSTANDING_BORROWINGS", outstandingLines: 2 });
-  expect(await db.guestVisit.findUniqueOrThrow({ where: { id: visitId } })).toMatchObject({
-    status: "STAYING", checkedOutAt: null,
+  expect(await warning.json()).toMatchObject({
+    error: "OUTSTANDING_BORROWINGS",
+    outstandingLines: 2,
+  });
+  expect(
+    await db.guestVisit.findUniqueOrThrow({ where: { id: visitId } }),
+  ).toMatchObject({
+    status: "STAYING",
+    checkedOutAt: null,
   });
 
   const confirmed = await postCheckout({ acknowledgeOutstanding: true });
   expect(confirmed.status).toBe(200);
   expect(await confirmed.json()).toMatchObject({
-    visit: { status: "CHECKED_OUT" }, outstandingLines: 2,
+    visit: { status: "CHECKED_OUT" },
+    outstandingLines: 2,
   });
-  expect(await db.itemUnit.findMany({
-    where: { id: { in: unitIds } }, orderBy: { id: "asc" },
-  })).toEqual(unitsBefore);
-  expect(await db.borrowingLine.findMany({
-    where: { unitId: { in: unitIds } }, orderBy: { id: "asc" },
-  })).toEqual(linesBefore);
-  expect(await db.auditEvent.findFirstOrThrow({
-    where: { entityId: visitId, action: "GUEST_VISIT_CHECKED_OUT" },
-  })).toMatchObject({
+  expect(
+    await db.itemUnit.findMany({
+      where: { id: { in: unitIds } },
+      orderBy: { id: "asc" },
+    }),
+  ).toEqual(unitsBefore);
+  expect(
+    await db.borrowingLine.findMany({
+      where: { unitId: { in: unitIds } },
+      orderBy: { id: "asc" },
+    }),
+  ).toEqual(linesBefore);
+  expect(
+    await db.auditEvent.findFirstOrThrow({
+      where: { entityId: visitId, action: "GUEST_VISIT_CHECKED_OUT" },
+    }),
+  ).toMatchObject({
     newValues: { outstandingLines: 2, acknowledgedOutstanding: true },
   });
   const rejectedIssue = await post(input());
   expect(rejectedIssue.status).toBe(409);
-  expect(await rejectedIssue.json()).toMatchObject({ error: "VISIT_NOT_STAYING" });
+  expect(await rejectedIssue.json()).toMatchObject({
+    error: "VISIT_NOT_STAYING",
+  });
   expect((await postReturn(returnInput([issued[0].id]))).status).toBe(201);
   expect(await (await getBorrowings()).json()).toMatchObject({
     visit: { status: "CHECKED_OUT" },
@@ -1342,12 +1807,218 @@ it("serializes checkout with a concurrent borrowing issue", async () => {
   const [issue, checkout] = await Promise.all([post(input()), postCheckout()]);
   expect([201, 409]).toContain(issue.status);
   expect(checkout.status).toBe(issue.status === 201 ? 409 : 200);
-  const visit = await db.guestVisit.findUniqueOrThrow({ where: { id: visitId } });
+  const visit = await db.guestVisit.findUniqueOrThrow({
+    where: { id: visitId },
+  });
   const outstanding = await db.borrowingLine.count({
     where: { borrowing: { guestVisitId: visitId }, status: "OUTSTANDING" },
   });
   expect(visit.status).toBe(issue.status === 201 ? "STAYING" : "CHECKED_OUT");
   expect(outstanding).toBe(issue.status === 201 ? 2 : 0);
+});
+
+it.each(["HK_STAFF", "HK_SUPERVISOR"] as const)(
+  "records initial damage for an unborrowed unit as %s with append-only photo history",
+  async (role) => {
+    mockUser.mockResolvedValue({ ...actor, roles: [role] });
+    const body = await conditionInput();
+    const first = await postConditionUpdate(body, [files[0][0], files[1][0]]);
+    expect(first.status).toBe(201);
+    expect(first.headers.get("Cache-Control")).toBe("no-store");
+    const saved = await first.json();
+    expect(saved.report).toMatchObject({ id: body.requestId, unitId: body.unitId, reportedBy: { id: actor.id } });
+    expect(saved.report.photos).toHaveLength(2);
+    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } })).toMatchObject({
+      condition: "DAMAGED", readiness: "ON_HOLD", custody: "HOUSEKEEPING", locationId,
+    });
+    expect(await db.borrowingLine.count({ where: { unitId: body.unitId } })).toBe(0);
+    expect(await db.returnBatch.count({ where: { guestVisitId: visitId } })).toBe(0);
+
+    const next = await conditionInput("DAMAGED");
+    expect((await postConditionUpdate(next, [files[0][0]])).status).toBe(201);
+    const history = await (await getUnitHistory(body.unitId)).json();
+    const event = history.events.find((entry: { id: string }) => entry.id === body.requestId);
+    expect(event).toMatchObject({
+      action: "ITEM_UNIT_CONDITION_UPDATED",
+      oldValues: { condition: "GOOD", readiness: "CLEAR" },
+      newValues: { condition: "DAMAGED", readiness: "ON_HOLD" },
+    });
+    expect(event.newValues).not.toHaveProperty("requestHash");
+    expect(event.photos).toHaveLength(2);
+    expect(await db.itemUnitPhoto.count({ where: { unitId: body.unitId } })).toBe(3);
+  },
+);
+
+it.each(["CLEAR", "ON_HOLD", "PENDING_INSPECTION", "PENDING_VERIFICATION"] as const)(
+  "appends evidence without clearing or replacing readiness %s",
+  async (readiness) => {
+    await db.itemUnit.update({ where: { id: unitIds[0] }, data: { readiness } });
+    const before = await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[0] } });
+    const body = await conditionInput("GOOD");
+    expect((await postConditionUpdate(body, [files[0][0]])).status).toBe(201);
+    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: unitIds[0] } })).toEqual({
+      ...before, updatedAt: expect.any(Date),
+    });
+  },
+);
+
+it.each(["GOOD", "MINOR_DAMAGE", "MISSING_PART"] as const)(
+  "rejects reclassification from DAMAGED to %s through the general update",
+  async (condition) => {
+    await db.itemUnit.update({ where: { id: unitIds[0] }, data: { condition: "DAMAGED", readiness: "ON_HOLD" } });
+    const body = await conditionInput(condition);
+    const response = await postConditionUpdate(body, [files[0][0]]);
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ error: "UNIT_STATE_CONFLICT" });
+    expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
+    expect(await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } })).toMatchObject({ condition: "DAMAGED", readiness: "ON_HOLD" });
+  },
+);
+
+it("cannot bypass condition reclassification restrictions through the old damage endpoint", async () => {
+  await prepareDamageReportUnit();
+  expect((await postDamage(damageInput())).status).toBe(201);
+  const response = await postDamage({ ...damageInput(), condition: "MINOR_DAMAGE" });
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "UNIT_STATE_CONFLICT" });
+});
+
+it.each([
+  { lifecycle: "RETIRED" },
+  { custody: "GUEST" },
+  { custody: "ENGINEERING" },
+  { custody: "EXTERNAL_VENDOR" },
+  { lossState: "MISSING" },
+  { lossState: "LOST" },
+] as const)("rejects condition updates for an ineligible unit: %j", async (patch) => {
+  await db.itemUnit.update({ where: { id: unitIds[0] }, data: patch });
+  const body = await conditionInput();
+  const response = await postConditionUpdate(body);
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "UNIT_STATE_CONFLICT" });
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
+});
+
+it("rejects outstanding obligations even when a unit appears held by Housekeeping", async () => {
+  await issueForReturn();
+  await db.itemUnit.update({ where: { id: unitIds[0] }, data: { custody: "HOUSEKEEPING" } });
+  const response = await postConditionUpdate(await conditionInput());
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: "OUTSTANDING_BORROWING" });
+});
+
+it("serializes competing condition updates and rejects the stale observation", async () => {
+  const first = await conditionInput();
+  const second = { ...first, requestId: randomUUID(), condition: "MINOR_DAMAGE" };
+  const responses = await Promise.all([postConditionUpdate(first), postConditionUpdate(second)]);
+  expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+  const rejected = responses.find((response) => response.status === 409);
+  expect(await rejected!.json()).toMatchObject({ error: "STALE_UNIT" });
+  expect(await db.auditEvent.count({ where: { entityId: first.unitId, action: "ITEM_UNIT_CONDITION_UPDATED" } })).toBe(1);
+});
+
+it("replays condition evidence without overwriting later state or accepting changed bytes", async () => {
+  const body = await conditionInput();
+  const first = await postConditionUpdate(body, [files[0][0]]);
+  expect(first.status).toBe(201);
+  const saved = await first.json();
+  await db.itemUnit.update({ where: { id: body.unitId }, data: { readiness: "PENDING_VERIFICATION" } });
+  const retry = await postConditionUpdate(body, [files[0][0]]);
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toEqual({ ...saved, replayed: true });
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } })).toMatchObject({ readiness: "PENDING_VERIFICATION" });
+  const changed = await postConditionUpdate(body, [files[1][0]]);
+  expect(changed.status).toBe(409);
+  expect(await changed.json()).toMatchObject({ error: "REQUEST_CONFLICT" });
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(1);
+});
+
+it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)("denies condition updates by %s", async (role) => {
+  mockUser.mockResolvedValue({ ...actor, roles: [role] });
+  expect((await postConditionUpdate(await conditionInput())).status).toBe(403);
+});
+
+it("saves concurrent retries as one condition observation and one evidence set", async () => {
+  const body = await conditionInput();
+  const responses = await Promise.all([
+    postConditionUpdate(body, [files[0][0]]),
+    postConditionUpdate(body, [files[0][0]]),
+  ]);
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(1);
+  expect(await db.itemUnitPhoto.count({ where: { auditEventId: body.requestId } })).toBe(1);
+});
+
+it("rolls back a condition update and cleans its photos when audit persistence fails", async () => {
+  const body = await conditionInput();
+  const before = await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } });
+  const storedKeys: string[] = [];
+  const originalStore = unitPhotos.storeUnitPhoto;
+  vi.spyOn(unitPhotos, "storeUnitPhoto").mockImplementation(async (prepared) => {
+    const key = await originalStore(prepared);
+    storedKeys.push(key);
+    return key;
+  });
+  const failure = new Error("Simulated audit failure");
+  const originalTransaction = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce((callback, options) =>
+    originalTransaction(async (tx) => {
+      const failingTransaction = new Proxy(tx, {
+        get(target, key) {
+          if (key === "auditEvent") {
+            return new Proxy(target.auditEvent, {
+              get(delegate, action) {
+                if (action === "create") {
+                  return async () => { throw failure; };
+                }
+                return Reflect.get(delegate, action);
+              },
+            });
+          }
+          return Reflect.get(target, key);
+        },
+      });
+      return callback(failingTransaction);
+    }, options),
+  );
+  await expect(postConditionUpdate(body, [files[0][0]])).rejects.toBe(failure);
+  expect(await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } })).toEqual(before);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
+  expect(await db.itemUnitPhoto.count({ where: { unitId: body.unitId } })).toBe(0);
+  expect(storedKeys).toHaveLength(1);
+  await expect(unitPhotos.readUnitPhoto(storedKeys[0])).rejects.toMatchObject({ code: "ENOENT" });
+});
+
+it("keeps condition evidence after a committed response is lost and safely replays it", async () => {
+  const body = await conditionInput();
+  const transact = db.$transaction.bind(db);
+  vi.spyOn(db, "$transaction").mockImplementationOnce(async (callback: unknown) => {
+    if (typeof callback !== "function") throw new Error("Expected interactive transaction");
+    await transact(callback as (tx: Prisma.TransactionClient) => Promise<unknown>);
+    throw new Error("Simulated lost transaction response");
+  });
+  await expect(postConditionUpdate(body, [files[0][0]])).rejects.toThrow("Simulated lost transaction response");
+  const photo = await db.itemUnitPhoto.findFirstOrThrow({ where: { auditEventId: body.requestId } });
+  expect((await unitPhotos.readUnitPhoto(photo.photoKey)).length).toBeGreaterThan(0);
+  const retry = await postConditionUpdate(body, [files[0][0]]);
+  expect(retry.status).toBe(200);
+  expect(await retry.json()).toMatchObject({ replayed: true, report: { id: body.requestId } });
+  expect(await db.itemUnitPhoto.count({ where: { auditEventId: body.requestId } })).toBe(1);
+});
+
+it("validates authentication, origin, unit versions and condition photo bytes", async () => {
+  const body = await conditionInput();
+  mockUser.mockResolvedValue(null);
+  expect((await postConditionUpdate(body)).status).toBe(401);
+  mockUser.mockResolvedValue(actor);
+  expect((await postConditionUpdate(body, [], "https://untrusted.example")).status).toBe(403);
+  expect((await postConditionUpdate({ ...body, expectedUpdatedAt: undefined })).status).toBe(400);
+  expect((await postConditionUpdate({ ...body, readiness: "CLEAR" })).status).toBe(400);
+  expect((await postConditionUpdate({ ...body, unitId: randomUUID() })).status).toBe(404);
+  const badPhoto = await postConditionUpdate(body, [new File(["invalid"], "bad.png", { type: "image/png" })]);
+  expect(badPhoto.status).toBe(400);
+  expect(await badPhoto.json()).toMatchObject({ error: "INVALID_PHOTO" });
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
 });
 
 it("holds newly discovered damage without rewriting a finalized GOOD return", async () => {
@@ -1467,16 +2138,10 @@ it("replays a damage report without resetting later unit state", async () => {
   expect(
     await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } }),
   ).toMatchObject({ readiness: "PENDING_VERIFICATION" });
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(1);
   expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(1);
-  expect(
-    (
-      await postDamage(
-        { ...body, notes: "Payload berbeda." },
-        [files[0][0]],
-      )
-    ).status,
+    (await postDamage({ ...body, notes: "Payload berbeda." }, [files[0][0]]))
+      .status,
   ).toBe(409);
 });
 
@@ -1489,12 +2154,9 @@ it("serializes concurrent retries into one damage report and evidence set", asyn
   ]);
 
   expect(responses.map((response) => response.status).sort()).toEqual([
-    200,
-    201,
+    200, 201,
   ]);
-  expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(1);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(1);
   expect(
     await db.itemUnitPhoto.count({
       where: { auditEventId: body.requestId },
@@ -1532,9 +2194,7 @@ it("requires a finalized GOOD return before reporting post-return damage", async
   expect(
     await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } }),
   ).toEqual(before);
-  expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(0);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
 });
 
 it("serializes damage reporting with a concurrent borrowing issue", async () => {
@@ -1598,12 +2258,10 @@ it("validates damage reports, photo bytes, authentication and origin", async () 
   expect((await postDamage(body)).status).toBe(401);
   mockUser.mockResolvedValue(actor);
 
-  expect(
-    (await postDamage(body, [], "https://untrusted.example")).status,
-  ).toBe(403);
-  expect(
-    (await postDamage({ ...body, condition: "GOOD" })).status,
-  ).toBe(400);
+  expect((await postDamage(body, [], "https://untrusted.example")).status).toBe(
+    403,
+  );
+  expect((await postDamage({ ...body, condition: "GOOD" })).status).toBe(400);
   expect((await postDamage({ ...body, notes: " " })).status).toBe(400);
   expect(
     (await postDamage({ ...body, notes: "x".repeat(256 * 1024) })).status,
@@ -1615,16 +2273,14 @@ it("validates damage reports, photo bytes, authentication and origin", async () 
       ])
     ).status,
   ).toBe(400);
-  expect(
-    (await postDamage({ ...body, unitId: randomUUID() })).status,
-  ).toBe(404);
+  expect((await postDamage({ ...body, unitId: randomUUID() })).status).toBe(
+    404,
+  );
 
   expect(
     await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } }),
   ).toEqual(before);
-  expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(0);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
 });
 
 it("rolls back the damage hold and removes staged photos when evidence persistence fails", async () => {
@@ -1639,16 +2295,12 @@ it("rolls back the damage hold and removes staged photos when evidence persisten
   );
   vi.spyOn(unitPhotos, "storeUnitPhoto").mockResolvedValue(key);
 
-  await expect(
-    postDamage(body, [files[0][0], files[1][0]]),
-  ).rejects.toThrow();
+  await expect(postDamage(body, [files[0][0], files[1][0]])).rejects.toThrow();
 
   expect(
     await db.itemUnit.findUniqueOrThrow({ where: { id: body.unitId } }),
   ).toEqual(before);
-  expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(0);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
   await expect(unitPhotos.readUnitPhoto(key)).rejects.toMatchObject({
     code: "ENOENT",
   });
@@ -1664,18 +2316,16 @@ it("preserves committed damage evidence when the transaction response is lost", 
       }
 
       await transact(
-        callback as (
-          tx: Prisma.TransactionClient,
-        ) => Promise<unknown>,
+        callback as (tx: Prisma.TransactionClient) => Promise<unknown>,
       );
       throw new Error("Simulated lost transaction response");
     },
   );
 
   const body = damageInput();
-  await expect(
-    postDamage(body, [files[0][0]]),
-  ).rejects.toThrow("Simulated lost transaction response");
+  await expect(postDamage(body, [files[0][0]])).rejects.toThrow(
+    "Simulated lost transaction response",
+  );
 
   const evidence = await db.itemUnitPhoto.findFirstOrThrow({
     where: { auditEventId: body.requestId },
@@ -1746,7 +2396,9 @@ it("saves individual verification results and photo evidence atomically", async 
 
   const ready = await getItemUnits(itemId, undefined, true);
   expect(ready?.units.map((unit) => unit.id)).toContain(body.units[0].unitId);
-  expect(ready?.units.map((unit) => unit.id)).not.toContain(body.units[1].unitId);
+  expect(ready?.units.map((unit) => unit.id)).not.toContain(
+    body.units[1].unitId,
+  );
 });
 
 it("replays verification without overwriting later unit state", async () => {
@@ -1797,9 +2449,7 @@ it("rejects missing photos and stale verification snapshots", async () => {
   const stale = await postVerification(body);
   expect(stale.status).toBe(409);
   expect(await stale.json()).toMatchObject({ error: "STALE_UNIT" });
-  expect(
-    await db.auditEvent.count({ where: { id: body.requestId } }),
-  ).toBe(0);
+  expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(0);
 });
 
 it("rejects the whole verification batch when one unit is ineligible", async () => {
@@ -1845,8 +2495,7 @@ it("serializes verification retries and rejects a stale new round", async () => 
     postVerification(body),
   ]);
   expect(responses.map((response) => response.status).sort()).toEqual([
-    200,
-    201,
+    200, 201,
   ]);
   expect(
     await db.auditEvent.count({
@@ -1898,9 +2547,9 @@ it.each(["HK_STAFF", "MANAGEMENT", "SYSTEM_ADMIN"] as const)(
     mockUser.mockResolvedValue({ ...actor, roles: [role] });
 
     expect((await postVerification(body)).status).toBe(403);
-    expect(
-      await db.auditEvent.count({ where: { id: body.requestId } }),
-    ).toBe(0);
+    expect(await db.auditEvent.count({ where: { id: body.requestId } })).toBe(
+      0,
+    );
   },
 );
 
@@ -1943,3 +2592,147 @@ it("preserves committed verification evidence after a lost response", async () =
 
   expect((await postVerification(body)).status).toBe(200);
 });
+
+it("records photo evidence at handover and receipt, then requires Supervisor verification", async () => {
+  const handover = await maintenanceHandoverInput();
+  const sent = await postMaintenance("HANDOVER", handover, [files[0][0]]);
+  expect(sent.status).toBe(201);
+  const sentResult = await sent.json();
+  expect(sentResult.event.photos).toHaveLength(1);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: handover.unitId } }),
+  ).toMatchObject({
+    custody: "ENGINEERING",
+    condition: "DAMAGED",
+    readiness: "ON_HOLD",
+    locationId: null,
+  });
+
+  const receive = await maintenanceReceiveInput(handover.requestId);
+  const received = await postMaintenance("RECEIPT", receive, [files[1][0]]);
+  expect(received.status).toBe(201);
+  const receivedResult = await received.json();
+  expect(receivedResult.event.photos).toHaveLength(1);
+  expect(receivedResult.handoverId).toBe(handover.requestId);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: handover.unitId } }),
+  ).toMatchObject({
+    custody: "HOUSEKEEPING",
+    condition: "GOOD",
+    readiness: "PENDING_VERIFICATION",
+    locationId,
+  });
+  expect(
+    (await getItemUnits(itemId, undefined, true))?.units.map((unit) => unit.id),
+  ).not.toContain(handover.unitId);
+
+  const history = await (await getMaintenance(handover.requestId)).json();
+  expect(history.before.photos).toHaveLength(1);
+  expect(history.after.photos).toHaveLength(1);
+  expect(history.before.photos[0].id).not.toBe(history.after.photos[0].id);
+  expect(history.before.after).not.toHaveProperty("requestHash");
+  expect(history.after.after).not.toHaveProperty("requestHash");
+
+  const unit = await db.itemUnit.findUniqueOrThrow({
+    where: { id: handover.unitId },
+  });
+  mockUser.mockResolvedValue({ ...actor, roles: ["HK_SUPERVISOR"] });
+  const verification = await postVerification(
+    {
+      requestId: randomUUID(),
+      units: [
+        {
+          unitId: unit.id,
+          expectedUpdatedAt: unit.updatedAt.toISOString(),
+          result: "FIT_FOR_USE",
+          notes: "Unit telah diperiksa dan layak digunakan.",
+        },
+      ],
+    },
+    [[files[0][0]]],
+  );
+  expect(verification.status).toBe(201);
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: handover.unitId } }),
+  ).toMatchObject({ readiness: "CLEAR", condition: "GOOD" });
+  expect(
+    (await getItemUnits(itemId, undefined, true))?.units.map((entry) => entry.id),
+  ).toContain(handover.unitId);
+});
+
+it("requires evidence for both maintenance actions and rejects restoring condition without work details", async () => {
+  const handover = await maintenanceHandoverInput();
+  expect((await postMaintenance("HANDOVER", handover, [])).status).toBe(400);
+  expect((await postMaintenance("HANDOVER", handover)).status).toBe(201);
+
+  const receive = await maintenanceReceiveInput(handover.requestId);
+  expect((await postMaintenance("RECEIPT", receive, [])).status).toBe(400);
+  expect(
+    (
+      await postMaintenance("RECEIPT", {
+        ...receive,
+        condition: "DAMAGED",
+        performedBy: null,
+        workCompletedAt: null,
+      })
+    ).status,
+  ).toBe(201);
+});
+
+it("rejects restoring a damaged unit without verified work metadata", async () => {
+  const handover = await maintenanceHandoverInput();
+  expect((await postMaintenance("HANDOVER", handover)).status).toBe(201);
+
+  const receive = await maintenanceReceiveInput(handover.requestId);
+  const response = await postMaintenance("RECEIPT", {
+    ...receive,
+    performedBy: null,
+    workCompletedAt: null,
+  });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    error: "INVALID_WORK_RESULT",
+  });
+  expect(
+    await getMaintenance(handover.requestId).then((result) => result.json()),
+  ).toMatchObject({ after: null });
+  expect(
+    await db.itemUnit.findUniqueOrThrow({ where: { id: handover.unitId } }),
+  ).toMatchObject({ custody: "ENGINEERING", condition: "DAMAGED" });
+});
+
+it("serializes concurrent receipts and preserves both photo sets on request replay", async () => {
+  const handover = await maintenanceHandoverInput();
+  expect((await postMaintenance("HANDOVER", handover)).status).toBe(201);
+  const receive = await maintenanceReceiveInput(handover.requestId);
+  const responses = await Promise.all([
+    postMaintenance("RECEIPT", receive, [files[1][0]]),
+    postMaintenance("RECEIPT", receive, [files[1][0]]),
+  ]);
+  expect(responses.map((response) => response.status).sort()).toEqual([200, 201]);
+
+  const replay = await postMaintenance("RECEIPT", receive, [files[1][0]]);
+  expect(replay.status).toBe(200);
+  expect(
+    await db.itemUnitPhoto.count({
+      where: { auditEventId: { in: [handover.requestId, receive.requestId] } },
+    }),
+  ).toBe(2);
+});
+
+it.each(["MANAGEMENT", "SYSTEM_ADMIN"] as const)(
+  "denies maintenance handover and receipt to %s",
+  async (role) => {
+    mockUser.mockResolvedValue(actor);
+    const handover = await maintenanceHandoverInput();
+    expect((await postMaintenance("HANDOVER", handover)).status).toBe(201);
+    const receive = await maintenanceReceiveInput(handover.requestId);
+
+    mockUser.mockResolvedValue({ ...actor, roles: [role] });
+    expect(
+      (await postMaintenance("HANDOVER", await maintenanceHandoverInput()))
+        .status,
+    ).toBe(403);
+    expect((await postMaintenance("RECEIPT", receive)).status).toBe(403);
+  },
+);

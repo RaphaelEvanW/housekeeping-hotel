@@ -87,9 +87,10 @@ export async function receiveReturn(
   submittedPhotos: File[][] = [],
 ) {
   const input = receiveReturnInputSchema.parse(rawInput);
-  const photos = submittedPhotos.length === 0
-    ? input.lines.map(() => [] as File[])
-    : submittedPhotos;
+  const photos =
+    submittedPhotos.length === 0
+      ? input.lines.map(() => [] as File[])
+      : submittedPhotos;
 
   if (
     photos.length !== input.lines.length ||
@@ -122,7 +123,9 @@ export async function receiveReturn(
         file.size === 0 ||
         file.size > MAX_PHOTO_BYTES
       ) {
-        throw new InvalidUnitPhotoError("Setiap foto harus berukuran 1 byte sampai 2 MiB.");
+        throw new InvalidUnitPhotoError(
+          "Setiap foto harus berukuran 1 byte sampai 2 MiB.",
+        );
       }
 
       line.photoHashes.push(
@@ -134,16 +137,20 @@ export async function receiveReturn(
   }
 
   const requestHash = createHash("sha256")
-    .update(JSON.stringify({
-      guestVisitId: input.guestVisitId,
-      defaultLocationId: input.defaultLocationId,
-      lines: normalizedLines.map(({ borrowingLineId, condition, locationId, photoHashes }) => ({
-        borrowingLineId,
-        condition,
-        locationId,
-        photoHashes,
-      })),
-    }))
+    .update(
+      JSON.stringify({
+        guestVisitId: input.guestVisitId,
+        defaultLocationId: input.defaultLocationId,
+        lines: normalizedLines.map(
+          ({ borrowingLineId, condition, locationId, photoHashes }) => ({
+            borrowingLineId,
+            condition,
+            locationId,
+            photoHashes,
+          }),
+        ),
+      }),
+    )
     .digest("hex");
 
   const existing = await findReplay(db, input.requestId, actorId, requestHash);
@@ -175,14 +182,22 @@ export async function receiveReturn(
             FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
           `;
 
-          const replay = await findReplay(tx, input.requestId, actorId, requestHash);
+          const replay = await findReplay(
+            tx,
+            input.requestId,
+            actorId,
+            requestHash,
+          );
           if (replay) return replay;
 
           const [visit] = await tx.$queryRaw<{ id: string }[]>`
             SELECT "id" FROM "guest_visit" WHERE "id" = ${input.guestVisitId} FOR SHARE
           `;
           if (!visit) {
-            throw new ReceiveReturnError("VISIT_NOT_FOUND", "Kunjungan tamu tidak ditemukan.");
+            throw new ReceiveReturnError(
+              "VISIT_NOT_FOUND",
+              "Kunjungan tamu tidak ditemukan.",
+            );
           }
 
           const lineIds = input.lines.map((line) => line.borrowingLineId);
@@ -204,8 +219,13 @@ export async function receiveReturn(
             },
           });
 
-          const unitIds = [...new Set(borrowingLines.map((line) => line.unitId))];
-          if (borrowingLines.length !== input.lines.length || unitIds.length !== input.lines.length) {
+          const unitIds = [
+            ...new Set(borrowingLines.map((line) => line.unitId)),
+          ];
+          if (
+            borrowingLines.length !== input.lines.length ||
+            unitIds.length !== input.lines.length
+          ) {
             throw new ReceiveReturnError(
               "LINES_UNAVAILABLE",
               "Sebagian unit bukan pinjaman aktif pada kunjungan ini.",
@@ -220,7 +240,9 @@ export async function receiveReturn(
             FOR UPDATE
           `;
 
-          const lockedLines = await tx.$queryRaw<{ id: string; status: string }[]>`
+          const lockedLines = await tx.$queryRaw<
+            { id: string; status: string }[]
+          >`
             SELECT "id", "status"
             FROM "borrowing_line"
             WHERE "id" IN (${Prisma.join(lineIds)})
@@ -238,18 +260,26 @@ export async function receiveReturn(
             );
           }
 
-          if (units.some((unit) => unit.custody !== "GUEST" || unit.lossState !== "NONE")) {
+          if (
+            units.some(
+              (unit) => unit.custody !== "GUEST" || unit.lossState !== "NONE",
+            )
+          ) {
             throw new ReceiveReturnError(
               "UNIT_STATE_CONFLICT",
               "Status penguasaan unit tidak sesuai untuk pengembalian biasa.",
             );
           }
 
-          const locationIds = [...new Set([
-            input.defaultLocationId,
-            ...normalizedLines.map((line) => line.locationId),
-          ])].sort();
-          const locations = await tx.$queryRaw<{ id: string; code: string; isActive: boolean }[]>`
+          const locationIds = [
+            ...new Set([
+              input.defaultLocationId,
+              ...normalizedLines.map((line) => line.locationId),
+            ]),
+          ].sort();
+          const locations = await tx.$queryRaw<
+            { id: string; code: string; isActive: boolean }[]
+          >`
             SELECT "id", "code", "isActive"
             FROM "location"
             WHERE "id" IN (${Prisma.join(locationIds)})
@@ -258,7 +288,10 @@ export async function receiveReturn(
           `;
           if (
             locations.length !== locationIds.length ||
-            locations.some((location) => !location.isActive || location.code === "WITH_GUEST")
+            locations.some(
+              (location) =>
+                !location.isActive || location.code === "WITH_GUEST",
+            )
           ) {
             throw new ReceiveReturnError(
               "LOCATION_UNAVAILABLE",
@@ -297,7 +330,9 @@ export async function receiveReturn(
             );
           }
 
-          const lineById = new Map(borrowingLines.map((line) => [line.id, line]));
+          const lineById = new Map(
+            borrowingLines.map((line) => [line.id, line]),
+          );
           const unitById = new Map(units.map((unit) => [unit.id, unit]));
           const savedLineByBorrowingLine = new Map(
             receipt.lines.map((line) => [line.borrowingLineId, line]),
@@ -306,15 +341,31 @@ export async function receiveReturn(
 
           for (const requestedLine of normalizedLines) {
             const borrowingLine = lineById.get(requestedLine.borrowingLineId);
-            const savedLine = savedLineByBorrowingLine.get(requestedLine.borrowingLineId);
+            const savedLine = savedLineByBorrowingLine.get(
+              requestedLine.borrowingLineId,
+            );
             const unit = borrowingLine && unitById.get(borrowingLine.unitId);
             if (!borrowingLine || !savedLine || !unit) {
-              throw new ReceiveReturnError("LINES_UNAVAILABLE", "Data unit tidak lengkap.");
+              throw new ReceiveReturnError(
+                "LINES_UNAVAILABLE",
+                "Data unit tidak lengkap.",
+              );
             }
 
-            const readiness = requestedLine.condition === "GOOD"
-              ? unit.readiness
-              : "PENDING_INSPECTION";
+            if (
+              unit.condition !== "GOOD" &&
+              requestedLine.condition !== unit.condition
+            ) {
+              throw new ReceiveReturnError(
+                "UNIT_STATE_CONFLICT",
+                "Kondisi kerusakan unit sudah tercatat. Pengembalian harus memakai kondisi tersebut; perubahan hasil perbaikan dicatat melalui penerimaan dari Engineering.",
+              );
+            }
+
+            const readiness =
+              requestedLine.condition === "GOOD"
+                ? unit.readiness
+                : "PENDING_INSPECTION";
             await tx.itemUnit.update({
               where: { id: unit.id },
               data: {
@@ -346,7 +397,8 @@ export async function receiveReturn(
                 borrowingId: borrowingLine.borrowingId,
                 borrowingLineId: borrowingLine.id,
                 guestVisitId: input.guestVisitId,
-                primaryGuestNameSnapshot: borrowingLine.borrowing.primaryGuestNameSnapshot,
+                primaryGuestNameSnapshot:
+                  borrowingLine.borrowing.primaryGuestNameSnapshot,
                 roomNumberSnapshot: borrowingLine.borrowing.roomNumberSnapshot,
                 receivedAt: receivedAt.toISOString(),
               },
@@ -364,7 +416,10 @@ export async function receiveReturn(
             const savedLine = receiptLineByUnit.get(event.entityId);
             const keys = savedLine && keysByLine.get(savedLine.borrowingLineId);
             if (!savedLine || !keys) {
-              throw new ReceiveReturnError("INVALID_PHOTOS", "Referensi foto pengembalian tidak lengkap.");
+              throw new ReceiveReturnError(
+                "INVALID_PHOTOS",
+                "Referensi foto pengembalian tidak lengkap.",
+              );
             }
             return keys.map((photoKey) => ({
               unitId: event.entityId,
@@ -374,7 +429,8 @@ export async function receiveReturn(
               photoKey,
             }));
           });
-          if (photoRows.length) await tx.itemUnitPhoto.createMany({ data: photoRows });
+          if (photoRows.length)
+            await tx.itemUnitPhoto.createMany({ data: photoRows });
 
           await tx.auditEvent.create({
             data: {
@@ -408,7 +464,8 @@ export async function receiveReturn(
     }
     return result;
   } catch (error) {
-    const knownPrismaRollback = error instanceof Prisma.PrismaClientKnownRequestError &&
+    const knownPrismaRollback =
+      error instanceof Prisma.PrismaClientKnownRequestError &&
       ["P2002", "P2003", "P2034"].includes(error.code);
     if (!transactionStarted || knownRollback || knownPrismaRollback) {
       await Promise.allSettled(storedKeys.map((key) => removeUnitPhoto(key)));
@@ -416,7 +473,12 @@ export async function receiveReturn(
 
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
       if (error.code === "P2002") {
-        const replay = await findReplay(db, input.requestId, actorId, requestHash);
+        const replay = await findReplay(
+          db,
+          input.requestId,
+          actorId,
+          requestHash,
+        );
         if (replay) return replay;
       }
       if (error.code === "P2034") {

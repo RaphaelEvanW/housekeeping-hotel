@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { Prisma } from "@/generated/prisma/client";
 import { db } from "@/server/db";
 import { reportUnitDamageInputSchema } from "@/server/report-unit-damage-input";
+import { unitConditionUpdateInputSchema } from "@/server/unit-condition-update-input";
 import {
   InvalidUnitPhotoError,
   MAX_PHOTO_BYTES,
@@ -13,7 +14,8 @@ import {
   storeUnitPhoto,
 } from "@/server/unit-photo";
 
-const ACTION = "ITEM_UNIT_DAMAGE_REPORTED";
+const DAMAGE_ACTION = "ITEM_UNIT_DAMAGE_REPORTED";
+const UPDATE_ACTION = "ITEM_UNIT_CONDITION_UPDATED";
 
 type ErrorCode =
   | "REQUEST_CONFLICT"
@@ -21,6 +23,7 @@ type ErrorCode =
   | "UNIT_STATE_CONFLICT"
   | "OUTSTANDING_BORROWING"
   | "GOOD_RETURN_REQUIRED"
+  | "STALE_UNIT"
   | "RETRY_REQUIRED";
 
 export class UnitDamageReportError extends Error {
@@ -69,6 +72,7 @@ async function findReplay(
   unitId: string,
   actorId: string,
   requestHash: string,
+  action: string,
 ) {
   const event = await client.auditEvent.findUnique({
     where: { id: requestId },
@@ -86,7 +90,7 @@ async function findReplay(
   const values = event.newValues;
 
   if (
-    event.action !== ACTION ||
+    event.action !== action ||
     event.entityType !== "ITEM_UNIT" ||
     event.entityId !== unitId ||
     event.actorId !== actorId ||
@@ -110,6 +114,29 @@ export async function reportUnitDamage(
   photos: File[] = [],
 ) {
   const input = reportUnitDamageInputSchema.parse(rawInput);
+  return recordUnitCondition(input, actorId, photos);
+}
+
+export async function updateUnitCondition(
+  rawInput: unknown,
+  actorId: string,
+  photos: File[] = [],
+) {
+  const input = unitConditionUpdateInputSchema.parse(rawInput);
+  return recordUnitCondition(input, actorId, photos);
+}
+
+async function recordUnitCondition(
+  input:
+    | ReturnType<typeof reportUnitDamageInputSchema.parse>
+    | ReturnType<typeof unitConditionUpdateInputSchema.parse>,
+  actorId: string,
+  photos: File[],
+) {
+  const expectedUpdatedAt =
+    "expectedUpdatedAt" in input ? input.expectedUpdatedAt : undefined;
+  const isGeneralUpdate = expectedUpdatedAt !== undefined;
+  const action = isGeneralUpdate ? UPDATE_ACTION : DAMAGE_ACTION;
   const photoHashes: string[] = [];
 
   for (const file of photos) {
@@ -137,6 +164,7 @@ export async function reportUnitDamage(
         condition: input.condition,
         notes: input.notes,
         photoHashes,
+        ...(isGeneralUpdate ? { expectedUpdatedAt } : {}),
       }),
     )
     .digest("hex");
@@ -147,6 +175,7 @@ export async function reportUnitDamage(
     input.unitId,
     actorId,
     requestHash,
+    action,
   );
   if (existing) return existing;
 
@@ -164,7 +193,7 @@ export async function reportUnitDamage(
         transactionStarted = true;
 
         try {
-          const lockKey = `unit-damage:${input.requestId}`;
+          const lockKey = `${isGeneralUpdate ? "unit-condition" : "unit-damage"}:${input.requestId}`;
           await tx.$queryRaw`
             SELECT 1 AS locked
             FROM pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))
@@ -176,6 +205,7 @@ export async function reportUnitDamage(
             input.unitId,
             actorId,
             requestHash,
+            action,
           );
           if (replay) return replay;
 
@@ -196,6 +226,26 @@ export async function reportUnitDamage(
           const before = await tx.itemUnit.findUniqueOrThrow({
             where: { id: input.unitId },
           });
+
+          if (
+            isGeneralUpdate &&
+            before.updatedAt.toISOString() !== expectedUpdatedAt
+          ) {
+            throw new UnitDamageReportError(
+              "STALE_UNIT",
+              "Data unit sudah berubah. Muat ulang sebelum memperbarui kondisi.",
+            );
+          }
+
+          if (
+            isGeneralUpdate &&
+            (before.lifecycle !== "ACTIVE" || before.custody !== "HOUSEKEEPING")
+          ) {
+            throw new UnitDamageReportError(
+              "UNIT_STATE_CONFLICT",
+              "Kondisi hanya dapat diperbarui untuk unit aktif yang berada di Housekeeping.",
+            );
+          }
 
           if (before.custody === "GUEST" || before.lossState !== "NONE") {
             throw new UnitDamageReportError(
@@ -219,32 +269,45 @@ export async function reportUnitDamage(
             );
           }
 
-          const [lastReturn] = await tx.$queryRaw<
-            { condition: string }[]
-          >`
-            SELECT rl."condition"
-            FROM "return_line" AS rl
-            JOIN "return_batch" AS rb
-              ON rb."id" = rl."returnBatchId"
-            JOIN "borrowing_line" AS bl
-              ON bl."id" = rl."borrowingLineId"
-            WHERE bl."unitId" = ${input.unitId}
-            ORDER BY rb."receivedAt" DESC, rb."id" DESC
-            LIMIT 1
-          `;
-
-          if (lastReturn?.condition !== "GOOD") {
+          if (before.condition !== "GOOD" && input.condition !== before.condition) {
             throw new UnitDamageReportError(
-              "GOOD_RETURN_REQUIRED",
-              "Laporan ini digunakan untuk kerusakan yang ditemukan setelah pengembalian berkondisi baik.",
+              "UNIT_STATE_CONFLICT",
+              "Jenis kerusakan sudah tercatat. Housekeeping dapat menambahkan foto dan catatan, tetapi tidak dapat mengubah jenis kerusakan atau memulihkan kondisi.",
             );
           }
 
+          if (!isGeneralUpdate) {
+            const [lastReturn] = await tx.$queryRaw<
+              { condition: string }[]
+            >`
+              SELECT rl."condition"
+              FROM "return_line" AS rl
+              JOIN "return_batch" AS rb
+                ON rb."id" = rl."returnBatchId"
+              JOIN "borrowing_line" AS bl
+                ON bl."id" = rl."borrowingLineId"
+              WHERE bl."unitId" = ${input.unitId}
+              ORDER BY rb."receivedAt" DESC, rb."id" DESC
+              LIMIT 1
+            `;
+
+            if (lastReturn?.condition !== "GOOD") {
+              throw new UnitDamageReportError(
+                "GOOD_RETURN_REQUIRED",
+                "Laporan ini digunakan untuk kerusakan yang ditemukan setelah pengembalian berkondisi baik.",
+              );
+            }
+          }
+
+          const readiness =
+            isGeneralUpdate && input.condition === before.condition
+              ? before.readiness
+              : "ON_HOLD";
           await tx.itemUnit.update({
             where: { id: input.unitId },
             data: {
               condition: input.condition,
-              readiness: "ON_HOLD",
+              readiness,
               updatedById: actorId,
             },
           });
@@ -253,7 +316,7 @@ export async function reportUnitDamage(
             data: {
               id: input.requestId,
               actorId,
-              action: ACTION,
+              action,
               entityType: "ITEM_UNIT",
               entityId: input.unitId,
               reason: input.notes,
@@ -263,7 +326,7 @@ export async function reportUnitDamage(
               },
               newValues: {
                 condition: input.condition,
-                readiness: "ON_HOLD",
+                readiness,
                 requestHash,
               },
             },
@@ -323,6 +386,7 @@ export async function reportUnitDamage(
           input.unitId,
           actorId,
           requestHash,
+          action,
         );
         if (replay) return replay;
       }
