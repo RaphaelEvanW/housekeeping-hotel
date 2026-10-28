@@ -110,7 +110,7 @@ it("renders stored names safely and keeps the selected-item action and dates rea
     items: [{ id: itemId, name: "Setrika <script>", isActive: true, description: null, photoUrl: null, photos: [], createdAt: new Date("2026-10-21T00:00:00Z"), updatedAt: new Date("2026-10-21T00:00:00Z") }],
     pagination: { page: 1, pageSize: 20, total: 1, totalPages: 1, hasNextPage: false },
   });
-  const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({}) }));
+  const html = renderToStaticMarkup(await InventoryPage({ searchParams: Promise.resolve({ item: itemId }) }));
   expect(html).toContain("Setrika &lt;script&gt;");
   expect(html).not.toContain("<script>");
   expect(html).toContain(`item=${itemId}`);

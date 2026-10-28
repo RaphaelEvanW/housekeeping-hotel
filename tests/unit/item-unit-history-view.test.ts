@@ -311,6 +311,79 @@ it("shows damage and verification state transitions without changing physical co
   ]);
 });
 
+it("shows Engineering handover and receipt as separate maintenance history events", () => {
+  const base = historyBody().events[0];
+  const handover = {
+    ...base,
+    action: "ITEM_UNIT_SENT_TO_ENGINEERING",
+    oldValues: {
+      condition: "DAMAGED",
+      readiness: "ON_HOLD",
+      custody: "HOUSEKEEPING",
+    },
+    newValues: {
+      condition: "DAMAGED",
+      readiness: "ON_HOLD",
+      custody: "ENGINEERING",
+      handedOverTo: "Petugas Engineering",
+      occurredAt: "2026-10-28T02:00:00.000Z",
+    },
+  };
+
+  expect(historyEventTitle(handover.action)).toBe("Unit diserahkan ke Engineering");
+  expect(historyEventDetails(handover)).toMatchObject({
+    facts: [
+      { key: "handedOverTo", label: "Penerima di Engineering" },
+      { key: "condition", label: "Kondisi tercatat", value: "Rusak" },
+      { key: "readiness", label: "Kesiapan setelah kejadian", value: "Belum siap" },
+      { key: "occurredAt", label: "Waktu penyerahan" },
+    ],
+    visitHref: null,
+    photoLabel: "Foto bukti kerusakan",
+  });
+  expect(historyChanges(handover)).toEqual([
+    { key: "custody", label: "Pemegang unit", before: "Housekeeping", after: "Engineering" },
+  ]);
+
+  const receipt = {
+    ...base,
+    action: "ITEM_UNIT_RECEIVED_FROM_ENGINEERING",
+    oldValues: {
+      condition: "DAMAGED",
+      readiness: "ON_HOLD",
+      custody: "ENGINEERING",
+    },
+    newValues: {
+      condition: "GOOD",
+      readiness: "PENDING_VERIFICATION",
+      custody: "HOUSEKEEPING",
+      receivedFrom: "Petugas Housekeeping",
+      performedBy: "Teknisi",
+      occurredAt: "2026-10-28T04:00:00.000Z",
+      workCompletedAt: "2026-10-28T03:45:00.000Z",
+    },
+  };
+
+  expect(historyEventTitle(receipt.action)).toBe("Unit diterima dari Engineering");
+  expect(historyEventDetails(receipt)).toMatchObject({
+    facts: [
+      { key: "receivedFrom", label: "Diserahkan oleh" },
+      { key: "performedBy", label: "Pelaksana perbaikan" },
+      { key: "condition", label: "Kondisi tercatat", value: "Baik" },
+      { key: "readiness", label: "Kesiapan setelah kejadian", value: "Menunggu verifikasi" },
+      { key: "occurredAt", label: "Waktu penerimaan" },
+      { key: "workCompletedAt", label: "Pekerjaan selesai" },
+    ],
+    visitHref: null,
+    photoLabel: "Foto penerimaan unit",
+  });
+  expect(historyChanges(receipt)).toEqual([
+    { key: "condition", label: "Kondisi", before: "Rusak", after: "Baik" },
+    { key: "readiness", label: "Kesiapan", before: "Belum siap", after: "Menunggu verifikasi" },
+    { key: "custody", label: "Pemegang unit", before: "Engineering", after: "Housekeeping" },
+  ]);
+});
+
 it("does not render malformed guest links or unrecognized audited values", () => {
   const event = {
     ...historyBody().events[0],

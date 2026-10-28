@@ -27,7 +27,7 @@ const responseSchema = z.object({
 
 export function confirmedDamageReport(
   body: unknown,
-  payload: DamageReportPayload,
+  payload: Pick<DamageReportPayload, "requestId" | "unitId" | "notes">,
   photoCount: number,
 ) {
   const parsed = responseSchema.safeParse(body);

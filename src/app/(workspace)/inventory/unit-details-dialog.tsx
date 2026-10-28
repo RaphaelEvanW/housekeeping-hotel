@@ -7,7 +7,11 @@ import { WorkspaceControlIcon } from "@/components/workspace-control-icon";
 import { normalizeUnitName, unitDisplayName } from "@/lib/unit-display-name";
 import { FieldError } from "@/components/field-error";
 import { useInventoryForm } from "@/lib/use-inventory-form";
+import type { UnitCondition } from "@/generated/prisma/enums";
 import { UnitHistory } from "./unit-history";
+import { ReportUnitDamageDialog } from "../guests/report-unit-damage-dialog";
+import { maintenanceHandoverId } from "@/lib/unit-maintenance-view";
+import { UnitMaintenanceDialog } from "./unit-maintenance-dialog";
 
 type UnitDetails = {
   id: string;
@@ -18,6 +22,7 @@ type UnitDetails = {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+  condition: UnitCondition;
   statusLabel: string;
   facts: { label: string; value: string }[];
 };
@@ -36,10 +41,18 @@ export function UnitDetailsDialog({
   unit,
   itemName,
   canEdit,
+  canUpdateCondition,
+  canHandoverToEngineering = false,
+  canReceiveFromEngineering = false,
+  locations = [],
 }: {
   unit: UnitDetails;
   itemName: string;
   canEdit: boolean;
+  canUpdateCondition: boolean;
+  canHandoverToEngineering?: boolean;
+  canReceiveFromEngineering?: boolean;
+  locations?: { id: string; name: string }[];
 }) {
   const router = useRouter();
   const validation = useInventoryForm();
@@ -420,6 +433,27 @@ export function UnitDetailsDialog({
                     key={`${unit.id}-${current.updatedAt}`}
                     unitId={unit.id}
                     unitCode={unit.unitCode}
+                    renderEventActions={(event) => {
+                      const handoverId = maintenanceHandoverId(event);
+                      if (!handoverId) return null;
+
+                      return (
+                        <UnitMaintenanceDialog
+                          handoverId={handoverId}
+                          unit={{
+                            id: current.id,
+                            displayName: unitDisplayName(current),
+                            unitCode: current.unitCode,
+                            itemName,
+                            condition: current.condition,
+                            updatedAt: current.updatedAt,
+                          }}
+                          canReceive={canReceiveFromEngineering}
+                          locations={locations}
+                          onDone={() => setOpen(false)}
+                        />
+                      );
+                    }}
                   >
                   <dl className="grid grid-cols-2 gap-x-4 gap-y-4 border-b border-ws-divider pb-5 text-sm sm:gap-x-6">
                     {[
@@ -446,6 +480,63 @@ export function UnitDetailsDialog({
                       </div>
                     ))}
                   </dl>
+                  {canUpdateCondition ? (
+                    <section
+                      aria-label="Pemeriksaan kondisi unit"
+                      className="mt-5 grid items-center gap-3 border-b border-ws-divider pb-5 sm:grid-cols-[minmax(0,1fr)_auto]"
+                    >
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-ws-strong">
+                          Pemeriksaan kondisi
+                        </h3>
+                        <p className="mt-1 text-xs leading-5 text-ws-text">
+                          Menemukan kendala atau perubahan kondisi? Perbarui kondisi
+                          unit dengan hasil pemeriksaan dan foto terbaru.
+                        </p>
+                      </div>
+                      <ReportUnitDamageDialog
+                        unit={{
+                          id: current.id,
+                          displayName: unitDisplayName(current),
+                          itemName,
+                          unitCode: current.unitCode,
+                        }}
+                        general={{
+                          condition: current.condition,
+                          expectedUpdatedAt: current.updatedAt,
+                        }}
+                        onDone={() => setOpen(false)}
+                      />
+                    </section>
+                  ) : null}
+                  {canHandoverToEngineering ? (
+                    <section
+                      aria-label="Penyerahan unit ke Engineering"
+                      className="mt-5 grid items-center gap-3 border-b border-ws-divider pb-5 sm:grid-cols-[minmax(0,1fr)_auto]"
+                    >
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-ws-strong">
+                          Perbaikan
+                        </h3>
+                        <p className="mt-1 text-xs leading-5">
+                          Catat penyerahan unit beserta bukti kerusakannya.
+                        </p>
+                      </div>
+                      <ReportUnitDamageDialog
+                        unit={{
+                          id: current.id,
+                          displayName: unitDisplayName(current),
+                          itemName,
+                          unitCode: current.unitCode,
+                        }}
+                        handover={{
+                          condition: current.condition,
+                          expectedUpdatedAt: current.updatedAt,
+                        }}
+                        onDone={() => setOpen(false)}
+                      />
+                    </section>
+                  ) : null}
                   <section className="mt-5">
                     <h3 className="text-sm font-medium text-ws-strong">
                       Deskripsi

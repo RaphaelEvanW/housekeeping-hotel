@@ -93,7 +93,8 @@ export default async function InventoryPage({
   const [result, selected, stockLocations] = await Promise.all([
     listItems(query.data),
     selectedId ? getItemUnits(selectedId, after) : Promise.resolve(null),
-    hasPermission(user.roles, "inventory:stock:add")
+    hasPermission(user.roles, "inventory:stock:add") ||
+    hasPermission(user.roles, "maintenance:receive")
       ? getStockLocations()
       : Promise.resolve([]),
   ]);
@@ -517,6 +518,27 @@ export default async function InventoryPage({
                               user.roles,
                               "inventory:unit:update",
                             )}
+                            canUpdateCondition={
+                              hasPermission(
+                                user.roles,
+                                "inventory:unit:condition:update",
+                              ) &&
+                              unit.lifecycle === "ACTIVE" &&
+                              unit.custody === "HOUSEKEEPING" &&
+                              unit.lossState === "NONE"
+                            }
+                            canHandoverToEngineering={
+                              hasPermission(user.roles, "maintenance:handover") &&
+                              unit.lifecycle === "ACTIVE" &&
+                              unit.custody === "HOUSEKEEPING" &&
+                              unit.lossState === "NONE"
+                            }
+                            canReceiveFromEngineering={
+                              hasPermission(user.roles, "maintenance:receive") &&
+                              unit.custody === "ENGINEERING" &&
+                              unit.lossState === "NONE"
+                            }
+                            locations={stockLocations}
                             unit={{
                               id: unit.id,
                               itemId: selected.item.id,
@@ -526,6 +548,7 @@ export default async function InventoryPage({
                               notes: unit.notes,
                               createdAt: unit.createdAt.toISOString(),
                               updatedAt: unit.updatedAt.toISOString(),
+                              condition: unit.condition,
                               statusLabel: unit.lossState === "LOST" ? "Hilang"
                                 : unit.lossState === "MISSING" ? "Belum ditemukan"
                                 : unit.custody === "GUEST" ? "Dipinjam"

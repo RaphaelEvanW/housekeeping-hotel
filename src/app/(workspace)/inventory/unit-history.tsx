@@ -13,6 +13,7 @@ import {
   historyEventTitle,
   parseUnitHistory,
   type UnitHistoryData,
+  type UnitHistoryEvent,
 } from "@/lib/item-unit-history-view";
 
 type HistoryRequest = {
@@ -60,10 +61,12 @@ export function UnitHistory({
   unitId,
   unitCode,
   children,
+  renderEventActions,
 }: {
   unitId: string;
   unitCode: string;
   children?: ReactNode;
+  renderEventActions?: (event: UnitHistoryEvent) => ReactNode;
 }) {
   const [request, setRequest] = useState<HistoryRequest>({
     page: 1,
@@ -420,6 +423,7 @@ export function UnitHistory({
                         Tidak ada foto yang tercatat pada aktivitas ini.
                       </p>
                     ) : null : null}
+                    {renderEventActions?.(event)}
                     </div>
                     </details>
                   </li>

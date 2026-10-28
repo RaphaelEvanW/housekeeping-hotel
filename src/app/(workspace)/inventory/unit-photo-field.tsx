@@ -12,7 +12,7 @@ export function UnitPhotoField({
 }: {
   index: number;
   error?: string;
-  purpose?: "initial" | "issue" | "return" | "condition" | "verification";
+    purpose?: "initial" | "issue" | "return" | "condition" | "verification" | "handover" | "receipt";
   required?: boolean;
 }) {
   const { input, previews, error: selectionError, append, remove, reset } =
@@ -25,6 +25,8 @@ export function UnitPhotoField({
     return: "Foto pengembalian",
     condition: "Foto kondisi unit",
     verification: "Foto verifikasi",
+    handover: "Foto bukti kerusakan",
+    receipt: "Foto penerimaan unit",
   } as const;
   const helpers = {
     initial: "Minimal satu foto kondisi awal.",
@@ -32,8 +34,10 @@ export function UnitPhotoField({
     return: required
       ? "Minimal satu foto wajib untuk kondisi selain baik."
       : "Foto boleh dilampirkan untuk kondisi baik.",
-    condition: "Lampirkan foto yang memperlihatkan kerusakan atau komponen yang kurang.",
+    condition: "Lampirkan minimal satu foto terbaru yang menunjukkan kondisi unit.",
     verification: "Minimal satu foto hasil pemeriksaan untuk setiap unit.",
+    handover: "Minimal satu foto kondisi unit saat diserahkan ke Engineering.",
+    receipt: "Minimal satu foto kondisi unit saat diterima kembali.",
   } as const;
   const label = labels[purpose];
 

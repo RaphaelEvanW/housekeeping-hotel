@@ -84,8 +84,14 @@ export function historyEventTitle(action: string) {
       return "Unit dikembalikan";
     case "ITEM_UNIT_DAMAGE_REPORTED":
       return "Kerusakan dilaporkan";
+    case "ITEM_UNIT_CONDITION_UPDATED":
+      return "Kondisi unit diperbarui";
     case "ITEM_UNIT_VERIFIED":
       return "Unit diverifikasi";
+    case "ITEM_UNIT_SENT_TO_ENGINEERING":
+      return "Unit diserahkan ke Engineering";
+    case "ITEM_UNIT_RECEIVED_FROM_ENGINEERING":
+      return "Unit diterima dari Engineering";
     default:
       return "Aktivitas unit";
   }
@@ -105,7 +111,10 @@ const operationalActions = new Set([
   "BORROWING_ISSUED",
   "BORROWING_RETURNED",
   "ITEM_UNIT_DAMAGE_REPORTED",
+  "ITEM_UNIT_CONDITION_UPDATED",
   "ITEM_UNIT_VERIFIED",
+  "ITEM_UNIT_SENT_TO_ENGINEERING",
+  "ITEM_UNIT_RECEIVED_FROM_ENGINEERING",
 ]);
 
 const historyValueLabels: Record<string, Readonly<Record<string, string>>> = {
@@ -124,7 +133,10 @@ const photoLabels: Record<string, string> = {
   BORROWING_ISSUED: "Foto peminjaman",
   BORROWING_RETURNED: "Foto pengembalian",
   ITEM_UNIT_DAMAGE_REPORTED: "Foto laporan kerusakan",
+  ITEM_UNIT_CONDITION_UPDATED: "Foto kondisi unit",
   ITEM_UNIT_VERIFIED: "Foto verifikasi",
+  ITEM_UNIT_SENT_TO_ENGINEERING: "Foto bukti kerusakan",
+  ITEM_UNIT_RECEIVED_FROM_ENGINEERING: "Foto penerimaan unit",
 };
 
 const historyTime = new Intl.DateTimeFormat("id-ID", {
@@ -179,6 +191,15 @@ export function historyEventDetails(event: UnitHistoryEvent) {
   if (event.action === "ITEM_UNIT_VERIFIED") {
     fields.unshift(["result", "Hasil verifikasi"]);
   }
+  if (event.action === "ITEM_UNIT_SENT_TO_ENGINEERING") {
+    fields.unshift(["handedOverTo", "Penerima di Engineering"]);
+  }
+  if (event.action === "ITEM_UNIT_RECEIVED_FROM_ENGINEERING") {
+    fields.unshift(
+      ["receivedFrom", "Diserahkan oleh"],
+      ["performedBy", "Pelaksana perbaikan"],
+    );
+  }
 
   for (const [key, label] of fields) {
     const value = formattedHistoryValue(event.newValues, key);
@@ -197,6 +218,35 @@ export function historyEventDetails(event: UnitHistoryEvent) {
         label: "Diterima kembali",
         value: `${historyTime.format(new Date(receivedAt.data))} WIB`,
       });
+    }
+  }
+
+  if (
+    event.action === "ITEM_UNIT_SENT_TO_ENGINEERING" ||
+    event.action === "ITEM_UNIT_RECEIVED_FROM_ENGINEERING"
+  ) {
+    const timestamps: [string, string][] = [
+      [
+        "occurredAt",
+        event.action === "ITEM_UNIT_SENT_TO_ENGINEERING"
+          ? "Waktu penyerahan"
+          : "Waktu penerimaan",
+      ],
+      ["workCompletedAt", "Pekerjaan selesai"],
+    ];
+
+    for (const [key, label] of timestamps) {
+      const parsed = z.iso.datetime({ offset: true }).safeParse(
+        detailValue(event.newValues, key),
+      );
+
+      if (parsed.success) {
+        facts.push({
+          key,
+          label,
+          value: `${historyTime.format(new Date(parsed.data))} WIB`,
+        });
+      }
     }
   }
 
